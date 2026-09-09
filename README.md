@@ -34,7 +34,7 @@ A standalone outage-rule engine and unit tests are included as the next foundati
 
 ## Visual design
 
-Dark navy surfaces with mint external-power and amber battery indicators. The battery gauge is drawn natively in Compose. A matching vector power-symbol launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
+Dark navy surfaces with mint external-power and amber battery indicators. The compact battery gauge is drawn natively in Compose so the charger-test instructions remain visible on the Pixel 4 emulator at default text size. Scrolling remains available for smaller screens and larger accessibility text. A matching vector lightning-bolt launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
 
 ## Validation
 

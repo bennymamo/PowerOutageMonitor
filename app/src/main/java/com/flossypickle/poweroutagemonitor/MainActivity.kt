@@ -113,8 +113,8 @@ private fun Dashboard(battery: BatteryReading) {
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(
                 Modifier.widthIn(max = 560.dp).fillMaxWidth()
-                    .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("FLOSSY PICKLE", color = colors.primary, fontSize = 11.sp,
@@ -124,7 +124,7 @@ private fun Dashboard(battery: BatteryReading) {
                 }
                 Card(shape = RoundedCornerShape(28.dp),
                     colors = CardDefaults.cardColors(containerColor = colors.surface)) {
-                    Column(Modifier.fillMaxWidth().padding(24.dp),
+                    Column(Modifier.fillMaxWidth().padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically,
@@ -137,9 +137,9 @@ private fun Dashboard(battery: BatteryReading) {
                             }, color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp)
                         }
-                        Box(Modifier.size(208.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(144.dp), contentAlignment = Alignment.Center) {
                             Canvas(Modifier.fillMaxSize().padding(10.dp)) {
-                                val stroke = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round)
+                                val stroke = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
                                 drawArc(colors.surfaceVariant, 135f, 270f, false, style = stroke)
                                 battery.percent?.let {
                                     drawArc(accent, 135f, 270f * it / 100f, false, style = stroke)
@@ -147,7 +147,7 @@ private fun Dashboard(battery: BatteryReading) {
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(battery.percent?.let { "$it%" } ?: "—",
-                                    fontSize = 48.sp, fontWeight = FontWeight.Light)
+                                    fontSize = 36.sp, fontWeight = FontWeight.Light)
                                 Text("BATTERY", color = colors.onSurfaceVariant, fontSize = 11.sp,
                                     letterSpacing = 2.sp)
                             }
