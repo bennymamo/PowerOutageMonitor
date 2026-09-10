@@ -27,7 +27,8 @@ private enum class AppScreen(val label: String) {
     HISTORY("History"),
     SETTINGS("Settings"),
     DIAGNOSTICS("Diagnostics"),
-    TEST_MODE("Test mode")
+    TEST_MODE("Test mode"),
+    TELEGRAM("Telegram")
 }
 
 private val primaryScreens = listOf(AppScreen.STATUS, AppScreen.HISTORY, AppScreen.SETTINGS)
@@ -51,8 +52,9 @@ internal fun PowerMonitorApp(
                     primaryScreens.forEach { item ->
                         val selected = screen == item ||
                             item == AppScreen.SETTINGS && screen in listOf(
-                                AppScreen.DIAGNOSTICS,
-                                AppScreen.TEST_MODE
+                                        AppScreen.DIAGNOSTICS,
+                                        AppScreen.TEST_MODE,
+                                        AppScreen.TELEGRAM
                             )
                         TextButton(onClick = { screen = item }, modifier = Modifier.weight(1f)) {
                             Text(
@@ -76,7 +78,8 @@ internal fun PowerMonitorApp(
                 onMonitoringEnabledChange,
                 onSettingsChange,
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
-                onOpenTestMode = { screen = AppScreen.TEST_MODE }
+                onOpenTestMode = { screen = AppScreen.TEST_MODE },
+                onOpenTelegram = { screen = AppScreen.TELEGRAM }
             )
             AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
                 settings = settings,
@@ -88,6 +91,11 @@ internal fun PowerMonitorApp(
             )
             AppScreen.TEST_MODE -> TestModeScreen(
                 settings = settings,
+                padding = padding,
+                onBack = { screen = AppScreen.SETTINGS }
+            )
+            AppScreen.TELEGRAM -> TelegramSetupScreen(
+                deviceName = settings.deviceName,
                 padding = padding,
                 onBack = { screen = AppScreen.SETTINGS }
             )

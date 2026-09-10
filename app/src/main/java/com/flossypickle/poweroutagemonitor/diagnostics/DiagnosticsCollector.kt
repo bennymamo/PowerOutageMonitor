@@ -13,6 +13,7 @@ import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 import java.text.DateFormat
 import java.util.Date
 
@@ -63,7 +64,9 @@ internal class DiagnosticsCollector(private val context: Context) {
         state: OutageEngine.State,
         snapshot: PowerSnapshot?,
         lastObservationEpochMs: Long
-    ): DiagnosticsReport = DiagnosticsReport(
+    ): DiagnosticsReport {
+        val telegram = TelegramConfigStore(context).config()
+        return DiagnosticsReport(
         appVersion = appVersionName(),
         androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
         device = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
@@ -78,8 +81,14 @@ internal class DiagnosticsCollector(private val context: Context) {
         internetAvailable = hasInternet(),
         batteryOptimizationExcluded = ignoresBatteryOptimization(),
         backgroundRestricted = isBackgroundRestricted(),
-        notificationsAllowed = notificationsAllowed()
-    )
+        notificationsAllowed = notificationsAllowed(),
+        configuredAlertProviders = when {
+            telegram.enabled -> "Telegram enabled (${telegram.destinations.size} destination(s))"
+            telegram.hasToken -> "Telegram saved, disabled"
+            else -> "None"
+        }
+        )
+    }
 
     private fun hasInternet(): Boolean = runCatching {
         val manager = context.getSystemService(ConnectivityManager::class.java)

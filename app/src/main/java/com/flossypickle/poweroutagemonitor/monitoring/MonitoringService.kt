@@ -53,6 +53,13 @@ internal class MonitoringService : Service() {
         isRunning = false
         handler.removeCallbacks(deadlineCheck)
         runCatching { unregisterReceiver(batteryReceiver) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 

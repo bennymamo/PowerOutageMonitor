@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 
 @Composable
 internal fun SettingsScreen(
@@ -46,11 +47,13 @@ internal fun SettingsScreen(
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
     onOpenDiagnostics: () -> Unit,
-    onOpenTestMode: () -> Unit
+    onOpenTestMode: () -> Unit,
+    onOpenTelegram: () -> Unit
 ) {
     var deviceName by remember { mutableStateOf(settings.deviceName) }
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
     val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
+    val telegramConfig = TelegramConfigStore(LocalContext.current).config()
 
     Column(
         Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
@@ -61,14 +64,14 @@ internal fun SettingsScreen(
         Text("Monitoring", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         SettingsCard {
             SettingSwitch(
-                title = "Background monitoring",
-                explanation = "Watch external power while the screen is off or the app is closed.",
+                title = "Monitoring master switch",
+                explanation = "Start or stop all power monitoring on this device.",
                 checked = settings.monitoringEnabled,
                 onCheckedChange = onMonitoringEnabledChange
             )
             Text(
                 if (settings.monitoringEnabled) "A small ongoing notification shows that monitoring is alive."
-                else "Turn this on while the device is connected to its permanent charger.",
+                else "Monitoring, alarms and the ongoing notification are off. History and settings are kept.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
@@ -84,6 +87,21 @@ internal fun SettingsScreen(
             }
             OutlinedButton(onClick = onOpenTestMode, modifier = Modifier.fillMaxWidth()) {
                 Text("Open test mode")
+            }
+        }
+
+        Text("Alert channels", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary)
+        SettingsCard {
+            SettingText("Telegram", when {
+                telegramConfig.enabled -> "Enabled"
+                telegramConfig.hasToken -> "Saved, disabled"
+                else -> "Not configured"
+            })
+            Text("Send outage and restoration messages through a bot you control. Multiple chats are supported.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
+                Text("Configure Telegram")
             }
         }
 
