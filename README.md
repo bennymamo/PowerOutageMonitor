@@ -91,3 +91,5 @@ Diagnostics includes a **Keep Power Monitor Running** section that identifies th
 The delivery queue allows one item per event, alert kind, provider and destination. Retryable failures back off through 1 minute, 5 minutes, 15 minutes, 30 minutes, 1 hour, 2 hours, 4 hours and 6 hours, then remain at 6-hour intervals. Permanent provider errors stop. A five-minute in-flight lease lets a delivery recover after process death. Provider-specific handling must still account for the narrow crash window after a remote service accepts a message but before the device records success.
 
 An alert captured before the first unlock is retained if a provider is still marked enabled but its credential-protected destination is temporarily unavailable. Saving a repaired Telegram configuration immediately materializes that retained event into the durable delivery queue.
+
+Current Android, Google Play, SMS and unattended-email trade-offs are documented in [Alert channel options](docs/alert-channel-options.md). The next provider remains a product decision because it affects permissions, distribution and credential setup.
