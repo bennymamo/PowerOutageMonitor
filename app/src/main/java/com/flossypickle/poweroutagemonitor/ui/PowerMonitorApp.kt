@@ -51,6 +51,8 @@ internal fun PowerMonitorApp(
     onCompleteSetup: (String, Long, Long) -> Unit,
     onRetryFailedDeliveries: () -> Unit,
     onClearDeliveryRecords: () -> Unit,
+    onHistoryLimitChange: (Int) -> Unit,
+    onClearHistory: () -> Unit,
     onSendTestAlert: (AlertMessage) -> Boolean
 ) {
     if (!settings.setupCompleted) {
@@ -94,6 +96,8 @@ internal fun PowerMonitorApp(
                 padding,
                 onMonitoringEnabledChange,
                 onSettingsChange,
+                onHistoryLimitChange,
+                onClearHistory,
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
                 onOpenTestMode = { screen = AppScreen.TEST_MODE },
                 onOpenTelegram = { screen = AppScreen.TELEGRAM }

@@ -46,6 +46,8 @@ internal fun SettingsScreen(
     padding: PaddingValues,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
+    onHistoryLimitChange: (Int) -> Unit,
+    onClearHistory: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
     onOpenTelegram: () -> Unit
@@ -54,6 +56,7 @@ internal fun SettingsScreen(
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
     val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
     val telegramConfig = TelegramConfigStore(LocalContext.current).config()
+    var confirmClearHistory by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
@@ -163,6 +166,43 @@ internal fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
 
+        Text("History", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary)
+        SettingsCard {
+            Text("Keep recent power events", fontWeight = FontWeight.Medium)
+            Text("Older entries are removed automatically. Alert delivery records are managed separately in Diagnostics.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            HISTORY_LIMITS.forEach { (value, label) ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onHistoryLimitChange(value) }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.historyLimit == value,
+                        onClick = { onHistoryLimitChange(value) }
+                    )
+                    Text(label)
+                }
+            }
+            if (!confirmClearHistory) {
+                OutlinedButton(
+                    onClick = { confirmClearHistory = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Clear power history") }
+            } else {
+                Text("This permanently removes the local power-event history.",
+                    color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        onClearHistory()
+                        confirmClearHistory = false
+                    }) { Text("Clear") }
+                    OutlinedButton(onClick = { confirmClearHistory = false }) { Text("Cancel") }
+                }
+            }
+        }
+
         Text("Safety & privacy", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         SettingsCard {
@@ -261,4 +301,10 @@ private val RESTORE_DELAYS = listOf(
     30_000L to "30 seconds",
     60_000L to "1 minute",
     120_000L to "2 minutes"
+)
+
+private val HISTORY_LIMITS = listOf(
+    50 to "Last 50 events",
+    100 to "Last 100 events",
+    200 to "Last 200 events (recommended)"
 )

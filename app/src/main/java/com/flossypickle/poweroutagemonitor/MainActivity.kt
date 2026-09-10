@@ -86,6 +86,8 @@ class MainActivity : ComponentActivity() {
                     onCompleteSetup = ::completeSetup,
                     onRetryFailedDeliveries = ::retryFailedDeliveries,
                     onClearDeliveryRecords = ::clearDeliveryRecords,
+                    onHistoryLimitChange = ::updateHistoryLimit,
+                    onClearHistory = ::clearHistory,
                     onSendTestAlert = ::sendTestAlert
                 )
             }
@@ -197,6 +199,17 @@ class MainActivity : ComponentActivity() {
 
     private fun clearDeliveryRecords() {
         AlertQueueStore(this).clearTerminal()
+        refreshStoredState()
+    }
+
+    private fun updateHistoryLimit(limit: Int) {
+        MonitorStore(this).setHistoryLimit(limit)
+        EventHistoryStore(this).trimTo(limit)
+        refreshStoredState()
+    }
+
+    private fun clearHistory() {
+        EventHistoryStore(this).clear()
         refreshStoredState()
     }
 

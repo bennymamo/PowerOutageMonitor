@@ -19,7 +19,8 @@ internal class MonitorStore(context: Context) {
         val outageDelayMs: Long,
         val restoreDelayMs: Long,
         val sendRestoreNotification: Boolean,
-        val deviceName: String
+        val deviceName: String,
+        val historyLimit: Int = DEFAULT_HISTORY_LIMIT
     )
 
     fun settings(): Settings = Settings(
@@ -28,7 +29,8 @@ internal class MonitorStore(context: Context) {
         outageDelayMs = preferences.getLong(KEY_OUTAGE_DELAY, DEFAULT_OUTAGE_DELAY_MS),
         restoreDelayMs = preferences.getLong(KEY_RESTORE_DELAY, DEFAULT_RESTORE_DELAY_MS),
         sendRestoreNotification = preferences.getBoolean(KEY_SEND_RESTORE, true),
-        deviceName = preferences.getString(KEY_DEVICE_NAME, DEFAULT_DEVICE_NAME) ?: DEFAULT_DEVICE_NAME
+        deviceName = preferences.getString(KEY_DEVICE_NAME, DEFAULT_DEVICE_NAME) ?: DEFAULT_DEVICE_NAME,
+        historyLimit = preferences.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)
     )
 
     fun state(): OutageEngine.State {
@@ -83,6 +85,13 @@ internal class MonitorStore(context: Context) {
             .commit()
     }
 
+    fun setHistoryLimit(limit: Int) {
+        require(limit in HISTORY_LIMIT_RANGE)
+        check(preferences.edit().putInt(KEY_HISTORY_LIMIT, limit).commit()) {
+            "Unable to persist history retention"
+        }
+    }
+
     fun save(state: OutageEngine.State, snapshot: PowerSnapshot, observedAtEpochMs: Long) {
         val editor = preferences.edit()
         writeState(editor, state)
@@ -120,6 +129,8 @@ internal class MonitorStore(context: Context) {
         const val DEFAULT_OUTAGE_DELAY_MS = 60_000L
         const val DEFAULT_RESTORE_DELAY_MS = 30_000L
         const val DEFAULT_DEVICE_NAME = "Power monitor"
+        const val DEFAULT_HISTORY_LIMIT = 200
+        val HISTORY_LIMIT_RANGE = 10..1_000
         private const val FILE_NAME = "monitor_state"
         private const val KEY_ENABLED = "monitoring_enabled"
         private const val KEY_SETUP_COMPLETED = "setup_completed"
@@ -127,6 +138,7 @@ internal class MonitorStore(context: Context) {
         private const val KEY_RESTORE_DELAY = "restore_delay_ms"
         private const val KEY_SEND_RESTORE = "send_restore"
         private const val KEY_DEVICE_NAME = "device_name"
+        private const val KEY_HISTORY_LIMIT = "history_limit"
         private const val KEY_PHASE = "phase"
         private const val KEY_PHASE_SINCE = "phase_since"
         private const val KEY_OUTAGE_STARTED = "outage_started"

@@ -32,7 +32,7 @@ internal class MonitoringCoordinator(private val context: Context) {
 
         AlertMessageFactory.forTransition(before, after, snapshot, settings, nowEpochMs)
             ?.let(alerts::persistForEnabledProviders)
-        recordCompletedEvent(before, after, snapshot, nowEpochMs)
+        recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)
         DeadlineScheduler(context).schedule(after, settings)
         alerts.materializePending()
@@ -44,7 +44,8 @@ internal class MonitoringCoordinator(private val context: Context) {
         before: OutageEngine.State,
         after: OutageEngine.State,
         snapshot: PowerSnapshot,
-        nowEpochMs: Long
+        nowEpochMs: Long,
+        historyLimit: Int
     ) {
         val wasBrief = before.phase == OutageEngine.Phase.PENDING_OUTAGE &&
             after.phase == OutageEngine.Phase.POWERED
@@ -64,7 +65,7 @@ internal class MonitoringCoordinator(private val context: Context) {
                 restoredAtEpochMs = nowEpochMs,
                 startingBatteryPercent = before.outageStartBatteryPercent,
                 endingBatteryPercent = snapshot.batteryPercent
-            ))
+            ), historyLimit)
         }.onFailure { Log.e(TAG, "Unable to store power event history", it) }
     }
 

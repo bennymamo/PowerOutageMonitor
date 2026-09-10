@@ -24,8 +24,19 @@ internal class EventHistoryStore(context: Context) {
     )
 
     @Synchronized
-    fun append(record: Record) {
-        val records = (listOf(record) + read()).take(MAX_RECORDS)
+    fun append(record: Record, maxRecords: Int = MonitorStore.DEFAULT_HISTORY_LIMIT) {
+        write((listOf(record) + read()).take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE)))
+    }
+
+    @Synchronized
+    fun trimTo(maxRecords: Int) {
+        write(read().take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE)))
+    }
+
+    @Synchronized
+    fun clear() = write(emptyList())
+
+    private fun write(records: List<Record>) {
         val array = JSONArray()
         records.forEach { item ->
             array.put(JSONObject().apply {
@@ -72,6 +83,5 @@ internal class EventHistoryStore(context: Context) {
     companion object {
         const val KIND_BRIEF_INTERRUPTION = "brief_interruption"
         const val KIND_CONFIRMED_OUTAGE = "confirmed_outage"
-        private const val MAX_RECORDS = 200
     }
 }
