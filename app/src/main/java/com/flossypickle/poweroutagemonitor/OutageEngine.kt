@@ -9,7 +9,8 @@ internal object OutageEngine {
         val phaseSinceEpochMs: Long = 0,
         val outageStartedEpochMs: Long? = null,
         val outageStartBatteryPercent: Int? = null,
-        val confirmedAtEpochMs: Long? = null
+        val confirmedAtEpochMs: Long? = null,
+        val outageStartBatteryTemperatureTenthsCelsius: Int? = null
     )
 
     fun update(
@@ -18,7 +19,8 @@ internal object OutageEngine {
         nowEpochMs: Long,
         batteryPercent: Int?,
         outageDelayMs: Long,
-        restoreDelayMs: Long
+        restoreDelayMs: Long,
+        batteryTemperatureTenthsCelsius: Int? = null
     ): State {
         require(outageDelayMs >= 0 && restoreDelayMs >= 0)
         if (powered == null) return state
@@ -30,7 +32,8 @@ internal object OutageEngine {
                 phaseSinceEpochMs = nowEpochMs,
                 outageStartedEpochMs = nowEpochMs,
                 outageStartBatteryPercent = batteryPercent,
-                confirmedAtEpochMs = if (outageDelayMs == 0L) nowEpochMs else null
+                confirmedAtEpochMs = if (outageDelayMs == 0L) nowEpochMs else null,
+                outageStartBatteryTemperatureTenthsCelsius = batteryTemperatureTenthsCelsius
             )
             Phase.PENDING_OUTAGE -> when {
                 powered -> State(Phase.POWERED, nowEpochMs)

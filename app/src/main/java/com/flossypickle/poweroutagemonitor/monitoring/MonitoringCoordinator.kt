@@ -27,7 +27,8 @@ internal class MonitoringCoordinator(private val context: Context) {
             nowEpochMs = nowEpochMs,
             batteryPercent = snapshot.batteryPercent,
             outageDelayMs = settings.outageDelayMs,
-            restoreDelayMs = settings.restoreDelayMs
+            restoreDelayMs = settings.restoreDelayMs,
+            batteryTemperatureTenthsCelsius = snapshot.batteryTemperatureTenthsCelsius
         )
 
         AlertMessageFactory.forTransition(before, after, snapshot, settings, nowEpochMs)
@@ -64,7 +65,10 @@ internal class MonitoringCoordinator(private val context: Context) {
                 confirmedAtEpochMs = before.confirmedAtEpochMs,
                 restoredAtEpochMs = nowEpochMs,
                 startingBatteryPercent = before.outageStartBatteryPercent,
-                endingBatteryPercent = snapshot.batteryPercent
+                endingBatteryPercent = snapshot.batteryPercent,
+                startingBatteryTemperatureTenthsCelsius =
+                    before.outageStartBatteryTemperatureTenthsCelsius,
+                endingBatteryTemperatureTenthsCelsius = snapshot.batteryTemperatureTenthsCelsius
             ), historyLimit)
         }.onFailure { Log.e(TAG, "Unable to store power event history", it) }
     }

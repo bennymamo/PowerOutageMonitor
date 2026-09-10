@@ -42,7 +42,9 @@ internal class MonitorStore(context: Context) {
             phaseSinceEpochMs = preferences.getLong(KEY_PHASE_SINCE, 0),
             outageStartedEpochMs = preferences.optionalLong(KEY_OUTAGE_STARTED),
             outageStartBatteryPercent = preferences.optionalInt(KEY_OUTAGE_START_BATTERY),
-            confirmedAtEpochMs = preferences.optionalLong(KEY_CONFIRMED_AT)
+            confirmedAtEpochMs = preferences.optionalLong(KEY_CONFIRMED_AT),
+            outageStartBatteryTemperatureTenthsCelsius =
+                preferences.optionalInt(KEY_OUTAGE_START_TEMPERATURE)
         )
     }
 
@@ -109,6 +111,10 @@ internal class MonitorStore(context: Context) {
             .putOptionalLong(KEY_OUTAGE_STARTED, state.outageStartedEpochMs)
             .putOptionalInt(KEY_OUTAGE_START_BATTERY, state.outageStartBatteryPercent)
             .putOptionalLong(KEY_CONFIRMED_AT, state.confirmedAtEpochMs)
+            .putOptionalInt(
+                KEY_OUTAGE_START_TEMPERATURE,
+                state.outageStartBatteryTemperatureTenthsCelsius
+            )
     }
 
     private fun SharedPreferences.optionalLong(key: String): Long? =
@@ -143,6 +149,7 @@ internal class MonitorStore(context: Context) {
         private const val KEY_PHASE_SINCE = "phase_since"
         private const val KEY_OUTAGE_STARTED = "outage_started"
         private const val KEY_OUTAGE_START_BATTERY = "outage_start_battery"
+        private const val KEY_OUTAGE_START_TEMPERATURE = "outage_start_temperature"
         private const val KEY_CONFIRMED_AT = "confirmed_at"
         private const val KEY_LAST_PLUGGED = "last_plugged"
         private const val KEY_LAST_BATTERY = "last_battery"

@@ -22,6 +22,7 @@ internal data class DiagnosticsReport(
     val phase: OutageEngine.Phase,
     val externalPower: Boolean?,
     val batteryPercent: Int?,
+    val batteryTemperature: String,
     val lastObservation: String,
     val internetAvailable: Boolean,
     val batteryOptimizationExcluded: Boolean,
@@ -46,6 +47,7 @@ internal data class DiagnosticsReport(
         appendLine("State: ${phase.name}")
         appendLine("External power: ${externalPower?.let(::yesNo) ?: "Unknown"}")
         appendLine("Battery: ${batteryPercent?.let { "$it%" } ?: "Unknown"}")
+        appendLine("Battery temperature: $batteryTemperature")
         appendLine("Last observation: $lastObservation")
         appendLine("Internet available: ${yesNo(internetAvailable)}")
         appendLine("Battery optimization excluded: ${yesNo(batteryOptimizationExcluded)}")
@@ -83,6 +85,9 @@ internal class DiagnosticsCollector(private val context: Context) {
         phase = state.phase,
         externalPower = snapshot?.externallyPowered,
         batteryPercent = snapshot?.batteryPercent,
+        batteryTemperature = snapshot?.batteryTemperatureTenthsCelsius?.let {
+            String.format(java.util.Locale.getDefault(), "%.1f °C", it / 10.0)
+        } ?: "Unknown",
         lastObservation = if (lastObservationEpochMs > 0) {
             DateFormat.getDateTimeInstance().format(Date(lastObservationEpochMs))
         } else "Never",

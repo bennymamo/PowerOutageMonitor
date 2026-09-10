@@ -20,7 +20,9 @@ internal class EventHistoryStore(context: Context) {
         val confirmedAtEpochMs: Long?,
         val restoredAtEpochMs: Long,
         val startingBatteryPercent: Int?,
-        val endingBatteryPercent: Int?
+        val endingBatteryPercent: Int?,
+        val startingBatteryTemperatureTenthsCelsius: Int? = null,
+        val endingBatteryTemperatureTenthsCelsius: Int? = null
     )
 
     @Synchronized
@@ -46,6 +48,8 @@ internal class EventHistoryStore(context: Context) {
                 put("restoredAt", item.restoredAtEpochMs)
                 put("startBattery", item.startingBatteryPercent ?: JSONObject.NULL)
                 put("endBattery", item.endingBatteryPercent ?: JSONObject.NULL)
+                put("startTemperature", item.startingBatteryTemperatureTenthsCelsius ?: JSONObject.NULL)
+                put("endTemperature", item.endingBatteryTemperatureTenthsCelsius ?: JSONObject.NULL)
             })
         }
         val output = file.startWrite()
@@ -71,7 +75,9 @@ internal class EventHistoryStore(context: Context) {
                 confirmedAtEpochMs = item.optLongOrNull("confirmedAt"),
                 restoredAtEpochMs = item.getLong("restoredAt"),
                 startingBatteryPercent = item.optIntOrNull("startBattery"),
-                endingBatteryPercent = item.optIntOrNull("endBattery")
+                endingBatteryPercent = item.optIntOrNull("endBattery"),
+                startingBatteryTemperatureTenthsCelsius = item.optIntOrNull("startTemperature"),
+                endingBatteryTemperatureTenthsCelsius = item.optIntOrNull("endTemperature")
             )
         }
         records

@@ -117,6 +117,7 @@ internal fun DiagnosticsScreen(
                 .replaceFirstChar(Char::titlecase))
             DiagnosticRow("External power", report.externalPower?.let(::yesNo) ?: "Unknown")
             DiagnosticRow("Battery", report.batteryPercent?.let { "$it%" } ?: "Unknown")
+            DiagnosticRow("Battery temperature", report.batteryTemperature)
             DiagnosticRow("Last observation", report.lastObservation)
         }
 

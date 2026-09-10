@@ -7,8 +7,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class OutageEngineTest {
-    private fun step(state: State, power: Boolean?, time: Long, battery: Int? = 90) =
-        OutageEngine.update(state, power, time, battery, outageDelayMs = 60, restoreDelayMs = 30)
+    private fun step(
+        state: State,
+        power: Boolean?,
+        time: Long,
+        battery: Int? = 90,
+        temperature: Int? = 250
+    ) = OutageEngine.update(
+        state,
+        power,
+        time,
+        battery,
+        outageDelayMs = 60,
+        restoreDelayMs = 30,
+        batteryTemperatureTenthsCelsius = temperature
+    )
 
     @Test fun waitsForFirstConnection() {
         assertEquals(Phase.WAITING, step(State(), false, 10).phase)
@@ -16,12 +29,13 @@ class OutageEngineTest {
     }
 
     @Test fun confirmsOnlyAtDeadlineAndRetainsLossData() {
-        val pending = step(State(Phase.POWERED), false, 10, 93)
+        val pending = step(State(Phase.POWERED), false, 10, 93, 287)
         assertEquals(Phase.PENDING_OUTAGE, step(pending, false, 69).phase)
         val confirmed = step(pending, false, 70)
         assertEquals(Phase.OUTAGE, confirmed.phase)
         assertEquals(10L, confirmed.outageStartedEpochMs)
         assertEquals(93, confirmed.outageStartBatteryPercent)
+        assertEquals(287, confirmed.outageStartBatteryTemperatureTenthsCelsius)
         assertEquals(70L, confirmed.confirmedAtEpochMs)
     }
 

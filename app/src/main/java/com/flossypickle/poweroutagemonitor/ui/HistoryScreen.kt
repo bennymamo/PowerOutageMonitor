@@ -23,6 +23,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySumm
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 
 @Composable
 internal fun HistoryScreen(
@@ -44,6 +45,7 @@ internal fun HistoryScreen(
             item {
                 EventCard("Ongoing outage", monitorState.outageStartedEpochMs ?: 0,
                     null, monitorState.outageStartBatteryPercent, null,
+                    monitorState.outageStartBatteryTemperatureTenthsCelsius, null,
                     deliverySummaries[eventId(monitorState.outageStartedEpochMs ?: 0)])
             }
         }
@@ -69,6 +71,8 @@ internal fun HistoryScreen(
                 restoredAt = record.restoredAtEpochMs,
                 startBattery = record.startingBatteryPercent,
                 endBattery = record.endingBatteryPercent,
+                startTemperature = record.startingBatteryTemperatureTenthsCelsius,
+                endTemperature = record.endingBatteryTemperatureTenthsCelsius,
                 deliverySummary = deliverySummaries[eventId(record.powerLostAtEpochMs)]
             )
         }
@@ -82,6 +86,8 @@ private fun EventCard(
     restoredAt: Long?,
     startBattery: Int?,
     endBattery: Int?,
+    startTemperature: Int?,
+    endTemperature: Int?,
     deliverySummary: AlertDeliverySummary.Event?
 ) {
     val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
@@ -100,6 +106,15 @@ private fun EventCard(
                 else -> null
             }
             batteryText?.let { Text("Battery: $it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            val temperatureText = when {
+                startTemperature != null && endTemperature != null ->
+                    "${formatTemperature(startTemperature)} → ${formatTemperature(endTemperature)}"
+                startTemperature != null -> "${formatTemperature(startTemperature)} at power loss"
+                else -> null
+            }
+            temperatureText?.let {
+                Text("Temperature: $it", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             deliverySummary?.let {
                 Text("Alerts: ${it.label()}", color = when {
                     it.failed > 0 -> MaterialTheme.colorScheme.error
@@ -110,6 +125,9 @@ private fun EventCard(
         }
     }
 }
+
+private fun formatTemperature(tenthsCelsius: Int): String =
+    String.format(Locale.getDefault(), "%.1f °C", tenthsCelsius / 10.0)
 
 private fun eventId(powerLostAtEpochMs: Long) = "power-event-$powerLostAtEpochMs"
 
