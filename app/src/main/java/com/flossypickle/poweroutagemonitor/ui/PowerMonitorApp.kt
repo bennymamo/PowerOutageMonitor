@@ -22,7 +22,15 @@ import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
-private enum class AppScreen(val label: String) { STATUS("Status"), HISTORY("History"), SETTINGS("Settings") }
+private enum class AppScreen(val label: String) {
+    STATUS("Status"),
+    HISTORY("History"),
+    SETTINGS("Settings"),
+    DIAGNOSTICS("Diagnostics"),
+    TEST_MODE("Test mode")
+}
+
+private val primaryScreens = listOf(AppScreen.STATUS, AppScreen.HISTORY, AppScreen.SETTINGS)
 
 @Composable
 internal fun PowerMonitorApp(
@@ -40,13 +48,18 @@ internal fun PowerMonitorApp(
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.surface) {
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().height(52.dp)) {
-                    AppScreen.entries.forEach { item ->
+                    primaryScreens.forEach { item ->
+                        val selected = screen == item ||
+                            item == AppScreen.SETTINGS && screen in listOf(
+                                AppScreen.DIAGNOSTICS,
+                                AppScreen.TEST_MODE
+                            )
                         TextButton(onClick = { screen = item }, modifier = Modifier.weight(1f)) {
                             Text(
                                 item.label,
-                                color = if (screen == item) MaterialTheme.colorScheme.primary
+                                color = if (selected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (screen == item) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
@@ -61,7 +74,22 @@ internal fun PowerMonitorApp(
                 settings,
                 padding,
                 onMonitoringEnabledChange,
-                onSettingsChange
+                onSettingsChange,
+                onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
+                onOpenTestMode = { screen = AppScreen.TEST_MODE }
+            )
+            AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
+                settings = settings,
+                state = monitorState,
+                snapshot = snapshot,
+                lastObservationEpochMs = lastObservationEpochMs,
+                padding = padding,
+                onBack = { screen = AppScreen.SETTINGS }
+            )
+            AppScreen.TEST_MODE -> TestModeScreen(
+                settings = settings,
+                padding = padding,
+                onBack = { screen = AppScreen.SETTINGS }
             )
         }
     }

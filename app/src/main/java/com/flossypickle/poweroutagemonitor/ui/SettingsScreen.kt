@@ -21,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,7 +44,9 @@ internal fun SettingsScreen(
     settings: MonitorStore.Settings,
     padding: PaddingValues,
     onMonitoringEnabledChange: (Boolean) -> Unit,
-    onSettingsChange: (Long, Long, Boolean, String) -> Unit
+    onSettingsChange: (Long, Long, Boolean, String) -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenTestMode: () -> Unit
 ) {
     var deviceName by remember { mutableStateOf(settings.deviceName) }
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
@@ -69,6 +72,19 @@ internal fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
+        }
+
+        Text("Setup & testing", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary)
+        SettingsCard {
+            Text("Check that the monitor is ready and preview outage messages without changing real monitoring data.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+                Text("Open diagnostics")
+            }
+            OutlinedButton(onClick = onOpenTestMode, modifier = Modifier.fillMaxWidth()) {
+                Text("Open test mode")
+            }
         }
 
         Text("Device", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)

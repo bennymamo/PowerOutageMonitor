@@ -4,7 +4,7 @@ An Android power-outage monitor by Flossy Pickle. Package: `com.flossypickle.pow
 
 ## Current milestone
 
-The app now has Status, History and Settings screens. A user-enabled foreground service observes Android's external-power state without polling, persists the outage state before first unlock, resumes after reboot, and records completed outages or brief interruptions locally. Alert delivery integrations are not implemented yet.
+The app now has Status, History and grouped Settings screens, plus Diagnostics and an isolated Test mode under Settings. A user-enabled foreground service observes Android's external-power state without polling, persists the outage state before first unlock, resumes after reboot or app upgrade, and records completed outages or brief interruptions locally. Alert delivery integrations are not implemented yet.
 
 Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose, one application module. API 36 emulator testing is the initial development target; physical old-device testing is required before reliability claims.
 
@@ -26,6 +26,7 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - `OutageEngine` contains deterministic business rules and has no Android dependencies.
 - `monitoring` owns Android battery observations, the foreground service, boot recovery, persisted-deadline alarms and coordination.
 - `storage` owns device-protected monitor state and bounded atomic event history.
+- `diagnostics` collects a credential-free local health report, and `guidance` supplies replaceable device guidance data.
 - `integrations.power` defines normalized grid evidence for Android charging, EcoFlow, Huawei, Tesla, Home Assistant, MQTT, REST, WebSocket, SNMP or other future sources.
 - `integrations.alerts` defines independent destinations such as Telegram, SMS, email, webhooks, ntfy and Gotify.
 - `ui` contains separate Status, History and Settings screens. User-adjustable behavior belongs in grouped Settings sections.
@@ -40,7 +41,7 @@ Open this existing directory in Android Studio and use its bundled JDK. From Pow
 .\gradlew.bat assembleDebug testDebugUnitTest lintDebug
 ```
 
-Permissions are limited to foreground service operation, notification display and restart after boot. No network permission is currently declared, no user information is transmitted, and power loss indicates charger disconnection rather than independently verified mains failure.
+Permissions are limited to foreground service operation, notification display, restart after boot and read-only network-state detection for Diagnostics. No internet permission is currently declared, no user information is transmitted, and power loss indicates charger disconnection rather than independently verified mains failure.
 
 A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. Android can delay this inexact alarm under Doze; exact-alarm special access is deliberately not requested.
 
@@ -50,4 +51,6 @@ Dark navy surfaces with mint external-power and amber battery indicators. The co
 
 ## Validation
 
-Debug build, seven outage-engine tests and Android lint passed on 10 September 2026. API 36 emulator checks verified the dark dashboard, launcher graphic, grouped Settings UI and completed History UI. An end-to-end simulated event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app. The notification remained silent, non-vibrating, low priority and ongoing. Android 6.0 and physical-device behavior are not yet verified.
+Debug build, seven outage-engine tests and Android lint passed on 10 September 2026. API 36 emulator checks verified the dark dashboard, launcher graphic, grouped Settings UI, completed History UI, live Diagnostics and simulated alert preview. The test-mode preview left the real state and history byte-for-byte unchanged. An end-to-end simulated device event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app; an in-place APK upgrade verified the same behavior through `MY_PACKAGE_REPLACED`. The notification remained silent, non-vibrating, low priority and ongoing. Android 6.0 and physical-device behavior are not yet verified.
+
+Background guidance follows Android's current [Doze and App Standby guidance](https://developer.android.com/training/monitoring-device-state/doze-standby) and opens the platform battery-optimization settings rather than assuming a manufacturer's changing menu layout.

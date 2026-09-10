@@ -33,6 +33,7 @@ internal class MonitoringService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         coordinator = MonitoringCoordinator(this)
         createNotificationChannel()
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
@@ -49,6 +50,7 @@ internal class MonitoringService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         handler.removeCallbacks(deadlineCheck)
         runCatching { unregisterReceiver(batteryReceiver) }
         super.onDestroy()
@@ -152,6 +154,9 @@ internal class MonitoringService : Service() {
     companion object {
         private const val CHANNEL_ID = "power_monitoring"
         private const val NOTIFICATION_ID = 1001
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(
