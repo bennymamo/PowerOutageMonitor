@@ -50,6 +50,8 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let { snapshot.value = it }
+                Intent.ACTION_POWER_CONNECTED,
+                Intent.ACTION_POWER_DISCONNECTED -> refreshCurrentPowerSnapshot()
                 MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED -> refreshStoredState()
                 AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED -> refreshStoredState()
             }
@@ -104,6 +106,8 @@ class MainActivity : ComponentActivity() {
         if (receiverRegistered) return
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED)
             addAction(AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED)
         }
@@ -114,6 +118,11 @@ class MainActivity : ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         receiverRegistered = true
+        PowerSnapshot.from(sticky)?.let { snapshot.value = it }
+    }
+
+    private fun refreshCurrentPowerSnapshot() {
+        val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         PowerSnapshot.from(sticky)?.let { snapshot.value = it }
     }
 

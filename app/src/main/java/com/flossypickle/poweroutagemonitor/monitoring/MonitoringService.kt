@@ -27,7 +27,11 @@ internal class MonitoringService : Service() {
     private val deadlineCheck = Runnable { reconcileCurrentPower() }
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            PowerSnapshot.from(intent)?.let(::process)
+            when (intent.action) {
+                Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let(::process)
+                Intent.ACTION_POWER_CONNECTED,
+                Intent.ACTION_POWER_DISCONNECTED -> reconcileCurrentPower()
+            }
         }
     }
 
@@ -66,7 +70,11 @@ internal class MonitoringService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun registerBatteryReceiver() {
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(batteryReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {

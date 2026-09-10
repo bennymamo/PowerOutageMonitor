@@ -53,6 +53,8 @@ Permissions are limited to foreground service operation, notification display, r
 
 A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. Android can delay this inexact alarm under Doze; exact-alarm special access is deliberately not requested.
 
+While monitoring is enabled, the foreground service listens dynamically for `ACTION_BATTERY_CHANGED`, `ACTION_POWER_CONNECTED` and `ACTION_POWER_DISCONNECTED`. The explicit connection events trigger a fresh read of Android's sticky battery snapshot; their intentionally sparse payload is never interpreted as a power state. This adds prompt vendor-independent event signals without polling or a manifest receiver that would depend on implicit-broadcast background behavior.
+
 ## Visual design
 
 Dark navy surfaces with mint external-power and amber battery indicators. The compact battery gauge is drawn natively in Compose so the charger-test instructions remain visible on the Pixel 4 emulator at default text size. Scrolling remains available for smaller screens and larger accessibility text. A matching vector lightning-bolt launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
@@ -66,6 +68,10 @@ The delivery path was exercised offline with a fake token and recipient. The con
 A seeded failed-delivery record verified dashboard failure visibility, live Diagnostics counts, user-triggered retry, asynchronous screen refresh and two-step clearing. Clearing removed only terminal delivery metadata; monitoring remained active and the dashboard warning disappeared.
 
 A clean-data emulator run verified all four setup pages, scroll behavior, the old-battery warning, default timing summary, Android 13+ notification-permission handoff, persisted completion and automatic service startup. The wizard uses the same dark theme and leaves alert-channel setup in its dedicated Settings section.
+
+With the expanded dynamic receiver installed, simulated AC loss moved the persisted engine and dashboard into pending-outage state within two seconds. Reconnection before the 60-second threshold returned to powered state, recorded a brief interruption and left only an `alarm_cancelled` entry in Android's alarm history.
+
+A cold emulator reboot also verified unattended recovery: Android delivered `LOCKED_BOOT_COMPLETED`, recreated the foreground monitoring service and restored its quiet ongoing notification without launching the app screen.
 
 Telegram bot tokens are encrypted with AES-GCM using an Android Keystore key and never displayed after saving. Tokens, chat destinations, queued messages and the pre-unlock alert bridge are excluded from Android backup and device transfer, preventing credentials or stale alerts from being restored onto another phone. The setup screen supports token validation, chat discovery, multiple recipients, test messages and two-step removal. Diagnostics reports queued, retrying and failed deliveries without revealing credentials.
 
