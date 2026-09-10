@@ -3,6 +3,7 @@ package com.flossypickle.poweroutagemonitor.storage
 import android.content.Context
 import android.os.Build
 import android.util.AtomicFile
+import com.flossypickle.poweroutagemonitor.OutageEngine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -27,7 +28,9 @@ internal class EventHistoryStore(context: Context) {
 
     @Synchronized
     fun append(record: Record, maxRecords: Int = MonitorStore.DEFAULT_HISTORY_LIMIT) {
-        write((listOf(record) + read()).take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE)))
+        val records = read()
+        val updated = appendUnique(records, record, maxRecords)
+        if (updated !== records) write(updated)
     }
 
     @Synchronized
@@ -89,5 +92,32 @@ internal class EventHistoryStore(context: Context) {
     companion object {
         const val KIND_BRIEF_INTERRUPTION = "brief_interruption"
         const val KIND_CONFIRMED_OUTAGE = "confirmed_outage"
+
+        internal fun completedKind(
+            before: OutageEngine.State,
+            after: OutageEngine.State
+        ): String? = when {
+            before.phase == OutageEngine.Phase.PENDING_OUTAGE &&
+                after.phase == OutageEngine.Phase.POWERED -> KIND_BRIEF_INTERRUPTION
+            before.phase in setOf(
+                OutageEngine.Phase.OUTAGE,
+                OutageEngine.Phase.PENDING_RESTORE
+            ) && after.phase == OutageEngine.Phase.POWERED -> KIND_CONFIRMED_OUTAGE
+            else -> null
+        }
+
+        internal fun appendUnique(
+            records: List<Record>,
+            record: Record,
+            maxRecords: Int
+        ): List<Record> {
+            if (records.any {
+                    it.kind == record.kind &&
+                        it.powerLostAtEpochMs == record.powerLostAtEpochMs
+                }
+            ) return records
+            return (listOf(record) + records)
+                .take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE))
+        }
     }
 }

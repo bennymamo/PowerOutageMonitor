@@ -48,19 +48,11 @@ internal class MonitoringCoordinator(private val context: Context) {
         nowEpochMs: Long,
         historyLimit: Int
     ) {
-        val wasBrief = before.phase == OutageEngine.Phase.PENDING_OUTAGE &&
-            after.phase == OutageEngine.Phase.POWERED
-        val wasRestored = before.phase == OutageEngine.Phase.PENDING_RESTORE &&
-            after.phase == OutageEngine.Phase.POWERED
-        if (!wasBrief && !wasRestored) return
+        val kind = EventHistoryStore.completedKind(before, after) ?: return
 
         runCatching {
             history.append(EventHistoryStore.Record(
-                kind = if (wasBrief) {
-                    EventHistoryStore.KIND_BRIEF_INTERRUPTION
-                } else {
-                    EventHistoryStore.KIND_CONFIRMED_OUTAGE
-                },
+                kind = kind,
                 powerLostAtEpochMs = before.outageStartedEpochMs ?: before.phaseSinceEpochMs,
                 confirmedAtEpochMs = before.confirmedAtEpochMs,
                 restoredAtEpochMs = nowEpochMs,

@@ -28,7 +28,7 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
         val registry = AlertProviderRegistry(context)
         val destinations = registry.enabledDestinations()
         if (destinations.isEmpty()) {
-            pending.clear()
+            if (!enabledProviders.hasAny()) pending.clear()
             return
         }
         val queue = AlertQueueStore(context)

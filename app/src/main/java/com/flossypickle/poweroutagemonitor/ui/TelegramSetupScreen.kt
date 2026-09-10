@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramClient
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 import kotlinx.coroutines.Dispatchers
@@ -221,6 +222,9 @@ internal fun TelegramSetupScreen(
                             }
                         }.onSuccess {
                             config = withContext(Dispatchers.IO) { store.config() }
+                            withContext(Dispatchers.IO) {
+                                AlertDeliveryCoordinator(context).materializePending()
+                            }
                             enabled = config.enabled
                             tokenInput = ""
                             feedback = if (requestedEnabled && !config.enabled) {
