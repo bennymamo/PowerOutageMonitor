@@ -30,6 +30,22 @@ internal class AlertQueueStore(context: Context) {
         writeUnlocked(items.toMutableList().apply { set(index, item) })
     }
 
+    fun find(id: String): AlertQueueEngine.Item? = synchronized(lock) {
+        readUnlocked().firstOrNull { it.id == id }
+    }
+
+    /** Atomically leases one item so overlapping workers cannot send it twice. */
+    fun claim(id: String, nowEpochMs: Long): AlertQueueEngine.Item? = synchronized(lock) {
+        val items = readUnlocked()
+        val index = items.indexOfFirst { it.id == id }
+        if (index < 0) return@synchronized null
+        val item = items[index]
+        if (item !in AlertQueueEngine.due(listOf(item), nowEpochMs)) return@synchronized null
+        val claimed = AlertQueueEngine.markInFlight(item, nowEpochMs)
+        writeUnlocked(items.toMutableList().apply { set(index, claimed) })
+        claimed
+    }
+
     private fun readUnlocked(): List<AlertQueueEngine.Item> = runCatching {
         if (!file.baseFile.exists()) return emptyList()
         val array = JSONArray(file.openRead().bufferedReader().use { it.readText() })

@@ -43,6 +43,7 @@ internal fun DashboardScreen(
     monitorState: OutageEngine.State,
     settings: MonitorStore.Settings,
     lastObservationEpochMs: Long,
+    deliveryWarning: String?,
     padding: PaddingValues
 ) {
     val colors = MaterialTheme.colorScheme
@@ -97,6 +98,20 @@ internal fun DashboardScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ReadingTile("POWER SOURCE", sourceText(snapshot?.plugged), Modifier.weight(1f))
                 ReadingTile("BATTERY STATE", statusText(snapshot?.batteryStatus), Modifier.weight(1f))
+            }
+            deliveryWarning?.let { warning ->
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.errorContainer)
+                ) {
+                    Text(
+                        warning,
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        color = colors.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

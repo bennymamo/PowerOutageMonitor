@@ -40,6 +40,7 @@ internal fun PowerMonitorApp(
     settings: MonitorStore.Settings,
     history: List<EventHistoryStore.Record>,
     lastObservationEpochMs: Long,
+    deliveryWarning: String?,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit
 ) {
@@ -70,7 +71,9 @@ internal fun PowerMonitorApp(
         }
     ) { padding ->
         when (screen) {
-            AppScreen.STATUS -> DashboardScreen(snapshot, monitorState, settings, lastObservationEpochMs, padding)
+            AppScreen.STATUS -> DashboardScreen(
+                snapshot, monitorState, settings, lastObservationEpochMs, deliveryWarning, padding
+            )
             AppScreen.HISTORY -> HistoryScreen(history, monitorState, padding)
             AppScreen.SETTINGS -> SettingsScreen(
                 settings,

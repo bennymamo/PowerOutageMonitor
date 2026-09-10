@@ -1,0 +1,89 @@
+package com.flossypickle.poweroutagemonitor.integrations.alerts
+
+import com.flossypickle.poweroutagemonitor.OutageEngine
+import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import java.text.DateFormat
+import java.util.Date
+import kotlin.math.max
+
+/** Creates provider-neutral user messages from confirmed state transitions. */
+internal object AlertMessageFactory {
+    fun forTransition(
+        before: OutageEngine.State,
+        after: OutageEngine.State,
+        snapshot: PowerSnapshot,
+        settings: MonitorStore.Settings,
+        nowEpochMs: Long
+    ): AlertMessage? {
+        val outageConfirmed = after.phase == OutageEngine.Phase.OUTAGE &&
+            before.phase in setOf(OutageEngine.Phase.POWERED, OutageEngine.Phase.PENDING_OUTAGE)
+        if (outageConfirmed) return outage(after, settings)
+
+        val restored = after.phase == OutageEngine.Phase.POWERED &&
+            before.phase in setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
+        if (restored && settings.sendRestoreNotification) {
+            return restored(before, snapshot, settings, nowEpochMs)
+        }
+        return null
+    }
+
+    private fun outage(state: OutageEngine.State, settings: MonitorStore.Settings): AlertMessage {
+        val lostAt = state.outageStartedEpochMs ?: state.phaseSinceEpochMs
+        val confirmedAt = state.confirmedAtEpochMs ?: state.phaseSinceEpochMs
+        return AlertMessage(
+            eventId = eventId(lostAt),
+            kind = AlertKind.OUTAGE,
+            title = "POWER OUTAGE DETECTED",
+            body = buildString {
+                appendLine("Device: ${settings.deviceName}")
+                appendLine("Power lost: ${formatTime(lostAt)}")
+                appendLine("Confirmed: ${formatTime(confirmedAt)}")
+                appendLine("Alert delay: ${formatDuration(settings.outageDelayMs)}")
+                state.outageStartBatteryPercent?.let { appendLine("Battery at power loss: $it%") }
+                append("The device is now running on battery.")
+            }
+        )
+    }
+
+    private fun restored(
+        state: OutageEngine.State,
+        snapshot: PowerSnapshot,
+        settings: MonitorStore.Settings,
+        restoredAt: Long
+    ): AlertMessage {
+        val lostAt = state.outageStartedEpochMs ?: state.phaseSinceEpochMs
+        return AlertMessage(
+            eventId = eventId(lostAt),
+            kind = AlertKind.RESTORED,
+            title = "POWER RESTORED",
+            body = buildString {
+                appendLine("Device: ${settings.deviceName}")
+                appendLine("Power lost: ${formatTime(lostAt)}")
+                appendLine("Power restored: ${formatTime(restoredAt)}")
+                appendLine("Outage duration: ${formatDuration(max(0, restoredAt - lostAt))}")
+                val start = state.outageStartBatteryPercent
+                val end = snapshot.batteryPercent
+                if (start != null && end != null) appendLine("Battery: $start% to $end%")
+                append("External power is stable again.")
+            }
+        )
+    }
+
+    private fun eventId(lostAt: Long) = "power-event-$lostAt"
+
+    private fun formatTime(epochMs: Long): String =
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
+
+    internal fun formatDuration(durationMs: Long): String {
+        val totalSeconds = durationMs.coerceAtLeast(0) / 1_000L
+        val hours = totalSeconds / 3_600
+        val minutes = totalSeconds % 3_600 / 60
+        val seconds = totalSeconds % 60
+        return buildList {
+            if (hours > 0) add("$hours h")
+            if (minutes > 0) add("$minutes min")
+            if (seconds > 0 || isEmpty()) add("$seconds sec")
+        }.joinToString(" ")
+    }
+}

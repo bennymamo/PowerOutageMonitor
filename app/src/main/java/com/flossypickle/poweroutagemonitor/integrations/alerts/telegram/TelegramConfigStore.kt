@@ -2,6 +2,7 @@ package com.flossypickle.poweroutagemonitor.integrations.alerts.telegram
 
 import android.content.Context
 import com.flossypickle.poweroutagemonitor.storage.SecureSecretStore
+import com.flossypickle.poweroutagemonitor.storage.EnabledAlertProvidersStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,6 +18,7 @@ internal class TelegramConfigStore(context: Context) {
     private val preferences = context.applicationContext
         .getSharedPreferences(PREFERENCES_FILE, Context.MODE_PRIVATE)
     private val secrets = SecureSecretStore(context)
+    private val enabledProviders = EnabledAlertProvidersStore(context)
 
     fun config(): Config = Config(
         enabled = preferences.getBoolean(KEY_ENABLED, false),
@@ -53,16 +55,19 @@ internal class TelegramConfigStore(context: Context) {
                 })
             }
         }
+        val actuallyEnabled = enabled && hasUsableToken && cleanDestinations.isNotEmpty()
         check(preferences.edit()
-            .putBoolean(KEY_ENABLED, enabled && hasUsableToken && cleanDestinations.isNotEmpty())
+            .putBoolean(KEY_ENABLED, actuallyEnabled)
             .putString(KEY_BOT_NAME, botDisplayName?.trim()?.takeIf(String::isNotEmpty))
             .putString(KEY_DESTINATIONS, json.toString())
             .commit()) { "Unable to persist Telegram configuration" }
+        enabledProviders.setEnabled(PROVIDER_ID, actuallyEnabled)
     }
 
     fun clear() {
         preferences.edit().clear().commit()
         secrets.remove(SECRET_BOT_TOKEN)
+        enabledProviders.setEnabled(PROVIDER_ID, false)
     }
 
     private fun readDestinations(): List<ChatDestination> = runCatching {

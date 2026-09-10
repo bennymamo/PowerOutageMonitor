@@ -101,6 +101,13 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Notifications", if (report.notificationsAllowed) "Allowed" else "Blocked")
             DiagnosticRow("Power source", report.configuredPowerProviders)
             DiagnosticRow("Alert channels", report.configuredAlertProviders)
+            DiagnosticRow("Queued", report.queuedDeliveries.toString())
+            DiagnosticRow("Waiting to retry", report.retryingDeliveries.toString())
+            DiagnosticRow("Failed", report.failedDeliveries.toString())
+            report.lastDeliveryError?.let { error ->
+                Text("Last delivery error: $error", color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp)
+            }
         }
 
         Text("Background reliability", style = MaterialTheme.typography.titleMedium,

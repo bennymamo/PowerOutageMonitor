@@ -14,6 +14,8 @@ import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
+import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import java.text.DateFormat
 import java.util.Date
 
@@ -33,7 +35,11 @@ internal data class DiagnosticsReport(
     val notificationsAllowed: Boolean,
     val bootStartupConfigured: Boolean = true,
     val configuredPowerProviders: String = "Android external power",
-    val configuredAlertProviders: String = "None"
+    val configuredAlertProviders: String = "None",
+    val queuedDeliveries: Int = 0,
+    val retryingDeliveries: Int = 0,
+    val failedDeliveries: Int = 0,
+    val lastDeliveryError: String? = null
 ) {
     fun asPlainText(): String = buildString {
         appendLine("Power Outage Monitor diagnostics")
@@ -52,7 +58,11 @@ internal data class DiagnosticsReport(
         appendLine("Notifications allowed: ${yesNo(notificationsAllowed)}")
         appendLine("Boot startup configured: ${yesNo(bootStartupConfigured)}")
         appendLine("Power providers: $configuredPowerProviders")
-        append("Alert providers: $configuredAlertProviders")
+        appendLine("Alert providers: $configuredAlertProviders")
+        appendLine("Queued deliveries: $queuedDeliveries")
+        appendLine("Retrying deliveries: $retryingDeliveries")
+        appendLine("Failed deliveries: $failedDeliveries")
+        lastDeliveryError?.let { appendLine("Last delivery error: $it") }
     }
 
     private fun yesNo(value: Boolean) = if (value) "Yes" else "No"
@@ -66,6 +76,7 @@ internal class DiagnosticsCollector(private val context: Context) {
         lastObservationEpochMs: Long
     ): DiagnosticsReport {
         val telegram = TelegramConfigStore(context).config()
+        val deliveries = AlertQueueStore(context).read()
         return DiagnosticsReport(
         appVersion = appVersionName(),
         androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
@@ -86,7 +97,13 @@ internal class DiagnosticsCollector(private val context: Context) {
             telegram.enabled -> "Telegram enabled (${telegram.destinations.size} destination(s))"
             telegram.hasToken -> "Telegram saved, disabled"
             else -> "None"
-        }
+        },
+        queuedDeliveries = deliveries.count {
+            it.status == AlertQueueEngine.Status.PENDING || it.status == AlertQueueEngine.Status.IN_FLIGHT
+        },
+        retryingDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.RETRYING },
+        failedDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.FAILED },
+        lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError }
         )
     }
 

@@ -12,7 +12,7 @@ internal class TelegramAlertProvider(
     override val id: String = TelegramConfigStore.PROVIDER_ID
     override val displayName: String = "Telegram · ${destination.label}"
 
-    override suspend fun send(message: AlertMessage): DeliveryResult = client.sendMessage(
+    override fun send(message: AlertMessage): DeliveryResult = client.sendMessage(
         token = token,
         chatId = destination.chatId,
         text = "${message.title}\n\n${message.body}"

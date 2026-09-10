@@ -205,7 +205,7 @@ internal fun TelegramSetupScreen(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Enable Telegram alerts", fontWeight = FontWeight.Medium)
-                    Text("Used by real outages only after delivery wiring is enabled in a later milestone.",
+                    Text("Send confirmed outage and stable-restoration alerts to every saved chat.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !loading)

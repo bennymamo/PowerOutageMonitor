@@ -19,5 +19,5 @@ internal sealed interface DeliveryResult {
 internal interface AlertProvider {
     val id: String
     val displayName: String
-    suspend fun send(message: AlertMessage): DeliveryResult
+    fun send(message: AlertMessage): DeliveryResult
 }

@@ -15,10 +15,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.monitoring.DeadlineScheduler
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryWorker
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
+import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.ui.PowerMonitorApp
 import com.flossypickle.poweroutagemonitor.ui.theme.PowerOutageMonitorTheme
@@ -29,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private var settings = androidx.compose.runtime.mutableStateOf<MonitorStore.Settings?>(null)
     private var history = androidx.compose.runtime.mutableStateOf(emptyList<EventHistoryStore.Record>())
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
+    private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
     private var receiverRegistered = false
 
     private val notificationPermission = registerForActivityResult(
@@ -40,6 +45,7 @@ class MainActivity : ComponentActivity() {
             when (intent.action) {
                 Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let { snapshot.value = it }
                 MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED -> refreshStoredState()
+                AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED -> refreshStoredState()
             }
         }
     }
@@ -59,6 +65,7 @@ class MainActivity : ComponentActivity() {
                     settings = settings.value ?: MonitorStore(this).settings(),
                     history = history.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
+                    deliveryWarning = deliveryWarning.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
                     onSettingsChange = ::updateSettings
                 )
@@ -70,6 +77,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         registerAppReceiver()
         refreshStoredState()
+        AlertDeliveryCoordinator(this).materializePending()
         if (MonitorStore(this).settings().monitoringEnabled) startMonitoringService()
     }
 
@@ -86,6 +94,7 @@ class MainActivity : ComponentActivity() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED)
+            addAction(AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED)
         }
         val sticky = ContextCompat.registerReceiver(
             this,
@@ -139,5 +148,13 @@ class MainActivity : ComponentActivity() {
         settings.value = store.settings()
         lastObservationEpochMs.longValue = store.lastObservationEpochMs()
         history.value = EventHistoryStore(this).read()
+        val deliveries = AlertQueueStore(this).read()
+        deliveryWarning.value = when {
+            deliveries.any { it.status == AlertQueueEngine.Status.FAILED } ->
+                "An alert failed. Open Diagnostics for the reason."
+            deliveries.any { it.status == AlertQueueEngine.Status.RETRYING } ->
+                "An alert is waiting to retry when delivery is possible."
+            else -> null
+        }
     }
 }
