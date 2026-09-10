@@ -35,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
@@ -266,6 +268,10 @@ private fun SettingSwitch(
 
 @Composable
 private fun DelayOptions(options: List<Pair<Long, String>>, selected: Long, onSelect: (Long) -> Unit) {
+    val isPreset = options.any { it.first == selected }
+    var customSeconds by remember(selected) {
+        mutableStateOf(if (isPreset) "" else (selected / 1_000L).toString())
+    }
     options.forEach { (value, label) ->
         Row(
             Modifier.fillMaxWidth().clickable { onSelect(value) }.padding(vertical = 2.dp),
@@ -275,6 +281,47 @@ private fun DelayOptions(options: List<Pair<Long, String>>, selected: Long, onSe
             Text(label)
         }
     }
+    if (!isPreset) {
+        Text(
+            "Current custom delay: ${formatCustomDelay(selected)}",
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+    OutlinedTextField(
+        value = customSeconds,
+        onValueChange = { value ->
+            if (value.length <= 5 && value.all(Char::isDigit)) customSeconds = value
+        },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Custom delay in seconds") },
+        supportingText = { Text("0 to 86,400 seconds") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true
+    )
+    val parsedSeconds = customSeconds.toLongOrNull()
+    OutlinedButton(
+        onClick = {
+            parsedSeconds
+                ?.takeIf { it in 0L..86_400L }
+                ?.let { onSelect(it * 1_000L) }
+        },
+        enabled = parsedSeconds != null && parsedSeconds in 0L..86_400L,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Save custom delay") }
+}
+
+private fun formatCustomDelay(milliseconds: Long): String {
+    val seconds = milliseconds / 1_000L
+    val hours = seconds / 3_600L
+    val minutes = seconds % 3_600L / 60L
+    val remainingSeconds = seconds % 60L
+    return buildList {
+        if (hours > 0) add("${hours}h")
+        if (minutes > 0) add("${minutes}m")
+        if (remainingSeconds > 0 || isEmpty()) add("${remainingSeconds}s")
+    }.joinToString(" ")
 }
 
 @Composable

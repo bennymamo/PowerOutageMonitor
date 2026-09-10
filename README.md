@@ -38,6 +38,7 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - `ui` contains separate Status, History and Settings screens. User-adjustable behavior belongs in grouped Settings sections.
 - History associates provider-neutral delivery totals with each power event. Diagnostics can retry failed items after a configuration fix or clear terminal delivery details while retaining outage history.
 - History retention is independently configurable to the newest 50, 100 or 200 power events; a separate two-step action clears power history without changing settings or delivery records.
+- Outage and restoration delays provide common one-tap presets plus a validated custom value from 0 seconds to 24 hours.
 - `SetupWizardScreen` is shown only on a true fresh install. Existing installs migrate past it, and every choice remains editable in Settings.
 
 The app remains one Gradle module for a fast, lightweight build. Package contracts allow later extraction into separate Gradle modules without coupling the state machine to Android or any provider.
