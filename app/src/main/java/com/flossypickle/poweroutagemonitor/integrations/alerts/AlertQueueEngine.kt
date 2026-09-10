@@ -66,6 +66,18 @@ internal object AlertQueueEngine {
         )
     }
 
+    fun retryFailed(item: Item, nowEpochMs: Long): Item = if (item.status == Status.FAILED) {
+        item.copy(
+            status = Status.PENDING,
+            attemptCount = 0,
+            lastAttemptAtEpochMs = null,
+            nextAttemptAtEpochMs = nowEpochMs,
+            leaseUntilEpochMs = null,
+            lastError = null,
+            providerMessageId = null
+        )
+    } else item
+
     fun retryDelayMs(attemptCount: Int): Long = RETRY_DELAYS_MS[
         (attemptCount - 1).coerceIn(0, RETRY_DELAYS_MS.lastIndex)
     ]

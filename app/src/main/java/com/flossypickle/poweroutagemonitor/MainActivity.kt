@@ -17,6 +17,8 @@ import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.monitoring.DeadlineScheduler
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryWorker
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryScheduler
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
@@ -34,6 +36,9 @@ class MainActivity : ComponentActivity() {
     private var history = androidx.compose.runtime.mutableStateOf(emptyList<EventHistoryStore.Record>())
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
+        emptyMap<String, AlertDeliverySummary.Event>()
+    )
     private var receiverRegistered = false
 
     private val notificationPermission = registerForActivityResult(
@@ -66,9 +71,12 @@ class MainActivity : ComponentActivity() {
                     history = history.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
+                    deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
                     onSettingsChange = ::updateSettings,
-                    onCompleteSetup = ::completeSetup
+                    onCompleteSetup = ::completeSetup,
+                    onRetryFailedDeliveries = ::retryFailedDeliveries,
+                    onClearDeliveryRecords = ::clearDeliveryRecords
                 )
             }
         }
@@ -156,6 +164,18 @@ class MainActivity : ComponentActivity() {
         setMonitoringEnabled(true)
     }
 
+    private fun retryFailedDeliveries() {
+        AlertQueueStore(this).retryFailed(System.currentTimeMillis()).forEach { item ->
+            AlertDeliveryScheduler(this).scheduleNow(item.id)
+        }
+        refreshStoredState()
+    }
+
+    private fun clearDeliveryRecords() {
+        AlertQueueStore(this).clearTerminal()
+        refreshStoredState()
+    }
+
     private fun refreshStoredState() {
         val store = MonitorStore(this)
         monitorState.value = store.state()
@@ -163,6 +183,7 @@ class MainActivity : ComponentActivity() {
         lastObservationEpochMs.longValue = store.lastObservationEpochMs()
         history.value = EventHistoryStore(this).read()
         val deliveries = AlertQueueStore(this).read()
+        deliverySummaries.value = AlertDeliverySummary.byEvent(deliveries)
         deliveryWarning.value = when {
             deliveries.any { it.status == AlertQueueEngine.Status.FAILED } ->
                 "An alert failed. Open Diagnostics for the reason."

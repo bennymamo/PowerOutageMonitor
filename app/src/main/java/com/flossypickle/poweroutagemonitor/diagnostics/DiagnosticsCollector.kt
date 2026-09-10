@@ -38,6 +38,7 @@ internal data class DiagnosticsReport(
     val configuredAlertProviders: String = "None",
     val queuedDeliveries: Int = 0,
     val retryingDeliveries: Int = 0,
+    val sentDeliveries: Int = 0,
     val failedDeliveries: Int = 0,
     val lastDeliveryError: String? = null
 ) {
@@ -61,6 +62,7 @@ internal data class DiagnosticsReport(
         appendLine("Alert providers: $configuredAlertProviders")
         appendLine("Queued deliveries: $queuedDeliveries")
         appendLine("Retrying deliveries: $retryingDeliveries")
+        appendLine("Sent deliveries: $sentDeliveries")
         appendLine("Failed deliveries: $failedDeliveries")
         lastDeliveryError?.let { appendLine("Last delivery error: $it") }
     }
@@ -102,6 +104,7 @@ internal class DiagnosticsCollector(private val context: Context) {
             it.status == AlertQueueEngine.Status.PENDING || it.status == AlertQueueEngine.Status.IN_FLIGHT
         },
         retryingDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.RETRYING },
+        sentDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.SENT },
         failedDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.FAILED },
         lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError }
         )

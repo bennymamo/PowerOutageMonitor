@@ -21,6 +21,7 @@ import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -41,9 +42,12 @@ internal fun PowerMonitorApp(
     history: List<EventHistoryStore.Record>,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
+    deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
-    onCompleteSetup: (String, Long, Long) -> Unit
+    onCompleteSetup: (String, Long, Long) -> Unit,
+    onRetryFailedDeliveries: () -> Unit,
+    onClearDeliveryRecords: () -> Unit
 ) {
     if (!settings.setupCompleted) {
         SetupWizardScreen(settings = settings, onComplete = onCompleteSetup)
@@ -79,7 +83,7 @@ internal fun PowerMonitorApp(
             AppScreen.STATUS -> DashboardScreen(
                 snapshot, monitorState, settings, lastObservationEpochMs, deliveryWarning, padding
             )
-            AppScreen.HISTORY -> HistoryScreen(history, monitorState, padding)
+            AppScreen.HISTORY -> HistoryScreen(history, monitorState, deliverySummaries, padding)
             AppScreen.SETTINGS -> SettingsScreen(
                 settings,
                 padding,
@@ -94,7 +98,10 @@ internal fun PowerMonitorApp(
                 state = monitorState,
                 snapshot = snapshot,
                 lastObservationEpochMs = lastObservationEpochMs,
+                deliverySummaries = deliverySummaries,
                 padding = padding,
+                onRetryFailedDeliveries = onRetryFailedDeliveries,
+                onClearDeliveryRecords = onClearDeliveryRecords,
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.TEST_MODE -> TestModeScreen(

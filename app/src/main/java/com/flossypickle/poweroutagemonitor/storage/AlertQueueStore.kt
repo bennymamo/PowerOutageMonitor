@@ -46,6 +46,21 @@ internal class AlertQueueStore(context: Context) {
         claimed
     }
 
+    fun retryFailed(nowEpochMs: Long): List<AlertQueueEngine.Item> = synchronized(lock) {
+        val items = readUnlocked()
+        val retried = items.map { AlertQueueEngine.retryFailed(it, nowEpochMs) }
+        writeUnlocked(retried)
+        retried.filter { retriedItem ->
+            items.any { original ->
+                original.id == retriedItem.id && original.status == AlertQueueEngine.Status.FAILED
+            }
+        }
+    }
+
+    fun clearTerminal() = synchronized(lock) {
+        writeUnlocked(readUnlocked().filter { it.status !in terminalStates })
+    }
+
     private fun readUnlocked(): List<AlertQueueEngine.Item> = runCatching {
         if (!file.baseFile.exists()) return emptyList()
         val array = JSONArray(file.openRead().bufferedReader().use { it.readText() })

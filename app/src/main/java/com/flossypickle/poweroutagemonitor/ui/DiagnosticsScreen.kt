@@ -42,6 +42,7 @@ import com.flossypickle.poweroutagemonitor.diagnostics.DiagnosticsReport
 import com.flossypickle.poweroutagemonitor.guidance.DeviceGuidance
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 
 @Composable
 internal fun DiagnosticsScreen(
@@ -49,14 +50,18 @@ internal fun DiagnosticsScreen(
     state: OutageEngine.State,
     snapshot: PowerSnapshot?,
     lastObservationEpochMs: Long,
+    deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     padding: PaddingValues,
+    onRetryFailedDeliveries: () -> Unit,
+    onClearDeliveryRecords: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val collector = remember(context) { DiagnosticsCollector(context) }
-    var report by remember(settings, state, snapshot, lastObservationEpochMs) {
+    var report by remember(settings, state, snapshot, lastObservationEpochMs, deliverySummaries) {
         mutableStateOf(collector.collect(settings, state, snapshot, lastObservationEpochMs))
     }
+    var confirmClearDeliveries by remember { mutableStateOf(false) }
     val refresh = {
         report = collector.collect(settings, state, snapshot, lastObservationEpochMs)
     }
@@ -103,10 +108,38 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Alert channels", report.configuredAlertProviders)
             DiagnosticRow("Queued", report.queuedDeliveries.toString())
             DiagnosticRow("Waiting to retry", report.retryingDeliveries.toString())
+            DiagnosticRow("Sent", report.sentDeliveries.toString())
             DiagnosticRow("Failed", report.failedDeliveries.toString())
             report.lastDeliveryError?.let { error ->
                 Text("Last delivery error: $error", color = MaterialTheme.colorScheme.error,
                     fontSize = 12.sp)
+            }
+            if (report.failedDeliveries > 0) {
+                Button(
+                    onClick = {
+                        onRetryFailedDeliveries()
+                        refresh()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Retry failed alerts") }
+            }
+            if (report.sentDeliveries + report.failedDeliveries > 0) {
+                if (!confirmClearDeliveries) {
+                    TextButton(onClick = { confirmClearDeliveries = true }) {
+                        Text("Clear delivery records")
+                    }
+                } else {
+                    Text("This removes sent and failed delivery details. Outage history is kept.",
+                        color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            onClearDeliveryRecords()
+                            confirmClearDeliveries = false
+                            refresh()
+                        }) { Text("Clear") }
+                        TextButton(onClick = { confirmClearDeliveries = false }) { Text("Cancel") }
+                    }
+                }
             }
         }
 

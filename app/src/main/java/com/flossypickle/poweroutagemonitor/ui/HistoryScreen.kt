@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeUnit
 internal fun HistoryScreen(
     records: List<EventHistoryStore.Record>,
     monitorState: OutageEngine.State,
+    deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     padding: PaddingValues
 ) {
     LazyColumn(
@@ -41,7 +43,8 @@ internal fun HistoryScreen(
         ) {
             item {
                 EventCard("Ongoing outage", monitorState.outageStartedEpochMs ?: 0,
-                    null, monitorState.outageStartBatteryPercent, null)
+                    null, monitorState.outageStartBatteryPercent, null,
+                    deliverySummaries[eventId(monitorState.outageStartedEpochMs ?: 0)])
             }
         }
         if (records.isEmpty()) {
@@ -65,7 +68,8 @@ internal fun HistoryScreen(
                 startedAt = record.powerLostAtEpochMs,
                 restoredAt = record.restoredAtEpochMs,
                 startBattery = record.startingBatteryPercent,
-                endBattery = record.endingBatteryPercent
+                endBattery = record.endingBatteryPercent,
+                deliverySummary = deliverySummaries[eventId(record.powerLostAtEpochMs)]
             )
         }
     }
@@ -77,7 +81,8 @@ private fun EventCard(
     startedAt: Long,
     restoredAt: Long?,
     startBattery: Int?,
-    endBattery: Int?
+    endBattery: Int?,
+    deliverySummary: AlertDeliverySummary.Event?
 ) {
     val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
     Card(shape = RoundedCornerShape(20.dp),
@@ -95,9 +100,18 @@ private fun EventCard(
                 else -> null
             }
             batteryText?.let { Text("Battery: $it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            deliverySummary?.let {
+                Text("Alerts: ${it.label()}", color = when {
+                    it.failed > 0 -> MaterialTheme.colorScheme.error
+                    it.retrying > 0 || it.pending > 0 -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.primary
+                })
+            }
         }
     }
 }
+
+private fun eventId(powerLostAtEpochMs: Long) = "power-event-$powerLostAtEpochMs"
 
 private fun formatDuration(durationMs: Long): String {
     val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(durationMs.coerceAtLeast(0))

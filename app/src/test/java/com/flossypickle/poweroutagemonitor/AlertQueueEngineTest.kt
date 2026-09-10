@@ -75,6 +75,23 @@ class AlertQueueEngineTest {
         assertEquals(6 * 60 * 60_000L, AlertQueueEngine.retryDelayMs(100))
     }
 
+    @Test
+    fun `user retry resets a permanent failure for an immediate clean attempt`() {
+        val failed = AlertQueueEngine.complete(
+            AlertQueueEngine.markInFlight(item(), 1_000L),
+            DeliveryResult.PermanentFailure("invalid token"),
+            2_000L
+        )
+
+        val retried = AlertQueueEngine.retryFailed(failed, 9_000L)
+
+        assertEquals(AlertQueueEngine.Status.PENDING, retried.status)
+        assertEquals(0, retried.attemptCount)
+        assertEquals(9_000L, retried.nextAttemptAtEpochMs)
+        assertEquals(null, retried.lastError)
+        assertEquals(listOf(retried), AlertQueueEngine.due(listOf(retried), 9_000L))
+    }
+
     private fun item() = AlertQueueEngine.Item(
         id = "delivery-1",
         providerId = "telegram",
