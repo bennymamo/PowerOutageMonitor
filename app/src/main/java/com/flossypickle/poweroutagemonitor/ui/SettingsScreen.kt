@@ -159,7 +159,7 @@ internal fun SettingsScreen(
             SettingText("Restart after reboot", "Enabled whenever background monitoring is on")
             SettingText("Before first unlock", if (Build.VERSION.SDK_INT >= 24) "Supported" else "Not available on this Android version")
             SettingText("Outage state", "Saved after every power observation")
-            Text("Some manufacturers can still stop background apps. Device-specific guidance will be added before release.",
+            Text("Some manufacturers can still stop background apps. Open Diagnostics for the current system status, battery settings shortcut and device guidance.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
 

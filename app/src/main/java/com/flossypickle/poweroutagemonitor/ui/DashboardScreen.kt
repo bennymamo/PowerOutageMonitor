@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
+import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.text.DateFormat
 import java.util.Date
@@ -44,6 +45,7 @@ internal fun DashboardScreen(
     settings: MonitorStore.Settings,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
+    systemHealth: SystemHealthSnapshot,
     padding: PaddingValues
 ) {
     val colors = MaterialTheme.colorScheme
@@ -99,19 +101,11 @@ internal fun DashboardScreen(
                 ReadingTile("POWER SOURCE", sourceText(snapshot?.plugged), Modifier.weight(1f))
                 ReadingTile("BATTERY STATE", statusText(snapshot?.batteryStatus), Modifier.weight(1f))
             }
+            systemHealth.monitoringAttention(settings.monitoringEnabled)?.let { warning ->
+                WarningCard(warning)
+            }
             deliveryWarning?.let { warning ->
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = colors.errorContainer)
-                ) {
-                    Text(
-                        warning,
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        color = colors.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                WarningCard(warning)
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -122,9 +116,16 @@ internal fun DashboardScreen(
                 }
                 Text(monitorExplanation(settings.monitoringEnabled, monitorState.phase),
                     color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                if (lastObservationEpochMs > 0) {
-                    Text("Last observation: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(lastObservationEpochMs))}",
-                        color = colors.onSurfaceVariant, fontSize = 11.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(
+                        if (systemHealth.internetAvailable) "Internet available" else "Internet unavailable",
+                        color = if (systemHealth.internetAvailable) colors.primary else Color(0xFFF0C580),
+                        fontSize = 11.sp
+                    )
+                    if (lastObservationEpochMs > 0) {
+                        Text("Last reading: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(lastObservationEpochMs))}",
+                            color = colors.onSurfaceVariant, fontSize = 11.sp)
+                    }
                 }
             }
             HorizontalDivider(color = colors.outline)
@@ -133,6 +134,22 @@ internal fun DashboardScreen(
             Text("Unplug your charger, then reconnect it. The indicator follows Android’s external-power reading.",
                 color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
+    }
+}
+
+@Composable
+private fun WarningCard(warning: String) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Text(
+            warning,
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

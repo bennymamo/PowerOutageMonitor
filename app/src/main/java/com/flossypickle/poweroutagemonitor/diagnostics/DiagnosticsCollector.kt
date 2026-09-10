@@ -1,14 +1,8 @@
 package com.flossypickle.poweroutagemonitor.diagnostics
 
-import android.Manifest
-import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
-import android.os.PowerManager
-import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
@@ -79,6 +73,7 @@ internal class DiagnosticsCollector(private val context: Context) {
     ): DiagnosticsReport {
         val telegram = TelegramConfigStore(context).config()
         val deliveries = AlertQueueStore(context).read()
+        val health = SystemHealthSnapshot.capture(context)
         return DiagnosticsReport(
         appVersion = appVersionName(),
         androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
@@ -91,10 +86,10 @@ internal class DiagnosticsCollector(private val context: Context) {
         lastObservation = if (lastObservationEpochMs > 0) {
             DateFormat.getDateTimeInstance().format(Date(lastObservationEpochMs))
         } else "Never",
-        internetAvailable = hasInternet(),
-        batteryOptimizationExcluded = ignoresBatteryOptimization(),
-        backgroundRestricted = isBackgroundRestricted(),
-        notificationsAllowed = notificationsAllowed(),
+        internetAvailable = health.internetAvailable,
+        batteryOptimizationExcluded = health.batteryOptimizationExcluded,
+        backgroundRestricted = health.backgroundRestricted,
+        notificationsAllowed = health.notificationsAllowed,
         configuredAlertProviders = when {
             telegram.enabled -> "Telegram enabled (${telegram.destinations.size} destination(s))"
             telegram.hasToken -> "Telegram saved, disabled"
@@ -109,26 +104,6 @@ internal class DiagnosticsCollector(private val context: Context) {
         lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError }
         )
     }
-
-    private fun hasInternet(): Boolean = runCatching {
-        val manager = context.getSystemService(ConnectivityManager::class.java)
-        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
-        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-    }.getOrDefault(false)
-
-    private fun ignoresBatteryOptimization(): Boolean = if (Build.VERSION.SDK_INT >= 23) {
-        context.getSystemService(PowerManager::class.java)
-            .isIgnoringBatteryOptimizations(context.packageName)
-    } else true
-
-    private fun isBackgroundRestricted(): Boolean = if (Build.VERSION.SDK_INT >= 28) {
-        context.getSystemService(ActivityManager::class.java).isBackgroundRestricted
-    } else false
-
-    private fun notificationsAllowed(): Boolean = Build.VERSION.SDK_INT < 33 ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-        PackageManager.PERMISSION_GRANTED
 
     @Suppress("DEPRECATION")
     private fun appVersionName(): String = runCatching {

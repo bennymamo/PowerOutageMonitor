@@ -23,6 +23,7 @@ import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -43,6 +44,7 @@ internal fun PowerMonitorApp(
     history: List<EventHistoryStore.Record>,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
+    systemHealth: SystemHealthSnapshot,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
@@ -83,7 +85,8 @@ internal fun PowerMonitorApp(
     ) { padding ->
         when (screen) {
             AppScreen.STATUS -> DashboardScreen(
-                snapshot, monitorState, settings, lastObservationEpochMs, deliveryWarning, padding
+                snapshot, monitorState, settings, lastObservationEpochMs, deliveryWarning,
+                systemHealth, padding
             )
             AppScreen.HISTORY -> HistoryScreen(history, monitorState, deliverySummaries, padding)
             AppScreen.SETTINGS -> SettingsScreen(

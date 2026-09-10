@@ -15,6 +15,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.monitoring.DeadlineScheduler
+import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthMonitor
+import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryWorker
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryScheduler
@@ -37,10 +39,12 @@ class MainActivity : ComponentActivity() {
     private var history = androidx.compose.runtime.mutableStateOf(emptyList<EventHistoryStore.Record>())
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private var systemHealth = androidx.compose.runtime.mutableStateOf(SystemHealthSnapshot())
     private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
         emptyMap<String, AlertDeliverySummary.Event>()
     )
     private var receiverRegistered = false
+    private lateinit var systemHealthMonitor: SystemHealthMonitor
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -65,6 +69,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         refreshStoredState()
+        systemHealthMonitor = SystemHealthMonitor(this) { systemHealth.value = it }
         setContent {
             PowerOutageMonitorTheme {
                 PowerMonitorApp(
@@ -74,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     history = history.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
+                    systemHealth = systemHealth.value,
                     deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
                     onSettingsChange = ::updateSettings,
@@ -89,6 +95,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         registerAppReceiver()
+        systemHealthMonitor.start()
         refreshStoredState()
         AlertDeliveryCoordinator(this).materializePending()
         if (MonitorStore(this).settings().monitoringEnabled) startMonitoringService()
@@ -99,7 +106,13 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(receiver)
             receiverRegistered = false
         }
+        systemHealthMonitor.stop()
         super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        systemHealthMonitor.refresh()
     }
 
     private fun registerAppReceiver() {

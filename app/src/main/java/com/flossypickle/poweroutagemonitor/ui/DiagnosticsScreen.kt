@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -84,6 +85,26 @@ internal fun DiagnosticsScreen(
                     color = MaterialTheme.colorScheme.onErrorContainer)
                 Text("Monitoring is enabled, but the service is not running. Reopen Status or restart monitoring.",
                     color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+        if (report.monitoringEnabled && report.backgroundRestricted) {
+            DiagnosticCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
+                Text("Background activity is restricted", fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("Android can block monitoring after this screen closes. Change this app's battery setting from Restricted.",
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+        if (report.monitoringEnabled && !report.notificationsAllowed) {
+            DiagnosticCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
+                Text("Monitoring notification is blocked", fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("Android may still run the service, but its ongoing notification and local alerts are hidden.",
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+                OutlinedButton(
+                    onClick = { openNotificationSettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open notification settings") }
             }
         }
 
@@ -216,6 +237,24 @@ private fun openBatteryOptimizationSettings(context: Context) {
     val primary = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     val fallback = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(primary) }
+        .recoverCatching { context.startActivity(fallback) }
+}
+
+private fun openNotificationSettings(context: Context) {
+    val primary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    } else {
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}")
+        )
+    }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val fallback = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:${context.packageName}")
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(primary) }
         .recoverCatching { context.startActivity(fallback) }
 }
