@@ -9,6 +9,38 @@ import kotlin.math.max
 
 /** Creates provider-neutral user messages from confirmed state transitions. */
 internal object AlertMessageFactory {
+    fun testOutage(settings: MonitorStore.Settings, simulatedAtEpochMs: Long): AlertMessage =
+        AlertMessage(
+            eventId = "test-outage-$simulatedAtEpochMs",
+            kind = AlertKind.TEST,
+            title = "TEST · POWER OUTAGE DETECTED",
+            body = buildString {
+                appendLine("SIMULATION — no real outage was detected.")
+                appendLine()
+                appendLine("Device: ${settings.deviceName}")
+                appendLine("Simulated power loss: ${formatTime(simulatedAtEpochMs)}")
+                appendLine("Configured alert delay: ${formatDuration(settings.outageDelayMs)}")
+                append("Test status: Running on battery")
+            }
+        )
+
+    fun testRestored(
+        settings: MonitorStore.Settings,
+        simulatedLostAtEpochMs: Long,
+        simulatedRestoredAtEpochMs: Long
+    ): AlertMessage = AlertMessage(
+        eventId = "test-restored-$simulatedRestoredAtEpochMs",
+        kind = AlertKind.TEST,
+        title = "TEST · POWER RESTORED",
+        body = buildString {
+            appendLine("SIMULATION — no real restoration was detected.")
+            appendLine()
+            appendLine("Device: ${settings.deviceName}")
+            appendLine("Simulated restoration: ${formatTime(simulatedRestoredAtEpochMs)}")
+            append("Simulated outage duration: ${formatDuration(simulatedRestoredAtEpochMs - simulatedLostAtEpochMs)}")
+        }
+    )
+
     fun forTransition(
         before: OutageEngine.State,
         after: OutageEngine.State,

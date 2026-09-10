@@ -22,6 +22,7 @@ import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -47,7 +48,8 @@ internal fun PowerMonitorApp(
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
     onCompleteSetup: (String, Long, Long) -> Unit,
     onRetryFailedDeliveries: () -> Unit,
-    onClearDeliveryRecords: () -> Unit
+    onClearDeliveryRecords: () -> Unit,
+    onSendTestAlert: (AlertMessage) -> Boolean
 ) {
     if (!settings.setupCompleted) {
         SetupWizardScreen(settings = settings, onComplete = onCompleteSetup)
@@ -107,6 +109,7 @@ internal fun PowerMonitorApp(
             AppScreen.TEST_MODE -> TestModeScreen(
                 settings = settings,
                 padding = padding,
+                onSendTestAlert = onSendTestAlert,
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.TELEGRAM -> TelegramSetupScreen(

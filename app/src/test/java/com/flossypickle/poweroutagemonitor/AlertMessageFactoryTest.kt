@@ -53,6 +53,18 @@ class AlertMessageFactoryTest {
         assertEquals("2 h 5 min", AlertMessageFactory.formatDuration(125 * 60_000L))
     }
 
+    @Test
+    fun `test messages are unmistakable and use independent ids`() {
+        val outage = AlertMessageFactory.testOutage(settings(), 10_000L)
+        val restored = AlertMessageFactory.testRestored(settings(), 10_000L, 25_000L)
+
+        assertEquals(AlertKind.TEST, outage.kind)
+        assertEquals(AlertKind.TEST, restored.kind)
+        assertTrue(outage.title.startsWith("TEST"))
+        assertTrue(restored.body.startsWith("SIMULATION"))
+        assertTrue(outage.eventId != restored.eventId)
+    }
+
     private fun state(phase: OutageEngine.Phase, confirmedAt: Long?) = OutageEngine.State(
         phase = phase,
         phaseSinceEpochMs = if (phase == OutageEngine.Phase.PENDING_OUTAGE) 10_000L else 80_000L,

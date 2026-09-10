@@ -13,8 +13,14 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
     private val pending = PendingAlertEventStore(context)
     private val enabledProviders = EnabledAlertProvidersStore(context)
 
-    fun persistForEnabledProviders(message: AlertMessage) {
-        if (enabledProviders.hasAny()) pending.enqueue(message)
+    fun persistForEnabledProviders(message: AlertMessage): Boolean {
+        return enabledProviders.hasAny() && pending.enqueue(message)
+    }
+
+    fun enqueueTest(message: AlertMessage): Boolean {
+        val accepted = persistForEnabledProviders(message)
+        if (accepted) materializePending()
+        return accepted
     }
 
     fun materializePending() {

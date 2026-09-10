@@ -20,6 +20,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryWork
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryScheduler
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
@@ -76,7 +77,8 @@ class MainActivity : ComponentActivity() {
                     onSettingsChange = ::updateSettings,
                     onCompleteSetup = ::completeSetup,
                     onRetryFailedDeliveries = ::retryFailedDeliveries,
-                    onClearDeliveryRecords = ::clearDeliveryRecords
+                    onClearDeliveryRecords = ::clearDeliveryRecords,
+                    onSendTestAlert = ::sendTestAlert
                 )
             }
         }
@@ -175,6 +177,9 @@ class MainActivity : ComponentActivity() {
         AlertQueueStore(this).clearTerminal()
         refreshStoredState()
     }
+
+    private fun sendTestAlert(message: AlertMessage): Boolean =
+        AlertDeliveryCoordinator(this).enqueueTest(message)
 
     private fun refreshStoredState() {
         val store = MonitorStore(this)

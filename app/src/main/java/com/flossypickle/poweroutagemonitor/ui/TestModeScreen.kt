@@ -29,8 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
-import java.text.DateFormat
-import java.util.Date
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessageFactory
 
 private enum class SimulationStage { READY, OUTAGE, RESTORED }
 
@@ -38,11 +38,13 @@ private enum class SimulationStage { READY, OUTAGE, RESTORED }
 internal fun TestModeScreen(
     settings: MonitorStore.Settings,
     padding: PaddingValues,
+    onSendTestAlert: (AlertMessage) -> Boolean,
     onBack: () -> Unit
 ) {
     var stage by rememberSaveable { mutableStateOf(SimulationStage.READY) }
     var lostAt by rememberSaveable { mutableLongStateOf(0L) }
     var restoredAt by rememberSaveable { mutableLongStateOf(0L) }
+    var deliveryFeedback by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
         Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
@@ -56,7 +58,7 @@ internal fun TestModeScreen(
         TestCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
             Text("SIMULATION", fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer, letterSpacing = 2.sp)
-            Text("These controls only preview the user-visible flow. They do not change monitoring state, history, alarms or real power readings.",
+            Text("These controls never change monitoring state, history, alarms or real power readings. Sending is always a separate explicit action.",
                 color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
 
@@ -68,6 +70,7 @@ internal fun TestModeScreen(
                     lostAt = System.currentTimeMillis()
                     restoredAt = 0L
                     stage = SimulationStage.OUTAGE
+                    deliveryFeedback = null
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Simulate confirmed outage") }
@@ -75,11 +78,12 @@ internal fun TestModeScreen(
                 onClick = {
                     restoredAt = System.currentTimeMillis()
                     stage = SimulationStage.RESTORED
+                    deliveryFeedback = null
                 },
                 enabled = stage == SimulationStage.OUTAGE,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Simulate restored power") }
-            Text("No alert channel is configured yet, so this milestone previews the exact message content locally.",
+            Text("Previewing is local. Use the separate send button below to exercise configured channels.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
 
@@ -89,8 +93,33 @@ internal fun TestModeScreen(
             when (stage) {
                 SimulationStage.READY -> Text("Run a simulation to preview an alert.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SimulationStage.OUTAGE -> AlertPreview(outageMessage(settings, lostAt))
-                SimulationStage.RESTORED -> AlertPreview(restoredMessage(settings, lostAt, restoredAt))
+                SimulationStage.OUTAGE -> AlertPreview(AlertMessageFactory.testOutage(settings, lostAt))
+                SimulationStage.RESTORED -> AlertPreview(
+                    AlertMessageFactory.testRestored(settings, lostAt, restoredAt)
+                )
+            }
+        }
+
+        if (stage != SimulationStage.READY) {
+            val message = when (stage) {
+                SimulationStage.OUTAGE -> AlertMessageFactory.testOutage(settings, lostAt)
+                SimulationStage.RESTORED -> AlertMessageFactory.testRestored(settings, lostAt, restoredAt)
+                SimulationStage.READY -> null
+            }
+            Button(
+                onClick = {
+                    deliveryFeedback = if (message != null && onSendTestAlert(message)) {
+                        "Simulated alert queued for every enabled channel."
+                    } else {
+                        "No alert channel is enabled. Configure one in Settings first."
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Send simulated alert") }
+            deliveryFeedback?.let {
+                TestCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                    Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
             }
         }
 
@@ -100,6 +129,7 @@ internal fun TestModeScreen(
                     stage = SimulationStage.READY
                     lostAt = 0L
                     restoredAt = 0L
+                    deliveryFeedback = null
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Reset simulation") }
@@ -120,37 +150,6 @@ private fun TestCard(
 }
 
 @Composable
-private fun AlertPreview(message: String) {
-    Text(message, style = MaterialTheme.typography.bodyLarge)
-}
-
-private fun outageMessage(settings: MonitorStore.Settings, lostAt: Long) = buildString {
-    appendLine("POWER OUTAGE DETECTED")
-    appendLine()
-    appendLine("Device: ${settings.deviceName}")
-    appendLine("Power lost: ${formatTime(lostAt)}")
-    appendLine("Alert delay: ${formatDuration(settings.outageDelayMs)}")
-    append("Status: Running on battery")
-}
-
-private fun restoredMessage(settings: MonitorStore.Settings, lostAt: Long, restoredAt: Long) = buildString {
-    appendLine("POWER RESTORED")
-    appendLine()
-    appendLine("Device: ${settings.deviceName}")
-    appendLine("Power restored: ${formatTime(restoredAt)}")
-    append("Outage duration: ${formatDuration((restoredAt - lostAt).coerceAtLeast(0))}")
-}
-
-private fun formatTime(epochMs: Long): String = DateFormat.getDateTimeInstance().format(Date(epochMs))
-
-private fun formatDuration(durationMs: Long): String {
-    val seconds = durationMs / 1_000
-    val hours = seconds / 3_600
-    val minutes = seconds % 3_600 / 60
-    val remainingSeconds = seconds % 60
-    return when {
-        hours > 0 -> "${hours}h ${minutes}m ${remainingSeconds}s"
-        minutes > 0 -> "${minutes}m ${remainingSeconds}s"
-        else -> "${remainingSeconds}s"
-    }
+private fun AlertPreview(message: AlertMessage) {
+    Text("${message.title}\n\n${message.body}", style = MaterialTheme.typography.bodyLarge)
 }
