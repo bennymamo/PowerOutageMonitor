@@ -4,7 +4,7 @@ An Android power-outage monitor by Flossy Pickle. Package: `com.flossypickle.pow
 
 ## Current milestone
 
-The starter greeting has been replaced with a live power dashboard showing external power, source, battery percentage and charging status. Observation is event-driven and active only while the activity is started. No background monitoring, outage confirmation or alert delivery is implemented yet.
+The app now has Status, History and Settings screens. A user-enabled foreground service observes Android's external-power state without polling, persists the outage state before first unlock, resumes after reboot, and records completed outages or brief interruptions locally. Alert delivery integrations are not implemented yet.
 
 Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose, one application module. API 36 emulator testing is the initial development target; physical old-device testing is required before reliability claims.
 
@@ -12,13 +12,25 @@ Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose,
 
 - Wait for the first external-power connection before arming outage detection.
 - Judge external power by the plugged source, never charging status alone.
-- Build a pure Kotlin outage engine, then persist its state/history using Room.
-- Store settings with DataStore. Use UTC history timestamps and monotonic elapsed time within a boot.
+- Keep the pure Kotlin outage engine independent from Android and persist critical state synchronously in device-protected storage.
+- Keep a small bounded atomic event-history file; reconsider Room when delivery-attempt queries require relational storage.
+- Use UTC epoch timestamps so state can be reconstructed across process death and reboot.
 - Add user-enabled foreground monitoring with a quiet, compact notification.
 - Support boot recovery before first unlock using device-protected monitoring state; keep credentials separate.
 - Add Telegram only after background and boot behavior are validated. No cloud backend, analytics or advertising.
 
-Planned transitions: waiting for connection -> powered -> pending outage -> confirmed outage -> pending restoration -> powered. Early restoration cancels a pending outage. Disconnection during pending restoration continues the same outage. Unknown readings must never imply a power loss. Recovery must expose observation gaps.
+Implemented transitions: waiting for connection -> powered -> pending outage -> confirmed outage -> pending restoration -> powered. Early restoration cancels a pending outage. Disconnection during pending restoration continues the same outage. Unknown readings never imply a power loss.
+
+## Architecture
+
+- `OutageEngine` contains deterministic business rules and has no Android dependencies.
+- `monitoring` owns Android battery observations, the foreground service, boot recovery, persisted-deadline alarms and coordination.
+- `storage` owns device-protected monitor state and bounded atomic event history.
+- `integrations.power` defines normalized grid evidence for Android charging, EcoFlow, Huawei, Tesla, Home Assistant, MQTT, REST, WebSocket, SNMP or other future sources.
+- `integrations.alerts` defines independent destinations such as Telegram, SMS, email, webhooks, ntfy and Gotify.
+- `ui` contains separate Status, History and Settings screens. User-adjustable behavior belongs in grouped Settings sections.
+
+The app remains one Gradle module for a fast, lightweight build. Package contracts allow later extraction into separate Gradle modules without coupling the state machine to Android or any provider.
 
 ## Build
 
@@ -28,9 +40,9 @@ Open this existing directory in Android Studio and use its bundled JDK. From Pow
 .\gradlew.bat assembleDebug testDebugUnitTest lintDebug
 ```
 
-No additional permissions or network access are requested by the current dashboard. No user information is transmitted. Power loss indicates charger disconnection, not independently verified mains failure.
+Permissions are limited to foreground service operation, notification display and restart after boot. No network permission is currently declared, no user information is transmitted, and power loss indicates charger disconnection rather than independently verified mains failure.
 
-A standalone outage-rule engine and unit tests are included as the next foundation. It is not yet connected to the dashboard or persistence. Its clock values are valid only within a single boot; recovery will be implemented by the persistence/coordinator layer.
+A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. Android can delay this inexact alarm under Doze; exact-alarm special access is deliberately not requested.
 
 ## Visual design
 
@@ -38,4 +50,4 @@ Dark navy surfaces with mint external-power and amber battery indicators. The co
 
 ## Validation
 
-Debug build, six outage-engine tests and Android lint passed on 9 September 2026. API 36 emulator checks verified the dark dashboard, launcher graphic and AC power-source update while battery status remained not charging. Lint reports no errors; warnings include existing dependency versions and unused starter resources. Android 6.0 and physical-device behavior are not yet verified.
+Debug build, seven outage-engine tests and Android lint passed on 10 September 2026. API 36 emulator checks verified the dark dashboard, launcher graphic, grouped Settings UI and completed History UI. An end-to-end simulated event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app. The notification remained silent, non-vibrating, low priority and ongoing. Android 6.0 and physical-device behavior are not yet verified.
