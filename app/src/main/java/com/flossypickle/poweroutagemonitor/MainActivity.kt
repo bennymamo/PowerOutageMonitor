@@ -67,7 +67,8 @@ class MainActivity : ComponentActivity() {
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
-                    onSettingsChange = ::updateSettings
+                    onSettingsChange = ::updateSettings,
+                    onCompleteSetup = ::completeSetup
                 )
             }
         }
@@ -140,6 +141,19 @@ class MainActivity : ComponentActivity() {
             deviceName
         )
         refreshStoredState()
+    }
+
+    private fun completeSetup(deviceName: String, outageDelayMs: Long, restoreDelayMs: Long) {
+        val store = MonitorStore(this)
+        store.updateSettings(
+            outageDelayMs = outageDelayMs,
+            restoreDelayMs = restoreDelayMs,
+            sendRestoreNotification = true,
+            deviceName = deviceName
+        )
+        store.setSetupCompleted()
+        refreshStoredState()
+        setMonitoringEnabled(true)
     }
 
     private fun refreshStoredState() {

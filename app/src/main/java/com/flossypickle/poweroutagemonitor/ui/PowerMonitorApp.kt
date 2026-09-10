@@ -42,8 +42,13 @@ internal fun PowerMonitorApp(
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
     onMonitoringEnabledChange: (Boolean) -> Unit,
-    onSettingsChange: (Long, Long, Boolean, String) -> Unit
+    onSettingsChange: (Long, Long, Boolean, String) -> Unit,
+    onCompleteSetup: (String, Long, Long) -> Unit
 ) {
+    if (!settings.setupCompleted) {
+        SetupWizardScreen(settings = settings, onComplete = onCompleteSetup)
+        return
+    }
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

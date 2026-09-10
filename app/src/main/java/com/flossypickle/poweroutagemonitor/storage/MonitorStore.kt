@@ -14,6 +14,7 @@ internal class MonitorStore(context: Context) {
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
     data class Settings(
+        val setupCompleted: Boolean,
         val monitoringEnabled: Boolean,
         val outageDelayMs: Long,
         val restoreDelayMs: Long,
@@ -22,6 +23,7 @@ internal class MonitorStore(context: Context) {
     )
 
     fun settings(): Settings = Settings(
+        setupCompleted = preferences.getBoolean(KEY_SETUP_COMPLETED, preferences.contains(KEY_ENABLED)),
         monitoringEnabled = preferences.getBoolean(KEY_ENABLED, false),
         outageDelayMs = preferences.getLong(KEY_OUTAGE_DELAY, DEFAULT_OUTAGE_DELAY_MS),
         restoreDelayMs = preferences.getLong(KEY_RESTORE_DELAY, DEFAULT_RESTORE_DELAY_MS),
@@ -58,6 +60,12 @@ internal class MonitorStore(context: Context) {
         val editor = preferences.edit().putBoolean(KEY_ENABLED, enabled)
         if (!enabled) writeState(editor, OutageEngine.State())
         editor.commit()
+    }
+
+    fun setSetupCompleted() {
+        check(preferences.edit().putBoolean(KEY_SETUP_COMPLETED, true).commit()) {
+            "Unable to persist setup completion"
+        }
     }
 
     fun updateSettings(
@@ -114,6 +122,7 @@ internal class MonitorStore(context: Context) {
         const val DEFAULT_DEVICE_NAME = "Power monitor"
         private const val FILE_NAME = "monitor_state"
         private const val KEY_ENABLED = "monitoring_enabled"
+        private const val KEY_SETUP_COMPLETED = "setup_completed"
         private const val KEY_OUTAGE_DELAY = "outage_delay_ms"
         private const val KEY_RESTORE_DELAY = "restore_delay_ms"
         private const val KEY_SEND_RESTORE = "send_restore"

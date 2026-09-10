@@ -62,6 +62,7 @@ class AlertMessageFactoryTest {
     )
 
     private fun settings() = MonitorStore.Settings(
+        setupCompleted = true,
         monitoringEnabled = true,
         outageDelayMs = 60_000L,
         restoreDelayMs = 30_000L,
