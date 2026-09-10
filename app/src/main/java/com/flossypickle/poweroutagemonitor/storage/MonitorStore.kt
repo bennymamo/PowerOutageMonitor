@@ -13,6 +13,8 @@ internal class MonitorStore(context: Context) {
     } else context.applicationContext
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
+    enum class ThemeMode { SYSTEM, DARK, LIGHT }
+
     data class Settings(
         val setupCompleted: Boolean,
         val monitoringEnabled: Boolean,
@@ -20,7 +22,8 @@ internal class MonitorStore(context: Context) {
         val restoreDelayMs: Long,
         val sendRestoreNotification: Boolean,
         val deviceName: String,
-        val historyLimit: Int = DEFAULT_HISTORY_LIMIT
+        val historyLimit: Int = DEFAULT_HISTORY_LIMIT,
+        val themeMode: ThemeMode = ThemeMode.SYSTEM
     )
 
     fun settings(): Settings = Settings(
@@ -30,7 +33,10 @@ internal class MonitorStore(context: Context) {
         restoreDelayMs = preferences.getLong(KEY_RESTORE_DELAY, DEFAULT_RESTORE_DELAY_MS),
         sendRestoreNotification = preferences.getBoolean(KEY_SEND_RESTORE, true),
         deviceName = preferences.getString(KEY_DEVICE_NAME, DEFAULT_DEVICE_NAME) ?: DEFAULT_DEVICE_NAME,
-        historyLimit = preferences.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)
+        historyLimit = preferences.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT),
+        themeMode = runCatching {
+            ThemeMode.valueOf(preferences.getString(KEY_THEME_MODE, null) ?: "")
+        }.getOrDefault(ThemeMode.SYSTEM)
     )
 
     fun state(): OutageEngine.State {
@@ -94,6 +100,12 @@ internal class MonitorStore(context: Context) {
         }
     }
 
+    fun setThemeMode(mode: ThemeMode) {
+        check(preferences.edit().putString(KEY_THEME_MODE, mode.name).commit()) {
+            "Unable to persist appearance setting"
+        }
+    }
+
     fun save(state: OutageEngine.State, snapshot: PowerSnapshot, observedAtEpochMs: Long) {
         val editor = preferences.edit()
         writeState(editor, state)
@@ -145,6 +157,7 @@ internal class MonitorStore(context: Context) {
         private const val KEY_SEND_RESTORE = "send_restore"
         private const val KEY_DEVICE_NAME = "device_name"
         private const val KEY_HISTORY_LIMIT = "history_limit"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_PHASE = "phase"
         private const val KEY_PHASE_SINCE = "phase_since"
         private const val KEY_OUTAGE_STARTED = "outage_started"

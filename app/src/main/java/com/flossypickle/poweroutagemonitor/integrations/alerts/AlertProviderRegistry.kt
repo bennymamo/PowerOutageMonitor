@@ -10,6 +10,15 @@ internal class AlertProviderRegistry(context: Context) {
 
     private val telegram = TelegramConfigStore(context)
 
+    fun statusSummary(): String {
+        val config = telegram.config()
+        return when {
+            config.enabled -> "Telegram active (${config.destinations.size})"
+            config.hasToken -> "Telegram saved, off"
+            else -> "None configured"
+        }
+    }
+
     fun enabledDestinations(): List<Destination> {
         val config = telegram.config()
         if (!config.enabled) return emptyList()

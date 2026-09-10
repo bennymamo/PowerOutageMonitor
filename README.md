@@ -6,7 +6,7 @@ An Android power-outage monitor by Flossy Pickle. Package: `com.flossypickle.pow
 
 The app now has a five-step first-run wizard, Status, History and grouped Settings screens, plus Diagnostics and an isolated Test mode under Settings. The wizard explains detection, battery safety and background operation, verifies a real charger disconnect/reconnect sequence, collects the device name and stable timing defaults, then enables monitoring and requests notification permission. Test mode previews unmistakably simulated outage/restoration messages and can explicitly send them through the real configured delivery path without changing monitoring state or history. A user-controlled master switch starts or stops the foreground monitor, its alarms and its ongoing notification. The service observes Android's external-power state without polling, persists the outage state before first unlock, resumes after reboot or app upgrade, and records completed outages or brief interruptions locally with battery level and temperature when Android supplies them. Confirmed outage and stable-restoration events flow through a provider-independent durable queue to enabled Telegram chats with per-recipient retry and de-duplication.
 
-The Status dashboard shows the latest completed outage or brief interruption with its local time and duration. Full event and delivery details remain in History.
+The Status dashboard is centered on inferred grid state rather than battery level. A compact hero uses distinct symbols and language for online power, possible outage, confirmed outage, restoration checking, recently restored, paused, waiting and unknown states. Battery is a supporting horizontal bar. The dashboard also holds the monitoring master switch, internet and alert readiness, and the latest completed power event. Full event and delivery details remain in History.
 
 Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose, one application module. API 36 emulator testing is the initial development target; physical old-device testing is required before reliability claims.
 
@@ -42,6 +42,8 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - History retention is independently configurable to the newest 50, 100 or 200 power events; a separate two-step action clears power history without changing settings or delivery records.
 - History completion is idempotent by outage identity, so a process restart between persistence steps cannot create duplicate event rows. Immediate and delayed restorations follow the same completion path.
 - Outage and restoration delays provide common one-tap presets plus a validated custom value from 0 seconds to 24 hours.
+- Settings opens as a clean category list; device, timing, restoration, appearance, reliability, history, safety, about, testing and alert controls each have a focused subpage.
+- Appearance supports System, Dark and Light themes. System is the default and follows the device setting.
 - `SetupWizardScreen` is shown only on a true fresh install. Existing installs migrate past it, and every choice remains editable in Settings.
 
 The app remains one Gradle module for a fast, lightweight build. Package contracts allow later extraction into separate Gradle modules without coupling the state machine to Android or any provider.
@@ -62,7 +64,7 @@ While monitoring is enabled, the foreground service listens dynamically for `ACT
 
 ## Visual design
 
-Dark navy surfaces with mint external-power and amber battery indicators. The compact battery gauge is drawn natively in Compose so the charger-test instructions remain visible on the Pixel 4 emulator at default text size. Scrolling remains available for smaller screens and larger accessibility text. A matching vector lightning-bolt launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
+The dark theme uses navy surfaces with mint online-power and amber caution indicators; the light theme uses warm neutral surfaces and a deep green accent. The compact dashboard gives grid state the strongest visual weight and uses a horizontal battery bar for supporting device health. Scrolling remains available for smaller screens and larger accessibility text. A matching vector lightning-bolt launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
 
 ## Validation
 

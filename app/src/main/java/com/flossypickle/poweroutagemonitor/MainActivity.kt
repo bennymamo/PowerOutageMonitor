@@ -13,6 +13,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.monitoring.DeadlineScheduler
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthMonitor
@@ -23,6 +25,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySche
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertProviderRegistry
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var history = androidx.compose.runtime.mutableStateOf(emptyList<EventHistoryStore.Record>())
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private var alertChannels = androidx.compose.runtime.mutableStateOf("None configured")
     private var systemHealth = androidx.compose.runtime.mutableStateOf(SystemHealthSnapshot())
     private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
         emptyMap<String, AlertDeliverySummary.Event>()
@@ -71,14 +75,30 @@ class MainActivity : ComponentActivity() {
         refreshStoredState()
         systemHealthMonitor = SystemHealthMonitor(this) { systemHealth.value = it }
         setContent {
-            PowerOutageMonitorTheme {
+            val currentSettings = settings.value ?: MonitorStore(this).settings()
+            val darkTheme = when (currentSettings.themeMode) {
+                MonitorStore.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                MonitorStore.ThemeMode.DARK -> true
+                MonitorStore.ThemeMode.LIGHT -> false
+            }
+            SideEffect {
+                val transparent = android.graphics.Color.TRANSPARENT
+                val barStyle = if (darkTheme) {
+                    SystemBarStyle.dark(transparent)
+                } else {
+                    SystemBarStyle.light(transparent, transparent)
+                }
+                enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
+            }
+            PowerOutageMonitorTheme(darkTheme = darkTheme) {
                 PowerMonitorApp(
                     snapshot = snapshot.value,
                     monitorState = monitorState.value,
-                    settings = settings.value ?: MonitorStore(this).settings(),
+                    settings = currentSettings,
                     history = history.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
+                    alertChannels = alertChannels.value,
                     systemHealth = systemHealth.value,
                     deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
@@ -87,8 +107,10 @@ class MainActivity : ComponentActivity() {
                     onRetryFailedDeliveries = ::retryFailedDeliveries,
                     onClearDeliveryRecords = ::clearDeliveryRecords,
                     onHistoryLimitChange = ::updateHistoryLimit,
+                    onThemeModeChange = ::updateThemeMode,
                     onClearHistory = ::clearHistory,
-                    onSendTestAlert = ::sendTestAlert
+                    onSendTestAlert = ::sendTestAlert,
+                    onAlertConfigurationChanged = ::refreshStoredState
                 )
             }
         }
@@ -208,6 +230,11 @@ class MainActivity : ComponentActivity() {
         refreshStoredState()
     }
 
+    private fun updateThemeMode(mode: MonitorStore.ThemeMode) {
+        MonitorStore(this).setThemeMode(mode)
+        refreshStoredState()
+    }
+
     private fun clearHistory() {
         EventHistoryStore(this).clear()
         refreshStoredState()
@@ -224,6 +251,7 @@ class MainActivity : ComponentActivity() {
         history.value = EventHistoryStore(this).read()
         val deliveries = AlertQueueStore(this).read()
         deliverySummaries.value = AlertDeliverySummary.byEvent(deliveries)
+        alertChannels.value = AlertProviderRegistry(this).statusSummary()
         deliveryWarning.value = when {
             deliveries.any { it.status == AlertQueueEngine.Status.FAILED } ->
                 "An alert failed. Open Diagnostics for the reason."

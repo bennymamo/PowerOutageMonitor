@@ -49,6 +49,7 @@ import kotlinx.coroutines.withContext
 internal fun TelegramSetupScreen(
     deviceName: String,
     padding: PaddingValues,
+    onConfigurationChanged: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -225,6 +226,7 @@ internal fun TelegramSetupScreen(
                             withContext(Dispatchers.IO) {
                                 AlertDeliveryCoordinator(context).materializePending()
                             }
+                            onConfigurationChanged()
                             enabled = config.enabled
                             tokenInput = ""
                             feedback = if (requestedEnabled && !config.enabled) {
@@ -304,6 +306,7 @@ internal fun TelegramSetupScreen(
                             discovered = emptyList()
                             confirmRemove = false
                             feedback = "Telegram configuration removed."
+                            onConfigurationChanged()
                         }
                     }) { Text("Remove") }
                     TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }

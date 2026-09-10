@@ -1,11 +1,12 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,211 +17,369 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+
+private enum class SettingsSection(val title: String) {
+    HOME("Settings"),
+    SETUP("Setup & testing"),
+    ALERTS("Alert channels"),
+    DEVICE("Device"),
+    OUTAGE("Outage timing"),
+    RESTORATION("Restoration"),
+    APPEARANCE("Appearance"),
+    RELIABILITY("Reliability"),
+    HISTORY("History"),
+    SAFETY("Safety & privacy"),
+    ABOUT("About")
+}
 
 @Composable
 internal fun SettingsScreen(
     settings: MonitorStore.Settings,
     padding: PaddingValues,
-    onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
+    onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
     onClearHistory: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
     onOpenTelegram: () -> Unit
 ) {
+    var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
+
+    BackHandler(enabled = section != SettingsSection.HOME) {
+        section = SettingsSection.HOME
+    }
     var deviceName by remember { mutableStateOf(settings.deviceName) }
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
     val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
     val telegramConfig = TelegramConfigStore(LocalContext.current).config()
     var confirmClearHistory by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp).widthIn(max = 600.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+    SettingsPage(
+        title = section.title,
+        padding = padding,
+        onBack = if (section == SettingsSection.HOME) null else {
+            { section = SettingsSection.HOME }
+        }
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text("Monitoring", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            SettingSwitch(
-                title = "Monitoring master switch",
-                explanation = "Start or stop all power monitoring on this device.",
-                checked = settings.monitoringEnabled,
-                onCheckedChange = onMonitoringEnabledChange
-            )
-            Text(
-                if (settings.monitoringEnabled) "A small ongoing notification shows that monitoring is alive."
-                else "Monitoring, alarms and the ongoing notification are off. History and settings are kept.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
-        }
-
-        Text("Setup & testing", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Check that the monitor is ready and preview outage messages without changing real monitoring data.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
-                Text("Open diagnostics")
-            }
-            OutlinedButton(onClick = onOpenTestMode, modifier = Modifier.fillMaxWidth()) {
-                Text("Open test mode")
-            }
-        }
-
-        Text("Alert channels", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            SettingText("Telegram", when {
-                telegramConfig.enabled -> "Enabled"
-                telegramConfig.hasToken -> "Saved, disabled"
-                else -> "Not configured"
-            })
-            Text("Send outage and restoration messages through a bot you control. Multiple chats are supported.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
-                Text("Configure Telegram")
-            }
-        }
-
-        Text("Device", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Friendly device name", fontWeight = FontWeight.Medium)
-            Text("This name will identify the monitor in future alerts.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = { if (it.length <= 50) deviceName = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Device name") }
-            )
-            Button(onClick = {
-                save(settings.outageDelayMs, settings.restoreDelayMs,
-                    settings.sendRestoreNotification, deviceName)
-            }) { Text("Save name") }
-        }
-
-        Text("Outage timing", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Confirm power loss after", fontWeight = FontWeight.Medium)
-            Text("Short interruptions that end before this delay are recorded without declaring an outage.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            DelayOptions(OUTAGE_DELAYS, settings.outageDelayMs) { value ->
-                save(value, settings.restoreDelayMs, settings.sendRestoreNotification, settings.deviceName)
-            }
-        }
-
-        Text("Restoration", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Confirm restored power after", fontWeight = FontWeight.Medium)
-            Text("Wait for power to remain stable before closing an outage.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            DelayOptions(RESTORE_DELAYS, settings.restoreDelayMs) { value ->
-                save(settings.outageDelayMs, value, settings.sendRestoreNotification, settings.deviceName)
-            }
-            SettingSwitch(
-                title = "Send restoration alerts",
-                explanation = "Notify configured alert channels when stable power returns.",
-                checked = settings.sendRestoreNotification,
-                onCheckedChange = { enabled ->
-                    save(settings.outageDelayMs, settings.restoreDelayMs, enabled, settings.deviceName)
+        when (section) {
+            SettingsSection.HOME -> {
+                SettingsCategoryCard(
+                    "Setup & testing",
+                    "Diagnostics, power checks and safe alert simulations"
+                ) { section = SettingsSection.SETUP }
+                SettingsCategoryCard(
+                    "Alert channels",
+                    when {
+                        telegramConfig.enabled -> "Telegram is enabled"
+                        telegramConfig.hasToken -> "Telegram is saved but disabled"
+                        else -> "No alert channel is configured"
+                    }
+                ) { section = SettingsSection.ALERTS }
+                SettingsCategoryCard("Device", "Name used in alerts") {
+                    section = SettingsSection.DEVICE
                 }
-            )
-        }
+                SettingsCategoryCard(
+                    "Outage timing",
+                    "Confirm after ${formatCustomDelay(settings.outageDelayMs)}"
+                ) { section = SettingsSection.OUTAGE }
+                SettingsCategoryCard(
+                    "Restoration",
+                    "Confirm after ${formatCustomDelay(settings.restoreDelayMs)}"
+                ) { section = SettingsSection.RESTORATION }
+                SettingsCategoryCard(
+                    "Appearance",
+                    settings.themeMode.name.lowercase().replaceFirstChar(Char::titlecase)
+                ) { section = SettingsSection.APPEARANCE }
+                SettingsCategoryCard("Reliability", "Boot startup and background guidance") {
+                    section = SettingsSection.RELIABILITY
+                }
+                SettingsCategoryCard("History", "Retention and local data controls") {
+                    section = SettingsSection.HISTORY
+                }
+                SettingsCategoryCard("Safety & privacy", "Battery care and data use") {
+                    section = SettingsSection.SAFETY
+                }
+                SettingsCategoryCard("About", "Version, Android and package details") {
+                    section = SettingsSection.ABOUT
+                }
+            }
 
-        Text("Reliability", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            SettingText("Restart after reboot", "Enabled whenever background monitoring is on")
-            SettingText("Before first unlock", if (Build.VERSION.SDK_INT >= 24) "Supported" else "Not available on this Android version")
-            SettingText("Outage state", "Saved after every power observation")
-            Text("Some manufacturers can still stop background apps. Open Diagnostics for the current system status, battery settings shortcut and device guidance.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
+            SettingsSection.SETUP -> SettingsCard {
+                Text(
+                    "Check that the monitor is ready and preview outage messages without changing real monitoring data.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open diagnostics")
+                }
+                OutlinedButton(onClick = onOpenTestMode, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open test mode")
+                }
+            }
 
-        Text("History", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Keep recent power events", fontWeight = FontWeight.Medium)
-            Text("Older entries are removed automatically. Alert delivery records are managed separately in Diagnostics.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            HISTORY_LIMITS.forEach { (value, label) ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { onHistoryLimitChange(value) }
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = settings.historyLimit == value,
-                        onClick = { onHistoryLimitChange(value) }
+            SettingsSection.ALERTS -> SettingsCard {
+                SettingText("Telegram", when {
+                    telegramConfig.enabled -> "Enabled"
+                    telegramConfig.hasToken -> "Saved, disabled"
+                    else -> "Not configured"
+                })
+                Text(
+                    "Send outage and restoration messages through a bot you control. Multiple chats are supported.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
+                    Text("Configure Telegram")
+                }
+            }
+
+            SettingsSection.DEVICE -> SettingsCard {
+                Text("Friendly device name", fontWeight = FontWeight.Medium)
+                Text(
+                    "This name identifies the monitor in alerts.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = deviceName,
+                    onValueChange = { if (it.length <= 50) deviceName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Device name") }
+                )
+                Button(onClick = {
+                    save(
+                        settings.outageDelayMs,
+                        settings.restoreDelayMs,
+                        settings.sendRestoreNotification,
+                        deviceName
                     )
-                    Text(label)
+                }) { Text("Save name") }
+            }
+
+            SettingsSection.OUTAGE -> SettingsCard {
+                Text("Confirm grid outage after", fontWeight = FontWeight.Medium)
+                Text(
+                    "Short power interruptions that end before this delay are logged without declaring an outage.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                DelayOptions(OUTAGE_DELAYS, settings.outageDelayMs) { value ->
+                    save(
+                        value,
+                        settings.restoreDelayMs,
+                        settings.sendRestoreNotification,
+                        settings.deviceName
+                    )
                 }
             }
-            if (!confirmClearHistory) {
-                OutlinedButton(
-                    onClick = { confirmClearHistory = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Clear power history") }
-            } else {
-                Text("This permanently removes the local power-event history.",
-                    color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        onClearHistory()
-                        confirmClearHistory = false
-                    }) { Text("Clear") }
-                    OutlinedButton(onClick = { confirmClearHistory = false }) { Text("Cancel") }
+
+            SettingsSection.RESTORATION -> SettingsCard {
+                Text("Confirm grid restoration after", fontWeight = FontWeight.Medium)
+                Text(
+                    "Wait for power to remain stable before closing an outage.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                DelayOptions(RESTORE_DELAYS, settings.restoreDelayMs) { value ->
+                    save(
+                        settings.outageDelayMs,
+                        value,
+                        settings.sendRestoreNotification,
+                        settings.deviceName
+                    )
+                }
+                SettingSwitch(
+                    title = "Send restoration alerts",
+                    explanation = "Notify configured alert channels when stable power returns.",
+                    checked = settings.sendRestoreNotification,
+                    onCheckedChange = { enabled ->
+                        save(
+                            settings.outageDelayMs,
+                            settings.restoreDelayMs,
+                            enabled,
+                            settings.deviceName
+                        )
+                    }
+                )
+            }
+
+            SettingsSection.APPEARANCE -> SettingsCard {
+                Text("Theme", fontWeight = FontWeight.Medium)
+                Text(
+                    "System follows the phone's light or dark appearance.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                THEME_OPTIONS.forEach { (mode, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onThemeModeChange(mode) }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = settings.themeMode == mode,
+                            onClick = { onThemeModeChange(mode) }
+                        )
+                        Text(label)
+                    }
                 }
             }
-        }
 
-        Text("Safety & privacy", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            Text("Do not leave an old, swollen, hot or damaged lithium battery charging unattended.",
-                fontWeight = FontWeight.Medium)
-            Text("The app has no analytics, advertising or trackers. Current monitoring stays on this device.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
+            SettingsSection.RELIABILITY -> SettingsCard {
+                SettingText("Restart after reboot", "Enabled with monitoring")
+                SettingText(
+                    "Before first unlock",
+                    if (Build.VERSION.SDK_INT >= 24) "Supported" else "Unavailable"
+                )
+                SettingText("Outage state", "Saved after every reading")
+                Text(
+                    "Some manufacturers can still stop background apps. Diagnostics shows current health and the system settings to check.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open reliability diagnostics")
+                }
+            }
 
-        Text("About", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        SettingsCard {
-            val context = LocalContext.current
-            SettingText("App version", appVersionName(context))
-            SettingText("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            SettingText("Device", "${Build.MANUFACTURER} ${Build.MODEL}")
-            SettingText("Package", context.packageName)
+            SettingsSection.HISTORY -> SettingsCard {
+                Text("Keep recent power events", fontWeight = FontWeight.Medium)
+                Text(
+                    "Older entries are removed automatically. Alert delivery records are managed separately in Diagnostics.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                HISTORY_LIMITS.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onHistoryLimitChange(value) }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = settings.historyLimit == value,
+                            onClick = { onHistoryLimitChange(value) }
+                        )
+                        Text(label)
+                    }
+                }
+                if (!confirmClearHistory) {
+                    OutlinedButton(
+                        onClick = { confirmClearHistory = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Clear power history") }
+                } else {
+                    Text(
+                        "This permanently removes the local power-event history.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            onClearHistory()
+                            confirmClearHistory = false
+                        }) { Text("Clear") }
+                        OutlinedButton(onClick = { confirmClearHistory = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            }
+
+            SettingsSection.SAFETY -> SettingsCard {
+                Text(
+                    "Do not leave an old, swollen, hot or damaged lithium battery charging unattended.",
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "The app has no analytics, advertising or trackers. Current monitoring stays on this device.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
+
+            SettingsSection.ABOUT -> SettingsCard {
+                val context = LocalContext.current
+                SettingText("App version", appVersionName(context))
+                SettingText("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                SettingText("Device", "${Build.MANUFACTURER} ${Build.MODEL}")
+                SettingText("Package", context.packageName)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPage(
+    title: String,
+    padding: PaddingValues,
+    onBack: (() -> Unit)?,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier.widthIn(max = 600.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            if (onBack != null) TextButton(onClick = onBack) { Text("‹ Settings") }
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsCategoryCard(title: String, summary: String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(summary, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            Text("›", color = MaterialTheme.colorScheme.primary, fontSize = 26.sp)
         }
     }
 }
@@ -242,10 +401,15 @@ private fun appVersionName(context: Context): String = try {
 
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
+        )
     }
 }
 
@@ -256,8 +420,11 @@ private fun SettingSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, fontWeight = FontWeight.Medium)
             Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -267,7 +434,11 @@ private fun SettingSwitch(
 }
 
 @Composable
-private fun DelayOptions(options: List<Pair<Long, String>>, selected: Long, onSelect: (Long) -> Unit) {
+private fun DelayOptions(
+    options: List<Pair<Long, String>>,
+    selected: Long,
+    onSelect: (Long) -> Unit
+) {
     val isPreset = options.any { it.first == selected }
     var customSeconds by remember(selected) {
         mutableStateOf(if (isPreset) "" else (selected / 1_000L).toString())
@@ -327,8 +498,8 @@ private fun formatCustomDelay(milliseconds: Long): String {
 @Composable
 private fun SettingText(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.Medium)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -354,4 +525,10 @@ private val HISTORY_LIMITS = listOf(
     50 to "Last 50 events",
     100 to "Last 100 events",
     200 to "Last 200 events (recommended)"
+)
+
+private val THEME_OPTIONS = listOf(
+    MonitorStore.ThemeMode.SYSTEM to "System default",
+    MonitorStore.ThemeMode.DARK to "Dark",
+    MonitorStore.ThemeMode.LIGHT to "Light"
 )

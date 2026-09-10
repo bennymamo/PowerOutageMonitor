@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,6 +45,7 @@ internal fun PowerMonitorApp(
     history: List<EventHistoryStore.Record>,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
+    alertChannels: String,
     systemHealth: SystemHealthSnapshot,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
@@ -52,14 +54,23 @@ internal fun PowerMonitorApp(
     onRetryFailedDeliveries: () -> Unit,
     onClearDeliveryRecords: () -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
+    onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
     onClearHistory: () -> Unit,
-    onSendTestAlert: (AlertMessage) -> Boolean
+    onSendTestAlert: (AlertMessage) -> Boolean,
+    onAlertConfigurationChanged: () -> Unit
 ) {
     if (!settings.setupCompleted) {
         SetupWizardScreen(settings = settings, snapshot = snapshot, onComplete = onCompleteSetup)
         return
     }
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
+    BackHandler(enabled = screen != AppScreen.STATUS) {
+        screen = when (screen) {
+            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM -> AppScreen.SETTINGS
+            AppScreen.HISTORY, AppScreen.SETTINGS -> AppScreen.STATUS
+            AppScreen.STATUS -> AppScreen.STATUS
+        }
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -88,15 +99,15 @@ internal fun PowerMonitorApp(
         when (screen) {
             AppScreen.STATUS -> DashboardScreen(
                 snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
-                systemHealth, padding
+                alertChannels, systemHealth, padding, onMonitoringEnabledChange
             )
             AppScreen.HISTORY -> HistoryScreen(history, monitorState, deliverySummaries, padding)
             AppScreen.SETTINGS -> SettingsScreen(
                 settings,
                 padding,
-                onMonitoringEnabledChange,
                 onSettingsChange,
                 onHistoryLimitChange,
+                onThemeModeChange,
                 onClearHistory,
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
                 onOpenTestMode = { screen = AppScreen.TEST_MODE },
@@ -122,6 +133,7 @@ internal fun PowerMonitorApp(
             AppScreen.TELEGRAM -> TelegramSetupScreen(
                 deviceName = settings.deviceName,
                 padding = padding,
+                onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.SETTINGS }
             )
         }
