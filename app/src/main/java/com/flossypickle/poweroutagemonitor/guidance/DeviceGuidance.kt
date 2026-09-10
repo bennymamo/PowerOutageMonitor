@@ -12,12 +12,12 @@ internal data class DeviceGuidance(
             val name = manufacturer.trim().ifEmpty { "Android" }
                 .replaceFirstChar { it.titlecase(Locale.getDefault()) }
             return DeviceGuidance(
-                title = "$name background guidance",
-                summary = "Android and the device maker can restrict apps that run for long periods. Check these items on the monitor device.",
+                title = "Keep Power Monitor Running",
+                summary = "Detected device maker: $name. Android and the device maker can restrict apps that run for long periods.",
                 steps = listOf(
                     "Allow the ongoing Power monitoring notification.",
-                    "Open Android battery optimization settings and avoid a Restricted battery mode for this app.",
-                    "If the device has an Auto-start or Background activity control, allow this app.",
+                    "Open this app's system settings and avoid a Restricted battery mode.",
+                    "If this device has Auto-start or Background activity controls, allow Power Outage Monitor.",
                     "After changing device settings, reboot once and confirm Monitoring service is running in Diagnostics."
                 )
             )

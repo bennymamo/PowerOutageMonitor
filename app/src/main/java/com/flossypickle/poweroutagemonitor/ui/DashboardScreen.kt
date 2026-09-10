@@ -34,15 +34,18 @@ import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
+import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.text.DateFormat
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 @Composable
 internal fun DashboardScreen(
     snapshot: PowerSnapshot?,
     monitorState: OutageEngine.State,
     settings: MonitorStore.Settings,
+    history: List<EventHistoryStore.Record>,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
     systemHealth: SystemHealthSnapshot,
@@ -129,10 +132,28 @@ internal fun DashboardScreen(
                 }
             }
             HorizontalDivider(color = colors.outline)
-            Text("POWER DETECTION", color = colors.primary, fontSize = 10.sp,
-                letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
-            Text("Unplug your charger, then reconnect it. The indicator follows Android’s external-power reading.",
-                color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            history.firstOrNull()?.let { lastEvent ->
+                Text("LAST POWER EVENT", color = colors.primary, fontSize = 10.sp,
+                    letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (lastEvent.kind == EventHistoryStore.KIND_CONFIRMED_OUTAGE) {
+                        "Confirmed outage"
+                    } else {
+                        "Brief interruption"
+                    },
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(lastEvent.powerLostAtEpochMs))} · ${formatEventDuration(lastEvent.restoredAtEpochMs - lastEvent.powerLostAtEpochMs)}",
+                    color = colors.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } ?: run {
+                Text("POWER DETECTION", color = colors.primary, fontSize = 10.sp,
+                    letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                Text("Unplug your charger, then reconnect it. The indicator follows Android’s external-power reading.",
+                    color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }
@@ -193,6 +214,18 @@ private fun statusText(status: Int?) = when (status) {
     BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"
     BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "Not charging"
     else -> "Unknown"
+}
+
+private fun formatEventDuration(durationMs: Long): String {
+    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(durationMs.coerceAtLeast(0))
+    val hours = totalSeconds / 3_600
+    val minutes = totalSeconds % 3_600 / 60
+    val seconds = totalSeconds % 60
+    return buildList {
+        if (hours > 0) add("${hours}h")
+        if (minutes > 0 || hours > 0) add("${minutes}m")
+        add("${seconds}s")
+    }.joinToString(" ")
 }
 
 private fun monitorLabel(enabled: Boolean, phase: OutageEngine.Phase) = when {

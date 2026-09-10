@@ -87,7 +87,7 @@ internal fun PowerMonitorApp(
     ) { padding ->
         when (screen) {
             AppScreen.STATUS -> DashboardScreen(
-                snapshot, monitorState, settings, lastObservationEpochMs, deliveryWarning,
+                snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
                 systemHealth, padding
             )
             AppScreen.HISTORY -> HistoryScreen(history, monitorState, deliverySummaries, padding)

@@ -174,9 +174,13 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Background restriction",
                 if (report.backgroundRestricted) "Restricted" else "Not reported")
             OutlinedButton(
+                onClick = { openAppSettings(context) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Open this app's system settings") }
+            TextButton(
                 onClick = { openBatteryOptimizationSettings(context) },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Open battery optimization settings") }
+            ) { Text("View battery optimization list") }
         }
 
         Text(guidance.title, style = MaterialTheme.typography.titleMedium,
@@ -237,6 +241,16 @@ private fun yesNo(value: Boolean) = if (value) "Yes" else "No"
 private fun openBatteryOptimizationSettings(context: Context) {
     val primary = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val fallback = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(primary) }
+        .recoverCatching { context.startActivity(fallback) }
+}
+
+private fun openAppSettings(context: Context) {
+    val primary = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:${context.packageName}")
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     val fallback = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(primary) }
         .recoverCatching { context.startActivity(fallback) }
