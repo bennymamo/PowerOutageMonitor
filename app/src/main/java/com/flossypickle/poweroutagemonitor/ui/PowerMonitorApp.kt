@@ -52,7 +52,7 @@ internal fun PowerMonitorApp(
     onSendTestAlert: (AlertMessage) -> Boolean
 ) {
     if (!settings.setupCompleted) {
-        SetupWizardScreen(settings = settings, onComplete = onCompleteSetup)
+        SetupWizardScreen(settings = settings, snapshot = snapshot, onComplete = onCompleteSetup)
         return
     }
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }

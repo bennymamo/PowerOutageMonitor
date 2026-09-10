@@ -22,6 +22,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -33,17 +34,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
 @Composable
 internal fun SetupWizardScreen(
     settings: MonitorStore.Settings,
+    snapshot: PowerSnapshot?,
     onComplete: (String, Long, Long) -> Unit
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var deviceName by rememberSaveable { mutableStateOf(settings.deviceName) }
     var outageDelay by rememberSaveable { mutableLongStateOf(settings.outageDelayMs) }
     var restoreDelay by rememberSaveable { mutableLongStateOf(settings.restoreDelayMs) }
+    var sawConnected by rememberSaveable { mutableStateOf(false) }
+    var sawDisconnected by rememberSaveable { mutableStateOf(false) }
+    var sawReconnected by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(snapshot?.externallyPowered) {
+        when {
+            snapshot?.externallyPowered == true && sawDisconnected -> sawReconnected = true
+            snapshot?.externallyPowered == true -> sawConnected = true
+            snapshot?.externallyPowered == false && sawConnected -> sawDisconnected = true
+        }
+    }
+    val powerTestComplete = sawConnected && sawDisconnected && sawReconnected
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -76,7 +91,13 @@ internal fun SetupWizardScreen(
                         onOutageDelayChange = { outageDelay = it },
                         onRestoreDelayChange = { restoreDelay = it }
                     )
-                    else -> ReadyStep(deviceName, outageDelay, restoreDelay)
+                    3 -> PowerDetectionStep(
+                        snapshot = snapshot,
+                        sawConnected = sawConnected,
+                        sawDisconnected = sawDisconnected,
+                        sawReconnected = sawReconnected
+                    )
+                    else -> ReadyStep(deviceName, outageDelay, restoreDelay, powerTestComplete)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -92,10 +113,81 @@ internal fun SetupWizardScreen(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = step != 2 || deviceName.isNotBlank()
-                ) { Text(if (step == SETUP_STEPS.lastIndex) "Start monitoring" else "Continue") }
+                ) {
+                    Text(when {
+                        step == SETUP_STEPS.lastIndex -> "Start monitoring"
+                        step == POWER_TEST_STEP && !powerTestComplete -> "Skip for now"
+                        else -> "Continue"
+                    })
+                }
             }
             }
         }
+    }
+}
+
+@Composable
+private fun PowerDetectionStep(
+    snapshot: PowerSnapshot?,
+    sawConnected: Boolean,
+    sawDisconnected: Boolean,
+    sawReconnected: Boolean
+) {
+    val instruction = when {
+        !sawConnected -> "Connect the permanent charger."
+        !sawDisconnected -> "Now unplug the charger."
+        !sawReconnected -> "Reconnect the charger."
+        else -> "Power detection is working on this device."
+    }
+    WizardHeading(
+        "Test power detection",
+        "This checks Android's real external-power signal. It does not create an outage or send an alert."
+    )
+    WizardCard {
+        Text(
+            if (snapshot?.externallyPowered == true) "EXTERNAL POWER CONNECTED"
+            else if (snapshot?.externallyPowered == false) "RUNNING ON BATTERY"
+            else "WAITING FOR ANDROID",
+            color = if (snapshot?.externallyPowered == true) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        Text(instruction, style = MaterialTheme.typography.titleMedium)
+        snapshot?.batteryPercent?.let { percent ->
+            Text("Battery $percent%", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    WizardCard {
+        TestCheck("Charger connected", sawConnected)
+        TestCheck("Charger disconnected", sawDisconnected)
+        TestCheck("Charger reconnected", sawReconnected)
+    }
+    if (!sawReconnected) {
+        Text(
+            "If you cannot unplug this device now, choose Skip for now. You can repeat the same check from the Status screen later.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+private fun TestCheck(label: String, complete: Boolean) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label)
+        Text(
+            if (complete) "DONE" else "WAITING",
+            color = if (complete) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
     }
 }
 
@@ -157,7 +249,12 @@ private fun DeviceStep(
 }
 
 @Composable
-private fun ReadyStep(deviceName: String, outageDelay: Long, restoreDelay: Long) {
+private fun ReadyStep(
+    deviceName: String,
+    outageDelay: Long,
+    restoreDelay: Long,
+    powerTestComplete: Boolean
+) {
     WizardHeading("Ready to start monitoring",
         "Android may ask for notification permission. Allow it so monitoring remains visible and reliable in the background.")
     WizardCard {
@@ -165,6 +262,7 @@ private fun ReadyStep(deviceName: String, outageDelay: Long, restoreDelay: Long)
         SummaryRow("Outage delay", setupDelayLabel(outageDelay))
         SummaryRow("Restore delay", setupDelayLabel(restoreDelay))
         SummaryRow("Restoration alerts", "On")
+        SummaryRow("Power detection", if (powerTestComplete) "Verified" else "Test later")
     }
     WizardCard {
         Text("After setup", fontWeight = FontWeight.SemiBold)
@@ -222,7 +320,8 @@ private fun setupDelayLabel(value: Long): String =
     (OUTAGE_SETUP_DELAYS + RESTORE_SETUP_DELAYS).firstOrNull { it.first == value }?.second
         ?: "${value / 1_000} seconds"
 
-private val SETUP_STEPS = listOf("Welcome", "Safety", "Device", "Ready")
+private const val POWER_TEST_STEP = 3
+private val SETUP_STEPS = listOf("Welcome", "Safety", "Device", "Power test", "Ready")
 private val OUTAGE_SETUP_DELAYS = listOf(
     30_000L to "30 seconds",
     60_000L to "1 minute (recommended)",

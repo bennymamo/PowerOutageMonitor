@@ -67,7 +67,7 @@ The delivery path was exercised offline with a fake token and recipient. The con
 
 A seeded failed-delivery record verified dashboard failure visibility, live Diagnostics counts, user-triggered retry, asynchronous screen refresh and two-step clearing. Clearing removed only terminal delivery metadata; monitoring remained active and the dashboard warning disappeared.
 
-A clean-data emulator run verified all four setup pages, scroll behavior, the old-battery warning, default timing summary, Android 13+ notification-permission handoff, persisted completion and automatic service startup. The wizard uses the same dark theme and leaves alert-channel setup in its dedicated Settings section.
+A clean-data emulator run verified the guided setup flow, scroll behavior, the old-battery warning, default timing summary, Android 13+ notification-permission handoff, persisted completion and automatic service startup. Its live power test records a real connected → disconnected → reconnected sequence from Android without changing outage history or sending alerts; it can be skipped when the charger cannot be handled during setup. The wizard uses the same dark theme and leaves alert-channel setup in its dedicated Settings section.
 
 With the expanded dynamic receiver installed, simulated AC loss moved the persisted engine and dashboard into pending-outage state within two seconds. Reconnection before the 60-second threshold returned to powered state, recorded a brief interruption and left only an `alarm_cancelled` entry in Android's alarm history.
 
