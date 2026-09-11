@@ -10,6 +10,9 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
+import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import java.text.DateFormat
 import java.util.Date
 
@@ -35,7 +38,12 @@ internal data class DiagnosticsReport(
     val retryingDeliveries: Int = 0,
     val sentDeliveries: Int = 0,
     val failedDeliveries: Int = 0,
-    val lastDeliveryError: String? = null
+    val lastDeliveryError: String? = null,
+    val audibleAlarmEnabled: Boolean = false,
+    val audibleAlarmActive: Boolean = false,
+    val audibleAlarmRepeatMinutes: Long = 5,
+    val operationalInterruptions: Int = 0,
+    val lastOperationalInterruption: String? = null
 ) {
     fun asPlainText(): String = buildString {
         appendLine("Power Outage Monitor diagnostics")
@@ -61,10 +69,19 @@ internal data class DiagnosticsReport(
         appendLine("Sent deliveries: $sentDeliveries")
         appendLine("Failed deliveries: $failedDeliveries")
         lastDeliveryError?.let { appendLine("Last delivery error: $it") }
+        appendLine("Audible alarm enabled: ${yesNo(audibleAlarmEnabled)}")
+        appendLine("Audible alarm active: ${yesNo(audibleAlarmActive)}")
+        appendLine("Audible repeat interval: ${formatMinutes(audibleAlarmRepeatMinutes)}")
+        appendLine("Unrecorded operational interruptions: $operationalInterruptions")
+        lastOperationalInterruption?.let {
+            appendLine("Last unrecorded interruption: $it")
+        }
     }
 
     private fun yesNo(value: Boolean) = if (value) "Yes" else "No"
 }
+
+internal fun formatMinutes(value: Long) = if (value == 1L) "1 minute" else "$value minutes"
 
 internal class DiagnosticsCollector(private val context: Context) {
     fun collect(
@@ -76,6 +93,11 @@ internal class DiagnosticsCollector(private val context: Context) {
         val telegram = TelegramConfigStore(context).config()
         val deliveries = AlertQueueStore(context).read()
         val health = SystemHealthSnapshot.capture(context)
+        val audibleSettings = AudibleAlarmStore(context).settings()
+        val operationalInterruptions = OperationalHistoryStore(context).read().filter {
+            it.kind == OperationalHistoryStore.KIND_APP_RECOVERED ||
+                it.kind == OperationalHistoryStore.KIND_MONITORING_RECOVERED
+        }
         return DiagnosticsReport(
         appVersion = appVersionName(),
         androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
@@ -106,7 +128,16 @@ internal class DiagnosticsCollector(private val context: Context) {
         retryingDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.RETRYING },
         sentDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.SENT },
         failedDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.FAILED },
-        lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError }
+        lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError },
+        audibleAlarmEnabled = audibleSettings.enabled,
+        audibleAlarmActive = AudibleAlarmCoordinator(context).isActive(state, snapshot),
+        audibleAlarmRepeatMinutes = audibleSettings.repeatIntervalMs / 60_000L,
+        operationalInterruptions = operationalInterruptions.size,
+        lastOperationalInterruption = operationalInterruptions.maxByOrNull {
+            it.timestampEpochMs
+        }?.let {
+            DateFormat.getDateTimeInstance().format(Date(it.timestampEpochMs))
+        }
         )
     }
 

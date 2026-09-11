@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.diagnostics.DiagnosticsCollector
 import com.flossypickle.poweroutagemonitor.diagnostics.DiagnosticsReport
+import com.flossypickle.poweroutagemonitor.diagnostics.formatMinutes
 import com.flossypickle.poweroutagemonitor.guidance.DeviceGuidance
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
@@ -173,6 +174,10 @@ internal fun DiagnosticsScreen(
                 if (report.batteryOptimizationExcluded) "Unrestricted" else "System managed")
             DiagnosticRow("Background restriction",
                 if (report.backgroundRestricted) "Restricted" else "Not reported")
+            DiagnosticRow("Unrecorded interruptions", report.operationalInterruptions.toString())
+            report.lastOperationalInterruption?.let {
+                DiagnosticRow("Latest interruption", it)
+            }
             OutlinedButton(
                 onClick = { openAppSettings(context) },
                 modifier = Modifier.fillMaxWidth()
@@ -181,6 +186,14 @@ internal fun DiagnosticsScreen(
                 onClick = { openBatteryOptimizationSettings(context) },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("View battery optimization list") }
+        }
+
+        Text("Local audible alarm", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary)
+        DiagnosticCard {
+            DiagnosticRow("Enabled", yesNo(report.audibleAlarmEnabled))
+            DiagnosticRow("Currently sounding", yesNo(report.audibleAlarmActive))
+            DiagnosticRow("Repeat interval", formatMinutes(report.audibleAlarmRepeatMinutes))
         }
 
         Text(guidance.title, style = MaterialTheme.typography.titleMedium,

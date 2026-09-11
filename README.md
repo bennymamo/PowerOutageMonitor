@@ -41,6 +41,7 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - `ui` contains separate Status, History and Settings screens. User-adjustable behavior belongs in grouped Settings sections.
 - History associates provider-neutral delivery totals with each power event. Diagnostics can retry failed items after a configuration fix or clear terminal delivery details while retaining outage history.
 - History merges grid events with a separate operational log. App and service sessions persist active markers, so a new start without a matching close/stop is highlighted as a possible crash, process kill or manufacturer restriction.
+- Diagnostics counts those unrecorded interruptions, shows the latest time, reports the local alarm state, and includes the same credential-free facts in its copied report.
 - History retention is independently configurable to the newest 50, 100 or 200 power events; a separate two-step action clears power history without changing settings or delivery records.
 - History completion is idempotent by outage identity, so a process restart between persistence steps cannot create duplicate event rows. Immediate and delayed restorations follow the same completion path.
 - Outage and restoration delays provide common one-tap presets plus a validated custom value from 0 seconds to 24 hours.
