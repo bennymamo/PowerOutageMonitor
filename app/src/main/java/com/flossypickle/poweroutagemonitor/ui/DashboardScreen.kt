@@ -21,6 +21,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,8 +67,10 @@ internal fun DashboardScreen(
     deliveryWarning: String?,
     alertChannels: String,
     systemHealth: SystemHealthSnapshot,
+    audibleAlarmActive: Boolean,
     padding: PaddingValues,
-    onMonitoringEnabledChange: (Boolean) -> Unit
+    onMonitoringEnabledChange: (Boolean) -> Unit,
+    onDismissAudibleAlarm: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     val lastEvent = history.firstOrNull()
@@ -210,6 +213,12 @@ internal fun DashboardScreen(
                         color = colors.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    if (audibleAlarmActive) {
+                        OutlinedButton(
+                            onClick = onDismissAudibleAlarm,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Dismiss audible alarm") }
+                    }
                     StatusRow(
                         "Internet",
                         if (systemHealth.internetAvailable) "Available" else "Unavailable",

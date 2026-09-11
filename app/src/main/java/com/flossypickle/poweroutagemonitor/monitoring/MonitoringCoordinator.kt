@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.flossypickle.poweroutagemonitor.OutageEngine
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessageFactory
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
@@ -14,6 +15,7 @@ internal class MonitoringCoordinator(private val context: Context) {
     private val store = MonitorStore(context)
     private val history = EventHistoryStore(context)
     private val alerts = AlertDeliveryCoordinator(context)
+    private val audibleAlarm = AudibleAlarmCoordinator(context)
 
     @Synchronized
     fun process(snapshot: PowerSnapshot, nowEpochMs: Long = System.currentTimeMillis()): OutageEngine.State {
@@ -36,6 +38,7 @@ internal class MonitoringCoordinator(private val context: Context) {
         recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)
         DeadlineScheduler(context).schedule(after, settings)
+        audibleAlarm.reconcile(after, snapshot, nowEpochMs)
         alerts.materializePending()
         context.sendBroadcast(Intent(ACTION_MONITOR_STATE_CHANGED).setPackage(context.packageName))
         return after

@@ -25,6 +25,8 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
+import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -43,6 +45,9 @@ internal fun PowerMonitorApp(
     monitorState: OutageEngine.State,
     settings: MonitorStore.Settings,
     history: List<EventHistoryStore.Record>,
+    operationalHistory: List<OperationalHistoryStore.Record>,
+    audibleSettings: AudibleAlarmStore.Settings,
+    audibleAlarmActive: Boolean,
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
     alertChannels: String,
@@ -55,6 +60,9 @@ internal fun PowerMonitorApp(
     onClearDeliveryRecords: () -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
+    onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
+    onDismissAudibleAlarm: () -> Unit,
+    onTestAudibleAlarm: () -> Unit,
     onClearHistory: () -> Unit,
     onSendTestAlert: (AlertMessage) -> Boolean,
     onAlertConfigurationChanged: () -> Unit
@@ -99,15 +107,23 @@ internal fun PowerMonitorApp(
         when (screen) {
             AppScreen.STATUS -> DashboardScreen(
                 snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
-                alertChannels, systemHealth, padding, onMonitoringEnabledChange
+                alertChannels, systemHealth, audibleAlarmActive, padding,
+                onMonitoringEnabledChange, onDismissAudibleAlarm
             )
-            AppScreen.HISTORY -> HistoryScreen(history, monitorState, deliverySummaries, padding)
+            AppScreen.HISTORY -> HistoryScreen(
+                history, operationalHistory, monitorState, deliverySummaries, padding
+            )
             AppScreen.SETTINGS -> SettingsScreen(
                 settings,
                 padding,
                 onSettingsChange,
                 onHistoryLimitChange,
                 onThemeModeChange,
+                audibleSettings,
+                onAudibleSettingsChange,
+                audibleAlarmActive,
+                onDismissAudibleAlarm,
+                onTestAudibleAlarm,
                 onClearHistory,
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
                 onOpenTestMode = { screen = AppScreen.TEST_MODE },

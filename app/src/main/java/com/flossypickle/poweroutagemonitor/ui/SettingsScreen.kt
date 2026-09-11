@@ -44,12 +44,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
 private enum class SettingsSection(val title: String) {
     HOME("Settings"),
     SETUP("Setup & testing"),
     ALERTS("Alert channels"),
+    AUDIBLE("Audible alarm"),
     DEVICE("Device"),
     OUTAGE("Outage timing"),
     RESTORATION("Restoration"),
@@ -67,6 +69,11 @@ internal fun SettingsScreen(
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
+    audibleSettings: AudibleAlarmStore.Settings,
+    onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
+    audibleAlarmActive: Boolean,
+    onDismissAudibleAlarm: () -> Unit,
+    onTestAudibleAlarm: () -> Unit,
     onClearHistory: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
@@ -104,6 +111,12 @@ internal fun SettingsScreen(
                         else -> "No alert channel is configured"
                     }
                 ) { section = SettingsSection.ALERTS }
+                SettingsCategoryCard(
+                    "Audible alarm",
+                    if (audibleSettings.enabled) {
+                        "On · repeats every ${formatCustomDelay(audibleSettings.repeatIntervalMs)}"
+                    } else "Off"
+                ) { section = SettingsSection.AUDIBLE }
                 SettingsCategoryCard("Device", "Name used in alerts") {
                     section = SettingsSection.DEVICE
                 }
@@ -161,6 +174,87 @@ internal fun SettingsScreen(
                 OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
                     Text("Configure Telegram")
                 }
+            }
+
+            SettingsSection.AUDIBLE -> SettingsCard {
+                SettingSwitch(
+                    title = "Enable audible outage alarm",
+                    explanation = "Sound a repeating local alarm only after a grid outage is confirmed.",
+                    checked = audibleSettings.enabled,
+                    onCheckedChange = {
+                        onAudibleSettingsChange(audibleSettings.copy(enabled = it))
+                    }
+                )
+                if (audibleAlarmActive) {
+                    OutlinedButton(
+                        onClick = onDismissAudibleAlarm,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Dismiss current outage alarm") }
+                }
+                OutlinedButton(
+                    onClick = onTestAudibleAlarm,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Play one test beep") }
+                Text("Repeat interval", fontWeight = FontWeight.Medium)
+                AUDIBLE_REPEAT_INTERVALS.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            onAudibleSettingsChange(
+                                audibleSettings.copy(repeatIntervalMs = value)
+                            )
+                        }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = audibleSettings.repeatIntervalMs == value,
+                            onClick = {
+                                onAudibleSettingsChange(
+                                    audibleSettings.copy(repeatIntervalMs = value)
+                                )
+                            }
+                        )
+                        Text(label)
+                    }
+                }
+                Text("Protect the device battery", fontWeight = FontWeight.Medium)
+                Text(
+                    "Stop sounding for the current outage when the battery reaches this level.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                AUDIBLE_BATTERY_LIMITS.forEach { value ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            onAudibleSettingsChange(
+                                audibleSettings.copy(stopBatteryPercent = value)
+                            )
+                        }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = audibleSettings.stopBatteryPercent == value,
+                            onClick = {
+                                onAudibleSettingsChange(
+                                    audibleSettings.copy(stopBatteryPercent = value)
+                                )
+                            }
+                        )
+                        Text("Stop at $value%")
+                    }
+                }
+                SettingSwitch(
+                    title = "Use maximum alarm volume",
+                    explanation = "Temporarily raises alarm volume for each beep, then restores it. Do Not Disturb can still silence it.",
+                    checked = audibleSettings.useMaximumVolume,
+                    onCheckedChange = {
+                        onAudibleSettingsChange(audibleSettings.copy(useMaximumVolume = it))
+                    }
+                )
+                Text(
+                    "The alarm stops when power returns, monitoring is disabled, the battery limit is reached, or you dismiss it. Android may delay repeats while the device is deeply idle.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
             }
 
             SettingsSection.DEVICE -> SettingsCard {
@@ -300,7 +394,7 @@ internal fun SettingsScreen(
                     ) { Text("Clear power history") }
                 } else {
                     Text(
-                        "This permanently removes the local power-event history.",
+                        "This permanently removes local grid and app-operation history.",
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
@@ -532,3 +626,13 @@ private val THEME_OPTIONS = listOf(
     MonitorStore.ThemeMode.DARK to "Dark",
     MonitorStore.ThemeMode.LIGHT to "Light"
 )
+
+private val AUDIBLE_REPEAT_INTERVALS = listOf(
+    60_000L to "Every minute",
+    5 * 60_000L to "Every 5 minutes (recommended)",
+    15 * 60_000L to "Every 15 minutes",
+    30 * 60_000L to "Every 30 minutes",
+    60 * 60_000L to "Every hour"
+)
+
+private val AUDIBLE_BATTERY_LIMITS = listOf(10, 20, 30, 40)

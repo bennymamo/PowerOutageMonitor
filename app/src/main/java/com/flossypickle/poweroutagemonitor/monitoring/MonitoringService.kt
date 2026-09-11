@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -18,12 +19,17 @@ import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.MainActivity
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.R
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmReceiver
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmScheduler
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 
 /** Event-driven foreground service. It performs no polling while power state is stable. */
 internal class MonitoringService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var coordinator: MonitoringCoordinator
+    private lateinit var audibleAlarm: AudibleAlarmCoordinator
     private val deadlineCheck = Runnable { reconcileCurrentPower() }
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -39,6 +45,9 @@ internal class MonitoringService : Service() {
         super.onCreate()
         isRunning = true
         coordinator = MonitoringCoordinator(this)
+        audibleAlarm = AudibleAlarmCoordinator(this)
+        val settings = MonitorStore(this).settings()
+        OperationalHistoryStore(this).recordMonitoringStarted(settings.historyLimit)
         createNotificationChannel()
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
         registerBatteryReceiver()
@@ -49,7 +58,19 @@ internal class MonitoringService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        reconcileCurrentPower()
+        when (intent?.action) {
+            ACTION_AUDIBLE_TICK -> {
+                val store = MonitorStore(this)
+                audibleAlarm.reconcile(
+                    state = store.state(),
+                    snapshot = store.lastSnapshot(),
+                    scheduledTick = true
+                )
+                refreshNotification()
+            }
+            ACTION_REFRESH_NOTIFICATION -> refreshNotification()
+            else -> reconcileCurrentPower()
+        }
         return START_STICKY
     }
 
@@ -64,6 +85,11 @@ internal class MonitoringService : Service() {
             stopForeground(true)
         }
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+        val settings = MonitorStore(this).settings()
+        OperationalHistoryStore(this).recordMonitoringStopped(
+            maxRecords = settings.historyLimit,
+            userDisabled = !settings.monitoringEnabled
+        )
         super.onDestroy()
     }
 
@@ -93,6 +119,12 @@ internal class MonitoringService : Service() {
         scheduleInProcessDeadline(state)
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(state, snapshot))
+    }
+
+    private fun refreshNotification() {
+        val store = MonitorStore(this)
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(store.state(), store.lastSnapshot()))
     }
 
     private fun scheduleInProcessDeadline(state: OutageEngine.State) {
@@ -139,7 +171,7 @@ internal class MonitoringService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
-        return builder
+        builder
             .setSmallIcon(R.drawable.ic_monitoring_notification)
             .setContentTitle(title)
             .setContentText("${MonitorStore(this).settings().deviceName}$battery")
@@ -148,7 +180,23 @@ internal class MonitoringService : Service() {
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .build()
+        if (audibleAlarm.isActive(state, snapshot)) {
+            val dismiss = PendingIntent.getBroadcast(
+                this,
+                4103,
+                Intent(this, AudibleAlarmReceiver::class.java)
+                    .setAction(AudibleAlarmScheduler.ACTION_DISMISS),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(this, R.drawable.ic_monitoring_notification),
+                    "Dismiss alarm",
+                    dismiss
+                ).build()
+            )
+        }
+        return builder.build()
     }
 
     private fun createNotificationChannel() {
@@ -179,5 +227,26 @@ internal class MonitoringService : Service() {
                 Intent(context, MonitoringService::class.java)
             )
         }
+
+        fun handleAudibleTick(context: Context) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MonitoringService::class.java).setAction(ACTION_AUDIBLE_TICK)
+            )
+        }
+
+        fun refreshNotification(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MonitoringService::class.java)
+                    .setAction(ACTION_REFRESH_NOTIFICATION)
+            )
+        }
+
+        private const val ACTION_AUDIBLE_TICK =
+            "com.flossypickle.poweroutagemonitor.SERVICE_AUDIBLE_TICK"
+        private const val ACTION_REFRESH_NOTIFICATION =
+            "com.flossypickle.poweroutagemonitor.REFRESH_MONITOR_NOTIFICATION"
     }
 }

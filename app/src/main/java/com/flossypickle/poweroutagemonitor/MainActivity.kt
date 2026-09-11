@@ -17,6 +17,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.SideEffect
 import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.monitoring.DeadlineScheduler
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmPlayer
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthMonitor
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
@@ -32,6 +35,7 @@ import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.ui.PowerMonitorApp
 import com.flossypickle.poweroutagemonitor.ui.theme.PowerOutageMonitorTheme
 
@@ -40,6 +44,11 @@ class MainActivity : ComponentActivity() {
     private var monitorState = androidx.compose.runtime.mutableStateOf(OutageEngine.State())
     private var settings = androidx.compose.runtime.mutableStateOf<MonitorStore.Settings?>(null)
     private var history = androidx.compose.runtime.mutableStateOf(emptyList<EventHistoryStore.Record>())
+    private var operationalHistory = androidx.compose.runtime.mutableStateOf(
+        emptyList<OperationalHistoryStore.Record>()
+    )
+    private var audibleSettings = androidx.compose.runtime.mutableStateOf(AudibleAlarmStore.Settings())
+    private var audibleAlarmActive = androidx.compose.runtime.mutableStateOf(false)
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
     private var alertChannels = androidx.compose.runtime.mutableStateOf("None configured")
@@ -61,7 +70,8 @@ class MainActivity : ComponentActivity() {
                 Intent.ACTION_POWER_CONNECTED,
                 Intent.ACTION_POWER_DISCONNECTED -> refreshCurrentPowerSnapshot()
                 MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED -> refreshStoredState()
-                AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED -> refreshStoredState()
+                AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED,
+                AudibleAlarmCoordinator.ACTION_AUDIBLE_ALARM_CHANGED -> refreshStoredState()
             }
         }
     }
@@ -72,6 +82,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
+        OperationalHistoryStore(this).recordAppOpened(MonitorStore(this).settings().historyLimit)
         refreshStoredState()
         systemHealthMonitor = SystemHealthMonitor(this) { systemHealth.value = it }
         setContent {
@@ -96,6 +107,9 @@ class MainActivity : ComponentActivity() {
                     monitorState = monitorState.value,
                     settings = currentSettings,
                     history = history.value,
+                    operationalHistory = operationalHistory.value,
+                    audibleSettings = audibleSettings.value,
+                    audibleAlarmActive = audibleAlarmActive.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
                     alertChannels = alertChannels.value,
@@ -108,6 +122,9 @@ class MainActivity : ComponentActivity() {
                     onClearDeliveryRecords = ::clearDeliveryRecords,
                     onHistoryLimitChange = ::updateHistoryLimit,
                     onThemeModeChange = ::updateThemeMode,
+                    onAudibleSettingsChange = ::updateAudibleSettings,
+                    onDismissAudibleAlarm = ::dismissAudibleAlarm,
+                    onTestAudibleAlarm = ::testAudibleAlarm,
                     onClearHistory = ::clearHistory,
                     onSendTestAlert = ::sendTestAlert,
                     onAlertConfigurationChanged = ::refreshStoredState
@@ -134,6 +151,15 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onDestroy() {
+        if (!isChangingConfigurations) {
+            OperationalHistoryStore(this).recordAppClosed(
+                MonitorStore(this).settings().historyLimit
+            )
+        }
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         systemHealthMonitor.refresh()
@@ -147,6 +173,7 @@ class MainActivity : ComponentActivity() {
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED)
             addAction(AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED)
+            addAction(AudibleAlarmCoordinator.ACTION_AUDIBLE_ALARM_CHANGED)
         }
         val sticky = ContextCompat.registerReceiver(
             this,
@@ -175,6 +202,7 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             DeadlineScheduler(this).cancel()
+            AudibleAlarmCoordinator(this).stop()
             stopService(Intent(this, MonitoringService::class.java))
         }
         refreshStoredState()
@@ -227,6 +255,7 @@ class MainActivity : ComponentActivity() {
     private fun updateHistoryLimit(limit: Int) {
         MonitorStore(this).setHistoryLimit(limit)
         EventHistoryStore(this).trimTo(limit)
+        OperationalHistoryStore(this).trimTo(limit)
         refreshStoredState()
     }
 
@@ -235,8 +264,27 @@ class MainActivity : ComponentActivity() {
         refreshStoredState()
     }
 
+    private fun updateAudibleSettings(value: AudibleAlarmStore.Settings) {
+        AudibleAlarmStore(this).updateSettings(value)
+        val store = MonitorStore(this)
+        AudibleAlarmCoordinator(this).reconcile(store.state(), store.lastSnapshot())
+        MonitoringService.refreshNotification(this)
+        refreshStoredState()
+    }
+
+    private fun dismissAudibleAlarm() {
+        AudibleAlarmCoordinator(this).dismissCurrent()
+        MonitoringService.refreshNotification(this)
+        refreshStoredState()
+    }
+
+    private fun testAudibleAlarm() {
+        AudibleAlarmPlayer(this).play(audibleSettings.value.useMaximumVolume)
+    }
+
     private fun clearHistory() {
         EventHistoryStore(this).clear()
+        OperationalHistoryStore(this).clear()
         refreshStoredState()
     }
 
@@ -249,6 +297,12 @@ class MainActivity : ComponentActivity() {
         settings.value = store.settings()
         lastObservationEpochMs.longValue = store.lastObservationEpochMs()
         history.value = EventHistoryStore(this).read()
+        operationalHistory.value = OperationalHistoryStore(this).read()
+        audibleSettings.value = AudibleAlarmStore(this).settings()
+        audibleAlarmActive.value = AudibleAlarmCoordinator(this).isActive(
+            monitorState.value,
+            store.lastSnapshot()
+        )
         val deliveries = AlertQueueStore(this).read()
         deliverySummaries.value = AlertDeliverySummary.byEvent(deliveries)
         alertChannels.value = AlertProviderRegistry(this).statusSummary()

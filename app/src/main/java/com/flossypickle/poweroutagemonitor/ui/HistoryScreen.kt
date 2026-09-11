@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
+import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import java.text.DateFormat
 import java.util.Date
@@ -28,10 +29,15 @@ import java.util.Locale
 @Composable
 internal fun HistoryScreen(
     records: List<EventHistoryStore.Record>,
+    operationalRecords: List<OperationalHistoryStore.Record>,
     monitorState: OutageEngine.State,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     padding: PaddingValues
 ) {
+    val timeline = (
+        records.map { TimelineEntry.Power(it) } +
+            operationalRecords.map { TimelineEntry.Operation(it) }
+        ).sortedByDescending(TimelineEntry::timestampEpochMs)
     LazyColumn(
         Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
@@ -49,32 +55,86 @@ internal fun HistoryScreen(
                     deliverySummaries[eventId(monitorState.outageStartedEpochMs ?: 0)])
             }
         }
-        if (records.isEmpty()) {
+        if (timeline.isEmpty()) {
             item {
                 Card(shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.fillMaxWidth().padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("No power events yet", fontWeight = FontWeight.Medium)
-                        Text("Confirmed outages and brief interruptions will appear here.",
+                        Text("No history yet", fontWeight = FontWeight.Medium)
+                        Text("Grid events and app-operation checks will appear here.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
-        items(records) { record ->
-            EventCard(
-                title = if (record.kind == EventHistoryStore.KIND_BRIEF_INTERRUPTION) {
-                    "Brief interruption"
-                } else "Confirmed outage",
-                startedAt = record.powerLostAtEpochMs,
-                restoredAt = record.restoredAtEpochMs,
-                startBattery = record.startingBatteryPercent,
-                endBattery = record.endingBatteryPercent,
-                startTemperature = record.startingBatteryTemperatureTenthsCelsius,
-                endTemperature = record.endingBatteryTemperatureTenthsCelsius,
-                deliverySummary = deliverySummaries[eventId(record.powerLostAtEpochMs)]
+        items(timeline) { entry ->
+            when (entry) {
+                is TimelineEntry.Power -> {
+                    val record = entry.record
+                    EventCard(
+                        title = if (record.kind == EventHistoryStore.KIND_BRIEF_INTERRUPTION) {
+                            "Brief interruption"
+                        } else "Confirmed outage",
+                        startedAt = record.powerLostAtEpochMs,
+                        restoredAt = record.restoredAtEpochMs,
+                        startBattery = record.startingBatteryPercent,
+                        endBattery = record.endingBatteryPercent,
+                        startTemperature = record.startingBatteryTemperatureTenthsCelsius,
+                        endTemperature = record.endingBatteryTemperatureTenthsCelsius,
+                        deliverySummary = deliverySummaries[eventId(record.powerLostAtEpochMs)]
+                    )
+                }
+                is TimelineEntry.Operation -> OperationalCard(entry.record)
+            }
+        }
+    }
+}
+
+private sealed interface TimelineEntry {
+    val timestampEpochMs: Long
+
+    data class Power(val record: EventHistoryStore.Record) : TimelineEntry {
+        override val timestampEpochMs = record.restoredAtEpochMs
+    }
+
+    data class Operation(val record: OperationalHistoryStore.Record) : TimelineEntry {
+        override val timestampEpochMs = record.timestampEpochMs
+    }
+}
+
+@Composable
+private fun OperationalCard(record: OperationalHistoryStore.Record) {
+    val title = when (record.kind) {
+        OperationalHistoryStore.KIND_APP_OPENED -> "App opened"
+        OperationalHistoryStore.KIND_APP_RECOVERED -> "Unrecorded app interruption"
+        OperationalHistoryStore.KIND_APP_CLOSED -> "App closed"
+        OperationalHistoryStore.KIND_MONITORING_STARTED -> "Monitoring started"
+        OperationalHistoryStore.KIND_MONITORING_STOPPED -> "Monitoring stopped"
+        OperationalHistoryStore.KIND_MONITORING_RECOVERED -> "Unrecorded monitoring interruption"
+        else -> "App event"
+    }
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (record.kind in setOf(
+                    OperationalHistoryStore.KIND_MONITORING_RECOVERED,
+                    OperationalHistoryStore.KIND_APP_RECOVERED
+                )) {
+                MaterialTheme.colorScheme.errorContainer
+            } else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
+                    .format(Date(record.timestampEpochMs))
             )
+            Text(record.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
