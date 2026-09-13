@@ -36,6 +36,8 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
             ?: scheduler.cancel()
         if (decision.playNow) {
             AudibleAlarmPlayer(context).play(settings.useMaximumVolume, settings.soundUri)
+        } else if (decision.nextAlarmAtEpochMs == null) {
+            AudibleAlarmPlayer(context).stop()
         }
     }
 
@@ -49,12 +51,14 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
             )
         )
         scheduler.cancel()
+        AudibleAlarmPlayer(context).stop()
         broadcastChange()
     }
 
     fun stop() {
         alarmStore.saveRuntime(AudibleAlarmEngine.Runtime())
         scheduler.cancel()
+        AudibleAlarmPlayer(context).stop()
         broadcastChange()
     }
 

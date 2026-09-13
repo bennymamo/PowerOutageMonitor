@@ -308,7 +308,11 @@ class MainActivity : ComponentActivity() {
 
     private fun testAudibleAlarm() {
         val audible = audibleSettings.value
-        AudibleAlarmPlayer(this).play(audible.useMaximumVolume, audible.soundUri)
+        AudibleAlarmPlayer(this).play(
+            audible.useMaximumVolume,
+            audible.soundUri,
+            AudibleAlarmPlayer.PREVIEW_DURATION_MS
+        )
     }
 
     private fun clearHistory() {

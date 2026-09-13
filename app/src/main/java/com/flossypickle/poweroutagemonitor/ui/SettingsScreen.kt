@@ -280,7 +280,7 @@ internal fun SettingsScreen(
                 OutlinedButton(
                     onClick = onTestAudibleAlarm,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Play one test sound") }
+                ) { Text("Play 5-second test") }
                 Text("Sound", fontWeight = FontWeight.Medium)
                 SettingText(
                     "Selected",
