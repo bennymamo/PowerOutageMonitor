@@ -30,11 +30,43 @@ internal object AlertQueueEngine {
     }
 
     fun due(items: List<Item>, nowEpochMs: Long): List<Item> = items.filter { item ->
-        when (item.status) {
+        val timeDue = when (item.status) {
             Status.PENDING, Status.RETRYING -> item.nextAttemptAtEpochMs <= nowEpochMs
             Status.IN_FLIGHT -> (item.leaseUntilEpochMs ?: Long.MAX_VALUE) <= nowEpochMs
             Status.SENT, Status.FAILED -> false
         }
+        timeDue && !hasUnfinishedPredecessor(items, item)
+    }
+
+    /** Keeps messages for one power event and destination in user-meaningful order. */
+    fun hasUnfinishedPredecessor(items: List<Item>, item: Item): Boolean = items.any { other ->
+        other.id != item.id &&
+            other.providerId == item.providerId &&
+            other.destinationId == item.destinationId &&
+            other.message.eventId == item.message.eventId &&
+            other.status !in terminalStatuses &&
+            deliveryOrder(other.message.kind) < deliveryOrder(item.message.kind)
+    }
+
+    fun nextUnfinishedForEvent(items: List<Item>, item: Item): Item? = items
+        .asSequence()
+        .filter { other ->
+            other.id != item.id &&
+                other.providerId == item.providerId &&
+                other.destinationId == item.destinationId &&
+                other.message.eventId == item.message.eventId &&
+                other.status !in terminalStatuses
+        }
+        .minWithOrNull(compareBy<Item>({ deliveryOrder(it.message.kind) }, { it.createdAtEpochMs }))
+
+    fun sequenceHeads(items: List<Item>): List<Item> = items.filter { item ->
+        item.status !in terminalStatuses && !hasUnfinishedPredecessor(items, item)
+    }
+
+    fun nextRunnableAt(item: Item): Long? = when (item.status) {
+        Status.PENDING, Status.RETRYING -> item.nextAttemptAtEpochMs
+        Status.IN_FLIGHT -> item.leaseUntilEpochMs
+        Status.SENT, Status.FAILED -> null
     }
 
     fun markInFlight(item: Item, nowEpochMs: Long): Item = item.copy(
@@ -84,6 +116,7 @@ internal object AlertQueueEngine {
 
     private const val DELIVERY_LEASE_MS = 5 * 60_000L
     private const val MAX_ERROR_LENGTH = 500
+    private val terminalStatuses = setOf(Status.SENT, Status.FAILED)
     private val RETRY_DELAYS_MS = longArrayOf(
         60_000L,
         5 * 60_000L,
@@ -94,4 +127,11 @@ internal object AlertQueueEngine {
         4 * 60 * 60_000L,
         6 * 60 * 60_000L
     )
+
+    private fun deliveryOrder(kind: AlertKind): Int = when (kind) {
+        AlertKind.OUTAGE -> 0
+        AlertKind.BATTERY_LOW -> 1
+        AlertKind.RESTORED -> 2
+        AlertKind.TEST -> 0
+    }
 }

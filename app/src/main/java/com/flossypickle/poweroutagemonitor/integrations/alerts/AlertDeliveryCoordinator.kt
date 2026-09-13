@@ -29,22 +29,32 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
         val destinations = registry.enabledDestinations()
         if (destinations.isEmpty()) {
             if (!enabledProviders.hasAny()) pending.clear()
-            return
-        }
-        val queue = AlertQueueStore(context)
-        pending.read().forEach { message ->
-            destinations.forEach { destination ->
-                val item = AlertQueueEngine.Item(
-                    id = stableItemId(message, destination),
-                    providerId = destination.providerId,
-                    destinationId = destination.destinationId,
-                    message = message,
-                    createdAtEpochMs = System.currentTimeMillis()
-                )
-                queue.enqueue(item)
-                AlertDeliveryScheduler(context).scheduleNow(item.id)
+        } else {
+            val queue = AlertQueueStore(context)
+            pending.read().forEach { message ->
+                destinations.forEach { destination ->
+                    val item = AlertQueueEngine.Item(
+                        id = stableItemId(message, destination),
+                        providerId = destination.providerId,
+                        destinationId = destination.destinationId,
+                        message = message,
+                        createdAtEpochMs = System.currentTimeMillis()
+                    )
+                    queue.enqueue(item)
+                    AlertDeliveryScheduler(context).scheduleNow(item.id)
+                }
+                pending.remove(message)
             }
-            pending.remove(message)
+        }
+        resumeRunnableQueue()
+    }
+
+    private fun resumeRunnableQueue() {
+        val scheduler = AlertDeliveryScheduler(context)
+        AlertQueueStore(context).sequenceHeads().forEach { item ->
+            AlertQueueEngine.nextRunnableAt(item)?.let { runAt ->
+                scheduler.ensureScheduled(item.id, runAt)
+            }
         }
     }
 

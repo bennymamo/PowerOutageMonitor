@@ -20,6 +20,13 @@ internal class AlertDeliveryScheduler(private val context: Context) {
         ExistingWorkPolicy.APPEND_OR_REPLACE
     )
 
+    /** Restores missing work after process death without duplicating work that still exists. */
+    fun ensureScheduled(itemId: String, runAtEpochMs: Long) = enqueue(
+        itemId,
+        (runAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0),
+        ExistingWorkPolicy.KEEP
+    )
+
     private fun enqueue(itemId: String, delayMs: Long, policy: ExistingWorkPolicy) {
         val constraints = Constraints.Builder().apply {
             val providerId = AlertQueueStore(context).find(itemId)?.providerId

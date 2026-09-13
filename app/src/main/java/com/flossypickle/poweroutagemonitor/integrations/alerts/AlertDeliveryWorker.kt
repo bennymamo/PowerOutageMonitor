@@ -17,7 +17,8 @@ internal class AlertDeliveryWorker(
         val now = System.currentTimeMillis()
         val claimed = queue.claim(itemId, now)
         if (claimed == null) {
-            queue.find(itemId)?.nextRunnableAt()?.let {
+            if (queue.isBlockedByEarlierMessage(itemId)) return Result.success()
+            queue.find(itemId)?.let(AlertQueueEngine::nextRunnableAt)?.let {
                 AlertDeliveryScheduler(applicationContext).scheduleRetry(itemId, it)
             }
             return Result.success()
@@ -39,14 +40,14 @@ internal class AlertDeliveryWorker(
         if (completed.status == AlertQueueEngine.Status.RETRYING) {
             AlertDeliveryScheduler(applicationContext)
                 .scheduleRetry(completed.id, completed.nextAttemptAtEpochMs)
+        } else {
+            queue.nextUnfinishedForEvent(completed)?.let { next ->
+                AlertQueueEngine.nextRunnableAt(next)?.let { runAt ->
+                    AlertDeliveryScheduler(applicationContext).scheduleRetry(next.id, runAt)
+                }
+            }
         }
         return Result.success()
-    }
-
-    private fun AlertQueueEngine.Item.nextRunnableAt(): Long? = when (status) {
-        AlertQueueEngine.Status.PENDING, AlertQueueEngine.Status.RETRYING -> nextAttemptAtEpochMs
-        AlertQueueEngine.Status.IN_FLIGHT -> leaseUntilEpochMs
-        AlertQueueEngine.Status.SENT, AlertQueueEngine.Status.FAILED -> null
     }
 
     companion object {

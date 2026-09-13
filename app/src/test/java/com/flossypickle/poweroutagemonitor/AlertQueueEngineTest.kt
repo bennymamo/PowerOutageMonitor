@@ -92,16 +92,84 @@ class AlertQueueEngineTest {
         assertEquals(listOf(retried), AlertQueueEngine.due(listOf(retried), 9_000L))
     }
 
-    private fun item() = AlertQueueEngine.Item(
-        id = "delivery-1",
+    @Test
+    fun `restoration waits for its outage message at the same destination`() {
+        val outage = item()
+        val restored = item(
+            id = "delivery-restored",
+            kind = AlertKind.RESTORED,
+            createdAtEpochMs = 2_000L
+        )
+
+        assertEquals(listOf(outage), AlertQueueEngine.due(listOf(outage, restored), 3_000L))
+        assertTrue(AlertQueueEngine.hasUnfinishedPredecessor(listOf(outage, restored), restored))
+    }
+
+    @Test
+    fun `terminal outage unblocks restoration even when outage delivery failed`() {
+        val failedOutage = AlertQueueEngine.complete(
+            AlertQueueEngine.markInFlight(item(), 1_000L),
+            DeliveryResult.PermanentFailure("Invalid destination"),
+            2_000L
+        )
+        val restored = item(
+            id = "delivery-restored",
+            kind = AlertKind.RESTORED,
+            createdAtEpochMs = 3_000L
+        )
+
+        assertEquals(
+            listOf(restored),
+            AlertQueueEngine.due(listOf(failedOutage, restored), 3_000L)
+        )
+        assertEquals(
+            restored,
+            AlertQueueEngine.nextUnfinishedForEvent(listOf(failedOutage, restored), failedOutage)
+        )
+    }
+
+    @Test
+    fun `battery warning is ordered between outage and restoration`() {
+        val sentOutage = AlertQueueEngine.complete(
+            AlertQueueEngine.markInFlight(item(), 1_000L),
+            DeliveryResult.Sent(),
+            2_000L
+        )
+        val batteryLow = item(
+            id = "delivery-battery",
+            kind = AlertKind.BATTERY_LOW,
+            createdAtEpochMs = 3_000L
+        )
+        val restored = item(
+            id = "delivery-restored",
+            kind = AlertKind.RESTORED,
+            createdAtEpochMs = 4_000L
+        )
+
+        assertEquals(
+            listOf(batteryLow),
+            AlertQueueEngine.due(listOf(sentOutage, batteryLow, restored), 5_000L)
+        )
+        assertEquals(
+            listOf(batteryLow),
+            AlertQueueEngine.sequenceHeads(listOf(sentOutage, batteryLow, restored))
+        )
+    }
+
+    private fun item(
+        id: String = "delivery-1",
+        kind: AlertKind = AlertKind.OUTAGE,
+        createdAtEpochMs: Long = 0L
+    ) = AlertQueueEngine.Item(
+        id = id,
         providerId = "telegram",
         destinationId = "garage-chat",
         message = AlertMessage(
             eventId = "event-1",
-            kind = AlertKind.OUTAGE,
+            kind = kind,
             title = "Power outage detected",
             body = "Garage monitor is on battery"
         ),
-        createdAtEpochMs = 0L
+        createdAtEpochMs = createdAtEpochMs
     )
 }

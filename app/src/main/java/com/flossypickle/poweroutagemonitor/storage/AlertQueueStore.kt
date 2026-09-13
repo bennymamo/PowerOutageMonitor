@@ -40,10 +40,23 @@ internal class AlertQueueStore(context: Context) {
         val index = items.indexOfFirst { it.id == id }
         if (index < 0) return@synchronized null
         val item = items[index]
-        if (item !in AlertQueueEngine.due(listOf(item), nowEpochMs)) return@synchronized null
+        if (item !in AlertQueueEngine.due(items, nowEpochMs)) return@synchronized null
         val claimed = AlertQueueEngine.markInFlight(item, nowEpochMs)
         writeUnlocked(items.toMutableList().apply { set(index, claimed) })
         claimed
+    }
+
+    fun isBlockedByEarlierMessage(id: String): Boolean = synchronized(lock) {
+        val items = readUnlocked()
+        val item = items.firstOrNull { it.id == id } ?: return@synchronized false
+        AlertQueueEngine.hasUnfinishedPredecessor(items, item)
+    }
+
+    fun nextUnfinishedForEvent(item: AlertQueueEngine.Item): AlertQueueEngine.Item? =
+        synchronized(lock) { AlertQueueEngine.nextUnfinishedForEvent(readUnlocked(), item) }
+
+    fun sequenceHeads(): List<AlertQueueEngine.Item> = synchronized(lock) {
+        AlertQueueEngine.sequenceHeads(readUnlocked())
     }
 
     fun retryFailed(nowEpochMs: Long): List<AlertQueueEngine.Item> = synchronized(lock) {
