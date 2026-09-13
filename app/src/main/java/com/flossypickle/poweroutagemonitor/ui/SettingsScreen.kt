@@ -67,6 +67,7 @@ private enum class SettingsSection(val title: String) {
     OUTAGE("Outage timing"),
     RESTORATION("Restoration"),
     APPEARANCE("Appearance"),
+    HELP("Help & guidance"),
     RELIABILITY("Reliability"),
     HISTORY("History"),
     SAFETY("Safety & privacy"),
@@ -80,6 +81,7 @@ internal fun SettingsScreen(
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
+    onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit,
     audibleSettings: AudibleAlarmStore.Settings,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     audibleAlarmActive: Boolean,
@@ -169,6 +171,12 @@ internal fun SettingsScreen(
                     "Appearance",
                     settings.themeMode.name.lowercase().replaceFirstChar(Char::titlecase)
                 ) { section = SettingsSection.APPEARANCE }
+                SettingsCategoryCard(
+                    "Help & guidance",
+                    if (settings.helpLevel == MonitorStore.HelpLevel.GUIDED) {
+                        "Guided setup instructions"
+                    } else "Concise setup instructions"
+                ) { section = SettingsSection.HELP }
                 SettingsCategoryCard("Reliability", "Boot startup and background guidance") {
                     section = SettingsSection.RELIABILITY
                 }
@@ -496,6 +504,35 @@ internal fun SettingsScreen(
                 }
             }
 
+            SettingsSection.HELP -> SettingsCard {
+                Text("Setup instructions", fontWeight = FontWeight.Medium)
+                Text(
+                    "This changes how much help setup pages show. It does not change monitoring or alert behavior.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                HELP_LEVEL_OPTIONS.forEach { (level, label, explanation) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onHelpLevelChange(level) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        RadioButton(
+                            selected = settings.helpLevel == level,
+                            onClick = { onHelpLevelChange(level) }
+                        )
+                        Column(Modifier.weight(1f).padding(top = 12.dp)) {
+                            Text(label, fontWeight = FontWeight.Medium)
+                            Text(
+                                explanation,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             SettingsSection.RELIABILITY -> SettingsCard {
                 SettingText("Restart after reboot", "Enabled with monitoring")
                 SettingText(
@@ -771,6 +808,19 @@ private val THEME_OPTIONS = listOf(
     MonitorStore.ThemeMode.SYSTEM to "System default",
     MonitorStore.ThemeMode.DARK to "Dark",
     MonitorStore.ThemeMode.LIGHT to "Light"
+)
+
+private val HELP_LEVEL_OPTIONS = listOf(
+    Triple(
+        MonitorStore.HelpLevel.GUIDED,
+        "Guided (recommended)",
+        "Show numbered walkthroughs, plain explanations and direct setup links."
+    ),
+    Triple(
+        MonitorStore.HelpLevel.EXPERIENCED,
+        "Experienced",
+        "Show concise technical notes and fewer setup hints."
+    )
 )
 
 private val AUDIBLE_REPEAT_INTERVALS = listOf(

@@ -44,6 +44,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailClient
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailProtocol
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +53,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ResendEmailSetupScreen(
     deviceName: String,
+    helpLevel: MonitorStore.HelpLevel,
     padding: PaddingValues,
     onConfigurationChanged: () -> Unit,
     onBack: () -> Unit
@@ -94,6 +96,7 @@ internal fun ResendEmailSetupScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold
         )
+        SetupGuidanceCaption(helpLevel)
         Text(
             "Advanced email delivery through a Resend account and a domain you control.",
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -102,10 +105,15 @@ internal fun ResendEmailSetupScreen(
         Text("Setup", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
-            Text("1. Create a Resend account and verify a sending domain or subdomain.")
-            Text("2. Create a sending-only API key restricted to that domain.")
-            Text("3. Enter the sender and recipient addresses below.")
-            Text("4. Save, send a test, then enable email alerts.")
+            if (helpLevel.isGuided) {
+                Text("1. Create a Resend account in the page opened below.")
+                Text("2. Add a domain you own and copy the DNS records Resend gives you into your domain provider's DNS page.")
+                Text("3. Wait until Resend marks the domain as verified.")
+                Text("4. Create a sending-only API key restricted to that domain.")
+                Text("5. Enter the sender and recipients, save, send a test, then enable alerts.")
+            } else {
+                Text("Verify a sending domain, create a restricted API key, then enter sender and recipients.")
+            }
             OutlinedButton(
                 onClick = {
                     runCatching {
@@ -114,11 +122,13 @@ internal fun ResendEmailSetupScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Open Resend setup") }
-            Text(
-                "There is no reliable public no-login mail relay. The account is used once for setup; outage sends do not show a login screen.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
+            if (helpLevel.isGuided) {
+                Text(
+                    "A domain is a web address you own, such as example.com. Resend needs it to prove that this app is allowed to send from that address. Outage sends run automatically after setup and do not show a login screen.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
         }
 
         Text("Credentials", style = MaterialTheme.typography.titleMedium,

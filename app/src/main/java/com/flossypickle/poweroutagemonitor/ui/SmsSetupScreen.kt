@@ -48,6 +48,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsCapability
 import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsClient
 import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsProtocol
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,6 +57,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SmsSetupScreen(
     deviceName: String,
+    helpLevel: MonitorStore.HelpLevel,
     padding: PaddingValues,
     onConfigurationChanged: () -> Unit,
     onBack: () -> Unit
@@ -109,6 +111,7 @@ internal fun SmsSetupScreen(
         TextButton(onClick = onBack) { Text("‹ Settings") }
         Text("Device SMS", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold)
+        SetupGuidanceCaption(helpLevel)
         Text(
             "Send through this phone's SIM and mobile network when internet service is unavailable.",
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -130,12 +133,11 @@ internal fun SmsSetupScreen(
                 )
             } else if (!capability.permissionGranted) {
                 Text(
-                    "FP Grid Monitor needs permission only to send the outage messages you configure. It does not read messages, contacts, call logs or phone identity.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                Text(
-                    "Android may label its dialog “send and view SMS messages” for the whole permission group. This app requests SEND_SMS only and cannot read the SMS inbox.",
+                    if (helpLevel.isGuided) {
+                        "Tap Allow SMS sending, then choose Allow in Android's permission window. Android may say “send and view SMS messages” for the whole permission group, but FP Grid Monitor requests SEND_SMS only and cannot read your inbox, contacts, call logs or phone identity."
+                    } else {
+                        "SEND_SMS permission is required. The app declares no SMS read, contacts, call-log or phone-identity permission."
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )

@@ -41,6 +41,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramClient
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,6 +49,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun TelegramSetupScreen(
     deviceName: String,
+    helpLevel: MonitorStore.HelpLevel,
     padding: PaddingValues,
     onConfigurationChanged: () -> Unit,
     onBack: () -> Unit
@@ -90,16 +92,22 @@ internal fun TelegramSetupScreen(
         TextButton(onClick = onBack) { Text("‹ Settings") }
         Text("Telegram", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold)
+        SetupGuidanceCaption(helpLevel)
         Text("Use your own Telegram bot to send alerts directly from this device.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Text("Setup", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
-            Text("1. Open BotFather and create a bot with /newbot.")
-            Text("2. Copy the bot token into the secure field below.")
-            Text("3. Open your new bot, send it /start, then tap Find chats.")
-            Text("4. Save, send a test, then enable the channel.")
+            if (helpLevel.isGuided) {
+                Text("1. Tap Open BotFather below. Telegram will open a verified bot that creates other bots.")
+                Text("2. Send /newbot and follow its prompts for a name and username.")
+                Text("3. Copy the token BotFather gives you into the secure field below.")
+                Text("4. Open your new bot, tap Start or send /start, then return here and tap Find chats.")
+                Text("5. Save, send a test, then enable Telegram alerts.")
+            } else {
+                Text("Create a bot with BotFather, paste its token, send /start to it, then discover chats.")
+            }
             OutlinedButton(
                 onClick = {
                     runCatching {

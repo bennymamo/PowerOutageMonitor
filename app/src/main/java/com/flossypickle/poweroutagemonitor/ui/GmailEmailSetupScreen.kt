@@ -45,6 +45,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpCl
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpProtocol
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailProtocol
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,6 +54,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun GmailEmailSetupScreen(
     deviceName: String,
+    helpLevel: MonitorStore.HelpLevel,
     padding: PaddingValues,
     onConfigurationChanged: () -> Unit,
     onBack: () -> Unit
@@ -88,6 +90,7 @@ internal fun GmailEmailSetupScreen(
         TextButton(onClick = onBack) { Text("‹ Email providers") }
         Text("Gmail", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold)
+        SetupGuidanceCaption(helpLevel)
         Text(
             "Send alerts from a Gmail or Google Workspace account without buying a domain.",
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -95,10 +98,15 @@ internal fun GmailEmailSetupScreen(
 
         SectionTitle("Setup")
         GmailCard {
-            Text("1. Turn on 2-Step Verification for the Google account.")
-            Text("2. Create an App Password named FP Grid Monitor.")
-            Text("3. Enter the account, 16-character App Password and recipients below.")
-            Text("4. Save, send a test, then enable Gmail alerts.")
+            if (helpLevel.isGuided) {
+                Text("1. Sign in to the Google account that will send alerts.")
+                Text("2. Turn on 2-Step Verification for that account.")
+                Text("3. Open App Passwords and create one named FP Grid Monitor.")
+                Text("4. Copy the 16-character password into this app. Do not use the normal Google password.")
+                Text("5. Enter recipients, save, send a test, then enable Gmail alerts.")
+            } else {
+                Text("Create a Google App Password, then enter the account, app password and recipients.")
+            }
             OutlinedButton(
                 onClick = {
                     runCatching {
@@ -107,11 +115,13 @@ internal fun GmailEmailSetupScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Open Google App Passwords") }
-            Text(
-                "Google may hide App Passwords for organization accounts, Advanced Protection, or security-key-only 2-Step Verification.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp
-            )
+            if (helpLevel.isGuided) {
+                Text(
+                    "If Google does not show App Passwords, first confirm that 2-Step Verification is on. Organization accounts, Advanced Protection and security-key-only accounts may not allow them.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+            }
         }
 
         SectionTitle("Credentials")

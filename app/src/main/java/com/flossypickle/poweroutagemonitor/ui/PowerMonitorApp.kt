@@ -60,11 +60,12 @@ internal fun PowerMonitorApp(
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
-    onCompleteSetup: (String, Long, Long) -> Unit,
+    onCompleteSetup: (String, Long, Long, MonitorStore.HelpLevel) -> Unit,
     onRetryFailedDeliveries: () -> Unit,
     onClearDeliveryRecords: () -> Unit,
     onHistoryLimitChange: (Int) -> Unit,
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
+    onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
@@ -130,6 +131,7 @@ internal fun PowerMonitorApp(
                 onSettingsChange,
                 onHistoryLimitChange,
                 onThemeModeChange,
+                onHelpLevelChange,
                 audibleSettings,
                 onAudibleSettingsChange,
                 audibleAlarmActive,
@@ -162,30 +164,35 @@ internal fun PowerMonitorApp(
             )
             AppScreen.TELEGRAM -> TelegramSetupScreen(
                 deviceName = settings.deviceName,
+                helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.SMS -> SmsSetupScreen(
                 deviceName = settings.deviceName,
+                helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.EMAIL -> EmailProvidersScreen(
                 padding = padding,
+                helpLevel = settings.helpLevel,
                 onOpenGmail = { screen = AppScreen.GMAIL_EMAIL },
                 onOpenResend = { screen = AppScreen.RESEND_EMAIL },
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.GMAIL_EMAIL -> GmailEmailSetupScreen(
                 deviceName = settings.deviceName,
+                helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.EMAIL }
             )
             AppScreen.RESEND_EMAIL -> ResendEmailSetupScreen(
                 deviceName = settings.deviceName,
+                helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.EMAIL }

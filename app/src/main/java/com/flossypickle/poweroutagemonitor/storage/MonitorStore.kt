@@ -14,6 +14,7 @@ internal class MonitorStore(context: Context) {
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
     enum class ThemeMode { SYSTEM, DARK, LIGHT }
+    enum class HelpLevel { GUIDED, EXPERIENCED }
 
     data class Settings(
         val setupCompleted: Boolean,
@@ -23,7 +24,8 @@ internal class MonitorStore(context: Context) {
         val sendRestoreNotification: Boolean,
         val deviceName: String,
         val historyLimit: Int = DEFAULT_HISTORY_LIMIT,
-        val themeMode: ThemeMode = ThemeMode.SYSTEM
+        val themeMode: ThemeMode = ThemeMode.SYSTEM,
+        val helpLevel: HelpLevel = HelpLevel.GUIDED
     )
 
     fun settings(): Settings = Settings(
@@ -36,7 +38,10 @@ internal class MonitorStore(context: Context) {
         historyLimit = preferences.getInt(KEY_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT),
         themeMode = runCatching {
             ThemeMode.valueOf(preferences.getString(KEY_THEME_MODE, null) ?: "")
-        }.getOrDefault(ThemeMode.SYSTEM)
+        }.getOrDefault(ThemeMode.SYSTEM),
+        helpLevel = runCatching {
+            HelpLevel.valueOf(preferences.getString(KEY_HELP_LEVEL, null) ?: "")
+        }.getOrDefault(HelpLevel.GUIDED)
     )
 
     fun state(): OutageEngine.State {
@@ -106,6 +111,12 @@ internal class MonitorStore(context: Context) {
         }
     }
 
+    fun setHelpLevel(level: HelpLevel) {
+        check(preferences.edit().putString(KEY_HELP_LEVEL, level.name).commit()) {
+            "Unable to persist help setting"
+        }
+    }
+
     fun save(state: OutageEngine.State, snapshot: PowerSnapshot, observedAtEpochMs: Long) {
         val editor = preferences.edit()
         writeState(editor, state)
@@ -158,6 +169,7 @@ internal class MonitorStore(context: Context) {
         private const val KEY_DEVICE_NAME = "device_name"
         private const val KEY_HISTORY_LIMIT = "history_limit"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_HELP_LEVEL = "help_level"
         private const val KEY_PHASE = "phase"
         private const val KEY_PHASE_SINCE = "phase_since"
         private const val KEY_OUTAGE_STARTED = "outage_started"

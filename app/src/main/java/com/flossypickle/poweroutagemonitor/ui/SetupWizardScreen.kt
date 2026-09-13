@@ -41,12 +41,13 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 internal fun SetupWizardScreen(
     settings: MonitorStore.Settings,
     snapshot: PowerSnapshot?,
-    onComplete: (String, Long, Long) -> Unit
+    onComplete: (String, Long, Long, MonitorStore.HelpLevel) -> Unit
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var deviceName by rememberSaveable { mutableStateOf(settings.deviceName) }
     var outageDelay by rememberSaveable { mutableLongStateOf(settings.outageDelayMs) }
     var restoreDelay by rememberSaveable { mutableLongStateOf(settings.restoreDelayMs) }
+    var helpLevel by rememberSaveable { mutableStateOf(settings.helpLevel) }
     var sawConnected by rememberSaveable { mutableStateOf(false) }
     var sawDisconnected by rememberSaveable { mutableStateOf(false) }
     var sawReconnected by rememberSaveable { mutableStateOf(false) }
@@ -81,8 +82,8 @@ internal fun SetupWizardScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 when (step) {
-                    0 -> WelcomeStep()
-                    1 -> SafetyStep()
+                    0 -> WelcomeStep(helpLevel, onHelpLevelChange = { helpLevel = it })
+                    1 -> SafetyStep(helpLevel)
                     2 -> DeviceStep(
                         deviceName = deviceName,
                         outageDelay = outageDelay,
@@ -109,7 +110,7 @@ internal fun SetupWizardScreen(
                 Button(
                     onClick = {
                         if (step < SETUP_STEPS.lastIndex) step++
-                        else onComplete(deviceName, outageDelay, restoreDelay)
+                        else onComplete(deviceName, outageDelay, restoreDelay, helpLevel)
                     },
                     modifier = Modifier.weight(1f),
                     enabled = step != 2 || deviceName.isNotBlank()
@@ -192,7 +193,10 @@ private fun TestCheck(label: String, complete: Boolean) {
 }
 
 @Composable
-private fun WelcomeStep() {
+private fun WelcomeStep(
+    helpLevel: MonitorStore.HelpLevel,
+    onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit
+) {
     WizardHeading("Turn a spare phone into a power monitor",
         "Keep this device connected to its permanent charger. The app watches Android's external-power signal and confirms an outage only after your chosen delay.")
     WizardCard {
@@ -203,10 +207,30 @@ private fun WelcomeStep() {
         Text("Charging can stop at 100% while external power is still connected. The app treats those as different signals.",
             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
     }
+    WizardCard {
+        Text("How much setup help would you like?", fontWeight = FontWeight.SemiBold)
+        SetupHelpOption(
+            selected = helpLevel == MonitorStore.HelpLevel.GUIDED,
+            title = "Guided (recommended)",
+            explanation = "Show step-by-step walkthroughs and explain where to find things online.",
+            onClick = { onHelpLevelChange(MonitorStore.HelpLevel.GUIDED) }
+        )
+        SetupHelpOption(
+            selected = helpLevel == MonitorStore.HelpLevel.EXPERIENCED,
+            title = "Experienced",
+            explanation = "Use shorter technical instructions and fewer hints.",
+            onClick = { onHelpLevelChange(MonitorStore.HelpLevel.EXPERIENCED) }
+        )
+        Text(
+            "You can change this later under Settings › Help & guidance.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+    }
 }
 
 @Composable
-private fun SafetyStep() {
+private fun SafetyStep(helpLevel: MonitorStore.HelpLevel) {
     WizardHeading("Check the phone before leaving it plugged in",
         "A spare phone may run unattended for long periods, so its battery condition matters.")
     WizardCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
@@ -217,8 +241,36 @@ private fun SafetyStep() {
     }
     WizardCard {
         Text("Monitoring uses a quiet ongoing notification so Android and the user can see that the service is alive.")
-        Text("Some manufacturers also require battery-optimization or auto-start changes. Diagnostics provides the relevant system shortcut after setup.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        if (helpLevel == MonitorStore.HelpLevel.GUIDED) {
+            Text("Some manufacturers also require battery-optimization or auto-start changes. Diagnostics explains each check and provides the relevant system shortcut after setup.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        } else {
+            Text("Check battery optimization and vendor auto-start controls in Diagnostics.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun SetupHelpOption(
+    selected: Boolean,
+    title: String,
+    explanation: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Column(Modifier.weight(1f).padding(top = 12.dp)) {
+            Text(title, fontWeight = FontWeight.Medium)
+            Text(
+                explanation,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+        }
     }
 }
 

@@ -27,10 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
 @Composable
 internal fun EmailProvidersScreen(
     padding: PaddingValues,
+    helpLevel: MonitorStore.HelpLevel,
     onOpenGmail: () -> Unit,
     onOpenResend: () -> Unit,
     onBack: () -> Unit
@@ -50,8 +52,13 @@ internal fun EmailProvidersScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold
         )
+        SetupGuidanceCaption(helpLevel)
         Text(
-            "Choose one or enable both. Each provider keeps its own credentials and delivery queue destinations.",
+            if (helpLevel.isGuided) {
+                "Choose one or enable both. Each provider keeps its own credentials and delivery queue destinations. Open a provider for a step-by-step walkthrough."
+            } else {
+                "Choose one or enable both. Gmail is the default; each provider has separate credentials and destinations."
+            },
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
@@ -76,7 +83,11 @@ internal fun EmailProvidersScreen(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "Uses the user's own Gmail or Google Workspace account. No domain purchase is needed. Google 2-Step Verification and an App Password are required.",
+                if (helpLevel.isGuided) {
+                    "Uses your own Gmail or Google Workspace account. No domain purchase is needed. The walkthrough explains 2-Step Verification and App Passwords."
+                } else {
+                    "SMTP over TLS with a Google App Password. No sending domain required."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
@@ -106,7 +117,11 @@ internal fun EmailProvidersScreen(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                "Uses a Resend API key. Reliable and retry-safe, but real delivery requires a domain owned and verified by the user.",
+                if (helpLevel.isGuided) {
+                    "Uses a Resend API key. The walkthrough explains how to verify a domain you own before sending real email."
+                } else {
+                    "HTTPS API with idempotent retries. Requires a verified sending domain."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

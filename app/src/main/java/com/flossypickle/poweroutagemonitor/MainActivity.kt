@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
                     onClearDeliveryRecords = ::clearDeliveryRecords,
                     onHistoryLimitChange = ::updateHistoryLimit,
                     onThemeModeChange = ::updateThemeMode,
+                    onHelpLevelChange = ::updateHelpLevel,
                     onAudibleSettingsChange = ::updateAudibleSettings,
                     onDismissAudibleAlarm = ::dismissAudibleAlarm,
                     onTestAudibleAlarm = ::testAudibleAlarm,
@@ -232,7 +233,12 @@ class MainActivity : ComponentActivity() {
         refreshStoredState()
     }
 
-    private fun completeSetup(deviceName: String, outageDelayMs: Long, restoreDelayMs: Long) {
+    private fun completeSetup(
+        deviceName: String,
+        outageDelayMs: Long,
+        restoreDelayMs: Long,
+        helpLevel: MonitorStore.HelpLevel
+    ) {
         val store = MonitorStore(this)
         store.updateSettings(
             outageDelayMs = outageDelayMs,
@@ -241,6 +247,7 @@ class MainActivity : ComponentActivity() {
             deviceName = deviceName
         )
         store.setSetupCompleted()
+        store.setHelpLevel(helpLevel)
         refreshStoredState()
         setMonitoringEnabled(true)
     }
@@ -266,6 +273,11 @@ class MainActivity : ComponentActivity() {
 
     private fun updateThemeMode(mode: MonitorStore.ThemeMode) {
         MonitorStore(this).setThemeMode(mode)
+        refreshStoredState()
+    }
+
+    private fun updateHelpLevel(level: MonitorStore.HelpLevel) {
+        MonitorStore(this).setHelpLevel(level)
         refreshStoredState()
     }
 
