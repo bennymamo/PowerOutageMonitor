@@ -111,3 +111,5 @@ An alert captured before the first unlock is retained if a provider is still mar
 Current Android, Google Play, SMS and unattended-email trade-offs are documented in [Alert channel options](docs/alert-channel-options.md). Gmail SMTP and Resend HTTPS are implemented as separate email providers. Gmail is the default for personal setup; Resend is advanced because every production user must verify a domain they own.
 
 Initial distribution is through GitHub Releases. The signing and release checklist is documented in [Direct APK releases](docs/direct-apk-releases.md); a public artifact is intentionally deferred until the long-lived release signing key is created and backed up.
+
+The next milestone is real-hardware validation. [Physical-device and Telegram validation](docs/physical-device-and-telegram-test.md) provides both a fully guided path and a compact experienced-user path for USB debugging, debug-APK installation, Telegram setup, background checks, real charger events, reboot recovery and overnight idle testing.
