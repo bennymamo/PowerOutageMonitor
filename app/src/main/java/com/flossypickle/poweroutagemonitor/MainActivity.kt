@@ -27,6 +27,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryWork
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryScheduler
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertProviderRegistry
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
@@ -53,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
     private var alertChannels = androidx.compose.runtime.mutableStateOf("None configured")
+    private var hasEnabledAlertChannel = androidx.compose.runtime.mutableStateOf(false)
+    private var hasSentTestAlert = androidx.compose.runtime.mutableStateOf(false)
     private var systemHealth = androidx.compose.runtime.mutableStateOf(SystemHealthSnapshot())
     private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
         emptyMap<String, AlertDeliverySummary.Event>()
@@ -115,6 +118,8 @@ class MainActivity : ComponentActivity() {
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
                     alertChannels = alertChannels.value,
+                    hasEnabledAlertChannel = hasEnabledAlertChannel.value,
+                    hasSentTestAlert = hasSentTestAlert.value,
                     systemHealth = systemHealth.value,
                     deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
@@ -330,7 +335,12 @@ class MainActivity : ComponentActivity() {
         exactAlarmAccessGranted.value = AudibleAlarmCoordinator(this).exactAccessGranted()
         val deliveries = AlertQueueStore(this).read()
         deliverySummaries.value = AlertDeliverySummary.byEvent(deliveries)
-        alertChannels.value = AlertProviderRegistry(this).statusSummary()
+        val providerRegistry = AlertProviderRegistry(this)
+        alertChannels.value = providerRegistry.statusSummary()
+        hasEnabledAlertChannel.value = providerRegistry.enabledDestinations().isNotEmpty()
+        hasSentTestAlert.value = deliveries.any {
+            it.message.kind == AlertKind.TEST && it.status == AlertQueueEngine.Status.SENT
+        }
         deliveryWarning.value = when {
             deliveries.any { it.status == AlertQueueEngine.Status.FAILED } ->
                 "An alert failed. Open Diagnostics for the reason."

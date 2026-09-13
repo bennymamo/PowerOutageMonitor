@@ -91,6 +91,7 @@ internal fun SettingsScreen(
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
     onClearHistory: () -> Unit,
+    onOpenSetupChecklist: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
     onOpenTelegram: () -> Unit,
@@ -205,6 +206,9 @@ internal fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
+                Button(onClick = onOpenSetupChecklist, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open setup checklist")
+                }
                 OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
                     Text("Open diagnostics")
                 }

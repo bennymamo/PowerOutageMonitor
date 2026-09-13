@@ -32,6 +32,7 @@ private enum class AppScreen(val label: String) {
     STATUS("Status"),
     HISTORY("History"),
     SETTINGS("Settings"),
+    SETUP_CHECKLIST("Setup checklist"),
     DIAGNOSTICS("Diagnostics"),
     TEST_MODE("Test mode"),
     TELEGRAM("Telegram"),
@@ -56,6 +57,8 @@ internal fun PowerMonitorApp(
     lastObservationEpochMs: Long,
     deliveryWarning: String?,
     alertChannels: String,
+    hasEnabledAlertChannel: Boolean,
+    hasSentTestAlert: Boolean,
     systemHealth: SystemHealthSnapshot,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
@@ -79,13 +82,26 @@ internal fun PowerMonitorApp(
         return
     }
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
+    var returnToChecklist by rememberSaveable { mutableStateOf(false) }
+    val returnFromChecklistChild: () -> Unit = {
+        if (returnToChecklist) {
+            returnToChecklist = false
+            screen = AppScreen.SETUP_CHECKLIST
+        } else {
+            screen = AppScreen.SETTINGS
+        }
+    }
     BackHandler(enabled = screen != AppScreen.STATUS) {
-        screen = when (screen) {
-            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM, AppScreen.SMS,
-            AppScreen.EMAIL -> AppScreen.SETTINGS
-            AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> AppScreen.EMAIL
-            AppScreen.HISTORY, AppScreen.SETTINGS -> AppScreen.STATUS
-            AppScreen.STATUS -> AppScreen.STATUS
+        when (screen) {
+            AppScreen.SETUP_CHECKLIST -> {
+                returnToChecklist = false
+                screen = AppScreen.SETTINGS
+            }
+            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
+            AppScreen.SMS, AppScreen.EMAIL -> returnFromChecklistChild()
+            AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> screen = AppScreen.EMAIL
+            AppScreen.HISTORY, AppScreen.SETTINGS -> screen = AppScreen.STATUS
+            AppScreen.STATUS -> Unit
         }
     }
     Scaffold(
@@ -97,6 +113,7 @@ internal fun PowerMonitorApp(
                         val selected = screen == item ||
                             item == AppScreen.SETTINGS && screen in listOf(
                                         AppScreen.DIAGNOSTICS,
+                                        AppScreen.SETUP_CHECKLIST,
                                         AppScreen.TEST_MODE,
                                         AppScreen.TELEGRAM,
                                         AppScreen.SMS,
@@ -104,7 +121,13 @@ internal fun PowerMonitorApp(
                                         AppScreen.GMAIL_EMAIL,
                                         AppScreen.RESEND_EMAIL
                             )
-                        TextButton(onClick = { screen = item }, modifier = Modifier.weight(1f)) {
+                        TextButton(
+                            onClick = {
+                                returnToChecklist = false
+                                screen = item
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text(
                                 item.label,
                                 color = if (selected) MaterialTheme.colorScheme.primary
@@ -141,11 +164,67 @@ internal fun PowerMonitorApp(
                 onDismissAudibleAlarm,
                 onTestAudibleAlarm,
                 onClearHistory,
-                onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
-                onOpenTestMode = { screen = AppScreen.TEST_MODE },
-                onOpenTelegram = { screen = AppScreen.TELEGRAM },
-                onOpenSms = { screen = AppScreen.SMS },
-                onOpenEmail = { screen = AppScreen.EMAIL }
+                onOpenSetupChecklist = {
+                    returnToChecklist = false
+                    screen = AppScreen.SETUP_CHECKLIST
+                },
+                onOpenDiagnostics = {
+                    returnToChecklist = false
+                    screen = AppScreen.DIAGNOSTICS
+                },
+                onOpenTestMode = {
+                    returnToChecklist = false
+                    screen = AppScreen.TEST_MODE
+                },
+                onOpenTelegram = {
+                    returnToChecklist = false
+                    screen = AppScreen.TELEGRAM
+                },
+                onOpenSms = {
+                    returnToChecklist = false
+                    screen = AppScreen.SMS
+                },
+                onOpenEmail = {
+                    returnToChecklist = false
+                    screen = AppScreen.EMAIL
+                }
+            )
+            AppScreen.SETUP_CHECKLIST -> SetupChecklistScreen(
+                settings = settings,
+                monitorState = monitorState,
+                systemHealth = systemHealth,
+                alertChannels = alertChannels,
+                hasEnabledAlertChannel = hasEnabledAlertChannel,
+                hasSentTestAlert = hasSentTestAlert,
+                padding = padding,
+                onOpenStatus = {
+                    returnToChecklist = false
+                    screen = AppScreen.STATUS
+                },
+                onOpenDiagnostics = {
+                    returnToChecklist = true
+                    screen = AppScreen.DIAGNOSTICS
+                },
+                onOpenTestMode = {
+                    returnToChecklist = true
+                    screen = AppScreen.TEST_MODE
+                },
+                onOpenEmail = {
+                    returnToChecklist = true
+                    screen = AppScreen.EMAIL
+                },
+                onOpenTelegram = {
+                    returnToChecklist = true
+                    screen = AppScreen.TELEGRAM
+                },
+                onOpenSms = {
+                    returnToChecklist = true
+                    screen = AppScreen.SMS
+                },
+                onBack = {
+                    returnToChecklist = false
+                    screen = AppScreen.SETTINGS
+                }
             )
             AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
                 settings = settings,
@@ -156,34 +235,34 @@ internal fun PowerMonitorApp(
                 padding = padding,
                 onRetryFailedDeliveries = onRetryFailedDeliveries,
                 onClearDeliveryRecords = onClearDeliveryRecords,
-                onBack = { screen = AppScreen.SETTINGS }
+                onBack = returnFromChecklistChild
             )
             AppScreen.TEST_MODE -> TestModeScreen(
                 settings = settings,
                 padding = padding,
                 onSendTestAlert = onSendTestAlert,
-                onBack = { screen = AppScreen.SETTINGS }
+                onBack = returnFromChecklistChild
             )
             AppScreen.TELEGRAM -> TelegramSetupScreen(
                 deviceName = settings.deviceName,
                 helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = { screen = AppScreen.SETTINGS }
+                onBack = returnFromChecklistChild
             )
             AppScreen.SMS -> SmsSetupScreen(
                 deviceName = settings.deviceName,
                 helpLevel = settings.helpLevel,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = { screen = AppScreen.SETTINGS }
+                onBack = returnFromChecklistChild
             )
             AppScreen.EMAIL -> EmailProvidersScreen(
                 padding = padding,
                 helpLevel = settings.helpLevel,
                 onOpenGmail = { screen = AppScreen.GMAIL_EMAIL },
                 onOpenResend = { screen = AppScreen.RESEND_EMAIL },
-                onBack = { screen = AppScreen.SETTINGS }
+                onBack = returnFromChecklistChild
             )
             AppScreen.GMAIL_EMAIL -> GmailEmailSetupScreen(
                 deviceName = settings.deviceName,
