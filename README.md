@@ -114,3 +114,5 @@ Current Android, Google Play, SMS and unattended-email trade-offs are documented
 Initial distribution is through GitHub Releases. The signing and release checklist is documented in [Direct APK releases](docs/direct-apk-releases.md); a public artifact is intentionally deferred until the long-lived release signing key is created and backed up.
 
 The next milestone is real-hardware validation. [Physical-device and Telegram validation](docs/physical-device-and-telegram-test.md) provides both a fully guided path and a compact experienced-user path for USB debugging, debug-APK installation, Telegram setup, background checks, real charger events, reboot recovery and overnight idle testing.
+
+The first physical run is recorded in [Samsung Galaxy S10 physical-device validation](docs/device-tests/samsung-sm-g973f-android-12.md). On Android 12 the real screen-on AC outage/restoration cycle, in-place update recovery, Telegram setup, durable test delivery and single-attempt live outage/restoration messages passed. Screen-off, removed-from-Recents, reboot and overnight-idle cases remain open.
