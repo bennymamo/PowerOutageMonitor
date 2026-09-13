@@ -16,3 +16,10 @@
 .cxx
 local.properties
 .kotlin/
+
+# Local project journal maintained during development; not part of the public repository.
+/DEVELOPMENT_NOTES.local.md
+
+# Temporary UI captures used during local verification.
+/.codex-*.xml
+/.codex-*.png

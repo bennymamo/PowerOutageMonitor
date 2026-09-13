@@ -1,118 +1,185 @@
 # FP Grid Monitor
 
-An Android power-outage monitor by Flossy Pickle. Package: `com.flossypickle.poweroutagemonitor`.
+## Purpose
 
-## Current milestone
+FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. Keep the device connected to a normal wall charger and the app watches whether Android reports that external power is present. If power disappears long enough to count as an outage, it records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
 
-The app now has a five-step first-run wizard, Status, History and grouped Settings screens, plus Diagnostics, a persistent readiness checklist and an isolated Test mode under Settings. The wizard explains detection, battery safety and background operation, verifies a real charger disconnect/reconnect sequence, collects the device name and stable timing defaults, then enables monitoring and requests notification permission. Users choose Guided setup help, which is the default, or concise Experienced instructions; the choice remains available in its own Help & guidance Settings page. The readiness checklist then verifies monitoring, the first charger baseline, notifications, Android background restrictions, an enabled alert destination and a recorded successful test delivery, with direct actions for each unfinished step. It keeps battery-optimization guidance separate because the app cannot promise how every phone maker treats background processes. Test mode previews unmistakably simulated outage/restoration messages and can explicitly send them through the real configured delivery path without changing monitoring state or history. A user-controlled master switch starts or stops the foreground monitor, its alarms and its ongoing notification. The service observes Android's external-power state without polling, persists the outage state before first unlock, resumes after reboot or app upgrade, and records completed outages or brief interruptions locally with battery level and temperature when Android supplies them. History also records app and monitoring starts/stops, and flags a later start when the previous session never recorded a clean stop. Confirmed outage, optional once-per-outage low-device-battery, and stable-restoration events flow through a provider-independent durable queue to enabled Telegram, Gmail, Resend and device-SMS destinations with per-recipient retry and de-duplication.
+The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
-The Status dashboard is centered on inferred grid state rather than battery level. A compact hero uses distinct symbols and language for online power, possible outage, confirmed outage, restoration checking, recently restored, paused, waiting and unknown states. Battery is a supporting horizontal bar. The dashboard also holds the monitoring master switch, internet and alert readiness, and the latest completed power event. Full event and delivery details remain in History.
+> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Android 6 compatibility and longer unattended testing still need physical verification. There is not yet a signed public release APK.
 
-Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose, one application module. API 36 emulator testing is the initial development target; physical old-device testing is required before reliability claims.
+## What it can do
 
-## Accepted design
+- Detect external power loss and stable restoration without constant polling.
+- Ignore brief cable movement with configurable outage and restoration delays.
+- Continue monitoring with the screen off and resume after a reboot, as far as the device manufacturer allows.
+- Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, and possible unclean shutdowns.
+- Send alerts through Telegram, Gmail, Resend, or the device's own SMS service.
+- Queue internet alerts while offline and retry them in the correct order when connectivity returns.
+- Sound an optional repeating local alarm using a built-in beep or an Android alarm sound.
+- Warn once when the monitoring device's battery becomes low during an outage.
+- Show diagnostics, setup checks, internet status, and provider failures without exposing credentials.
+- Offer System, Dark, and Light themes and Guided or Experienced setup instructions.
 
-- Wait for the first external-power connection before arming outage detection.
-- Judge external power by the plugged source, never charging status alone.
-- Keep the pure Kotlin outage engine independent from Android and persist critical state synchronously in device-protected storage.
-- Keep a small bounded atomic event-history file; reconsider Room when delivery-attempt queries require relational storage.
-- Keep future alert deliveries in an atomic credential-protected queue, separate from the before-unlock power state.
-- Use UTC epoch timestamps so state can be reconstructed across process death and reboot.
-- Add user-enabled foreground monitoring with a quiet, compact notification.
-- Support boot recovery before first unlock using device-protected monitoring state; keep credentials separate.
-- Store Telegram bot tokens with a non-exportable Android Keystore key and exclude credentials and destinations from backup and device transfer.
-- No cloud backend, analytics or advertising.
-- Publish the first installable builds as directly downloadable APKs through GitHub Releases.
+## How detection works
 
-Implemented transitions: waiting for connection -> powered -> pending outage -> confirmed outage -> pending restoration -> powered. Early restoration cancels a pending outage. Disconnection during pending restoration continues the same outage. Unknown readings never imply a power loss.
+FP Grid Monitor treats the charger's connection as evidence of grid power:
 
-## Architecture
+1. It waits until the device has seen external power at least once.
+2. When Android reports that the charger has disconnected, it starts the outage-confirmation delay.
+3. If power returns during that delay, the interruption is recorded but no outage alert is sent.
+4. If the delay expires, the outage is confirmed and enabled alerts are queued.
+5. When power returns and remains stable for the restoration delay, the outage is completed and restoration alerts are queued.
 
-- `OutageEngine` contains deterministic business rules and has no Android dependencies.
-- `monitoring` owns Android battery observations, the foreground service, boot recovery, persisted-deadline alarms and coordination.
-- `audible` owns the optional local alarm's pure rules, device-protected state, sound playback and repeat scheduling.
-- `storage` owns device-protected monitor state and bounded atomic event history.
-- `diagnostics` collects a credential-free local health report, and `guidance` supplies replaceable device guidance data.
-- `integrations.power` defines normalized grid evidence for Android charging, EcoFlow, Huawei, Tesla, Home Assistant, MQTT, REST, WebSocket, SNMP or other future sources.
-- `integrations.alerts` defines independent destinations such as Telegram, SMS, email, webhooks, ntfy and Gotify.
-- `integrations.alerts.AlertQueueEngine` owns provider-neutral de-duplication, in-flight leases and retry decisions; `storage.AlertQueueStore` persists that queue without exposing it before unlock.
-- `integrations.alerts.telegram` owns Telegram's API client, provider adapter and configuration. Adding another destination does not change outage detection.
-- Telegram setup shows network progress and results beside the control that started each operation. Chat discovery recognizes direct messages, group/channel posts, callback messages and bot membership updates.
-- `integrations.alerts.email` contains independent Gmail SMTP and Resend HTTPS adapters. Gmail is the default user-facing option because it needs no domain; Resend is an advanced option for users with a verified sending domain.
-- `integrations.alerts.sms` owns device capability checks, number normalization, Android sent-result handling and SMS configuration. SMS deliveries bypass the internet constraint but use the same queue, retry and diagnostics model.
-- `AlertDeliveryCoordinator` keeps non-secret events in device-protected storage when an outage is detected before unlock, then materializes per-recipient queue items when credentials become available.
-- `AlertDeliveryWorker` gives each queue item its own network-constrained WorkManager chain so a slow or failing recipient cannot block another destination.
-- `ui` contains separate Status, History and Settings screens. User-adjustable behavior belongs in grouped Settings sections.
-- History associates provider-neutral delivery totals with each power event. Diagnostics can retry failed items after a configuration fix or clear terminal delivery details while retaining outage history.
-- History merges grid events with a separate operational log. App and service sessions persist active markers, so a new start without a matching close/stop is highlighted as a possible crash, process kill or manufacturer restriction.
-- Diagnostics counts those unrecorded interruptions, shows the latest time, reports the local alarm state, and includes the same credential-free facts in its copied report.
-- History retention is independently configurable to the newest 50, 100 or 200 power events; a separate two-step action clears power history without changing settings or delivery records.
-- History completion is idempotent by outage identity, so a process restart between persistence steps cannot create duplicate event rows. Immediate and delayed restorations follow the same completion path.
-- Outage and restoration delays provide common one-tap presets plus a validated custom value from 0 seconds to 24 hours.
-- Settings opens as a clean category list; device, timing, restoration, appearance, reliability, history, safety, about, testing and alert controls each have a focused subpage.
-- Help & guidance stores a global Guided or Experienced setup preference. Alert integrations share one guidance contract so future providers can offer the same amount of help without coupling it to their transport code.
-- Setup & testing contains a persistent live checklist. Guided mode explains why each check matters and Experienced mode presents the same verified state concisely; both link directly to the relevant app or Android controls.
-- Appearance supports System, Dark and Light themes. System is the default and follows the device setting.
-- Audible alarm settings are isolated in their own category. The alarm is off by default, starts only for confirmed outages, repeats at a chosen interval, can use the built-in beep or an Android alarm sound, can temporarily use maximum alarm volume, stops at a chosen battery level, and can be dismissed from the dashboard or monitoring notification. The selected-sound preview is capped at five seconds. Repeat scheduling can be Best effort or Exact; Exact falls back safely until Android grants Alarms & reminders access.
-- Battery alerts are isolated from the audible-alarm controls. The optional warning is off by default, supports 10–30% thresholds, and stores the outage identity after queueing so it is emitted at most once per outage across process death and reboot.
-- `SetupWizardScreen` is shown only on a true fresh install. Existing installs migrate past it, and every choice remains editable in Settings.
+The app checks whether Android considers an external power source connected. It does not use the battery's *charging/not charging* label as proof of an outage, because many devices stop charging when their battery is full.
 
-The app remains one Gradle module for a fast, lightweight build. Package contracts allow later extraction into separate Gradle modules without coupling the state machine to Android or any provider.
+## Is it suitable for your setup?
 
-## Build
+### Advantages
 
-Open this existing directory in Android Studio and use its bundled JDK. From PowerShell, with JAVA_HOME pointing at that JDK:
+- Reuses an old Android device and its battery as a small built-in backup supply.
+- Detects and records locally even when the internet is unavailable.
+- Requires no FP Grid Monitor server or subscription.
+- Supports both internet alerts and device SMS.
+- Uses event-driven monitoring to keep idle CPU and network use low.
+- Stores alert credentials using Android Keystore encryption.
+
+### Limitations
+
+- It detects loss of power to the phone's charger, not the electricity grid directly.
+- A charger connected through a UPS, power station, backed-up socket, faulty cable, or switched USB port may give a misleading result.
+- Telegram and email cannot arrive until the monitoring device regains internet access. SMS needs a working SIM/mobile network and may cost money.
+- Some Android manufacturers aggressively stop background apps. Their battery settings can change between phone models and software versions.
+- An old or damaged lithium battery should not be left charging unattended. Inspect the device and battery before using it continuously.
+- This is not a certified safety, medical, or emergency alarm system.
+
+## Installation
+
+### Public release APK
+
+A signed public APK is not available yet. When the first release is ready, it will appear on the repository's [Releases page](https://github.com/bennymamo/PowerOutageMonitor/releases). Installation will then be:
+
+1. Download the APK on the Android device.
+2. If Android asks, allow that browser or file manager to install unknown apps.
+3. Open the APK and choose **Install**.
+4. Open **FP Grid Monitor** and follow the guided setup.
+5. Return to the Releases page for future updates. Install newer APKs over the existing app so settings and history are retained.
+
+Only install APKs published by this repository. Uninstalling the app removes its local settings, credentials, queue, and history.
+
+### Build the current development version
+
+Developers can build a debug APK from source with Android Studio or PowerShell. The project currently uses Kotlin, Jetpack Compose, Android Gradle Plugin, and the Gradle wrapper included in this repository.
+
+Requirements:
+
+- Windows, macOS, or Linux
+- Android Studio with an Android SDK that supports API 37
+- JDK 25; Android Studio's bundled JDK is suitable
+
+On Windows PowerShell, from the repository root:
 
 ```powershell
-.\gradlew.bat assembleDebug testDebugUnitTest lintDebug
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+.\gradlew.bat assembleDebug
 ```
 
-Permissions are limited to foreground service operation, notification display, restart after boot, network-state detection, alarm-volume adjustment, optional exact alarm scheduling, internet access for user-configured network providers, and user-approved SMS sending. The app transmits a message only when the user explicitly tests or enables an alert channel. Power loss indicates charger disconnection rather than independently verified mains failure.
+The debug APK is created at:
 
-A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. The core outage-confirmation deadline remains best effort. Audible repeats can use best-effort scheduling or user-selected exact scheduling; on Android 12 and newer the settings page explains and opens the required Alarms & reminders access screen.
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
 
-While monitoring is enabled, the foreground service listens dynamically for `ACTION_BATTERY_CHANGED`, `ACTION_POWER_CONNECTED` and `ACTION_POWER_DISCONNECTED`. The explicit connection events trigger a fresh read of Android's sticky battery snapshot; their intentionally sparse payload is never interpreted as a power state. This adds prompt vendor-independent event signals without polling or a manifest receiver that would depend on implicit-broadcast background behavior.
+To run the automated checks:
 
-## Visual design
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug
+```
 
-The dark theme uses navy surfaces with mint online-power and amber caution indicators; the light theme uses warm neutral surfaces and a deep green accent. The compact dashboard gives grid state the strongest visual weight and uses a horizontal battery bar for supporting device health. Scrolling remains available for smaller screens and larger accessibility text. A matching vector lightning-bolt launcher icon includes legacy API 23 and adaptive/themed variants. No image or icon library is required.
+The minimum supported Android version is Android 6.0 (API 23). The project currently targets API 37.
 
-## Validation
+## First setup
 
-Debug build, 63 unit tests and Android lint passed on 13 September 2026. API 36 emulator checks verified the grid-first light and dark dashboards, launcher graphic, FP Grid Monitor app label, grouped Settings UI, System/Dark/Light selection, Android Back behavior, combined grid/operational History UI, live Diagnostics, simulated alert preview and the separate Telegram, Gmail, Resend and device-SMS setup flows. The persistent setup checklist was inspected at enlarged system text in Guided and Experienced modes, including its progress display, live completion states, direct provider and reliability actions, scrolling, and Android Back path from checklist to Settings to Status. A checklist action returns from its child screen to the checklist so the refreshed result is immediately visible. Guided setup is the default; the Help & guidance page was checked at enlarged system text, and switching to Experienced immediately replaced the Gmail/provider walkthroughs with concise technical notes. The optional Battery alerts page was checked both collapsed/off and expanded at its recommended 20% threshold. The SMS page showed capability, permission and default-SIM checks, and Android displayed its runtime prompt only after the explicit permission action. The Audible alarm page was checked at phone width, Android's installed-sound picker opened correctly, and selecting Exact timing showed its best-effort fallback plus the Alarms & reminders shortcut while access was unavailable. Test mode shows simulated outage, low-monitor-battery and restoration messages with an explicit provider-send action and correct no-provider guidance while leaving the real state, history and queue unchanged. An end-to-end simulated device event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app; an in-place APK upgrade verified the same behavior through `MY_PACKAGE_REPLACED`. The monitoring notification remained silent, non-vibrating, low priority and ongoing. Physical Android 12 behavior is recorded below; Android 6.0 remains unverified.
+The app starts with a guided wizard. For a reliable installation:
 
-An audible-alarm emulator run temporarily enabled immediate outage confirmation. AC loss produced a confirmed outage, played one alarm tone, scheduled the next repeat, and exposed dismissal on both the dashboard and ongoing notification. Dismissal removed both controls and canceled the repeat; AC power, the 60-second delay and the default-off alarm state were restored. Physical testing then found that an already-playing Android ringtone was not owned by the coordinator and therefore could outlive Dismiss. Playback now has one process-wide stoppable session. On the Galaxy S10, Android audio diagnostics verified the custom preview stops within its five-second cap and the app-owned Dismiss action immediately stops active playback. Battery-cutoff and Do Not Disturb behavior remain open.
+1. Read the battery-safety note and name the monitoring device, such as `Home power monitor`.
+2. Leave the phone connected to the wall charger and complete the real connection/disconnection check.
+3. Keep the recommended 60-second outage delay and 30-second restoration delay initially.
+4. Allow notifications. Android requires the small ongoing notification while background monitoring is active.
+5. Open **Setup & testing** and complete the readiness checklist.
+6. Open **Alert channels**, configure at least one destination, and send a test.
+7. Use the master switch on the Status dashboard to start or stop all monitoring. Turning it off also removes the ongoing notification and stops local alarm activity.
 
-Operational History was verified with a normal dashboard monitoring stop/start and a hard process kill. The normal pair produced explicit stopped and started records. The forced kill produced highlighted app and monitoring interruption records at the next launch because neither previous session had recorded a clean end.
+On phones with strict battery management, open **Settings → Reliability → Keep Power Monitor Running** and follow the device and Android checks. Prefer an **Unrestricted** or equivalent battery setting when the phone offers one.
 
-The delivery path was exercised offline with a fake token and recipient. The confirmed outage produced one `PENDING` item while network access was unavailable, network restoration woke its worker, the fake credential became one sanitized permanent failure, and stable power restoration produced its own separate item. The plaintext token did not appear in preferences, the queue or the stored error, and the fake configuration and queue records were removed after the test. A successful live Telegram delivery still requires a real user-owned bot and chat during physical-device validation.
+## Alert options
 
-A seeded failed-delivery record verified dashboard failure visibility, live Diagnostics counts, user-triggered retry, asynchronous screen refresh and two-step clearing. Clearing removed only terminal delivery metadata; monitoring remained active and the dashboard warning disappeared.
+### Telegram
 
-A clean-data emulator run verified the guided setup flow, scroll behavior, the old-battery warning, default timing summary, Android 13+ notification-permission handoff, persisted completion and automatic service startup. Its live power test records a real connected → disconnected → reconnected sequence from Android without changing outage history or sending alerts; it can be skipped when the charger cannot be handled during setup. The wizard uses the same dark theme and leaves alert-channel setup in its dedicated Settings section.
+Telegram is the easiest internet-based option for most users and can alert one or more private chats or groups.
 
-With the expanded dynamic receiver installed, simulated AC loss moved the persisted engine and dashboard into pending-outage state within two seconds. Reconnection before the 60-second threshold returned to powered state, recorded a brief interruption and left only an `alarm_cancelled` entry in Android's alarm history.
+1. In Telegram, create a bot with `@BotFather` and copy its bot token.
+2. Send `/start` to the new bot from every private chat that should receive alerts. Add it to a group and send a message there if needed.
+3. In FP Grid Monitor, open **Settings → Alert channels → Telegram**.
+4. Save the token, check it, find chats, select recipients, and send a test.
 
-A separate zero-delay emulator regression moved directly from powered to confirmed outage and back to powered, then stored one confirmed-outage History record with its original confirmation timestamp. Repeating the powered signal did not create another record. Unit tests also cover replaying the same completion after a process interruption.
+The bot token is a password. Do not share it or paste it into issue reports.
 
-A cold emulator reboot also verified unattended recovery: Android delivered `LOCKED_BOOT_COMPLETED`, recreated the foreground monitoring service and restored its quiet ongoing notification without launching the app screen.
+### Gmail
 
-Telegram bot tokens are encrypted with AES-GCM using an Android Keystore key and never displayed after saving. Tokens, chat destinations, queued messages and the pre-unlock alert bridge are excluded from Android backup and device transfer, preventing credentials or stale alerts from being restored onto another phone. The setup screen supports token validation, chat discovery, multiple recipients, test messages and two-step removal. Diagnostics reports queued, retrying and failed deliveries without revealing credentials.
+Gmail is the default email option and does not require a registered domain. Google normally requires two-step verification and a dedicated App Password; a normal Gmail password should not be entered. The app sends directly through Gmail's SMTP service.
 
-The Status screen reads validated internet availability through Android's event-driven network callbacks and shows it beside the last power reading. It raises a compact reliability warning when Android blocks notifications or reports the app as background restricted; Diagnostics explains the problem and opens the relevant system settings. Android 6 uses a dynamically registered connectivity broadcast only while the app screen is visible because default-network callbacks were added in Android 7.
+### SMS
 
-WorkManager 2.11.2 schedules delivery only when Android reports a connected network and persists scheduled work across app restarts and device reboots. The app keeps provider results in its own queue because retry state belongs to each recipient. Retryable Telegram failures use the queue's bounded backoff; invalid credentials, missing destinations and other permanent configuration errors stop and remain visible in Diagnostics.
+SMS can work when home internet fails, provided the Android device has telephony support, an active SIM, mobile signal, and permission to send SMS. Your mobile provider may charge for every message. Distribution through Google Play may impose additional SMS-policy restrictions; direct sideloading does not remove Android's runtime permission requirement.
 
-Diagnostics includes a **Keep Power Monitor Running** section that identifies the device maker, explains the stable checks to make, and opens both this app's system page and Android's battery-optimization list. It deliberately avoids brittle manufacturer menu paths that change between software versions. Background guidance follows Android's current [Doze and App Standby guidance](https://developer.android.com/training/monitoring-device-state/doze-standby).
+### Resend
 
-The delivery queue allows one item per event, alert kind, provider and destination. For each recipient it preserves the meaningful sequence: outage, optional low-battery warning, then restoration. This matters when internet access returns only after power is already restored. Retryable failures back off through 1 minute, 5 minutes, 15 minutes, 30 minutes, 1 hour, 2 hours, 4 hours and 6 hours, then remain at 6-hour intervals. Permanent provider errors stop and unblock the next message. A five-minute in-flight lease and restart-time queue scan recover work after process death. Provider-specific handling must still account for the narrow crash window after a remote service accepts a message but before the device records success.
+Resend is an advanced email option intended for users who already control a verified sending domain and have a Resend API key. Most home users should choose Gmail or Telegram.
 
-An alert captured before the first unlock is retained if a provider is still marked enabled but its credential-protected destination is temporarily unavailable. Saving a repaired Telegram configuration immediately materializes that retained event into the durable delivery queue.
+### Audible alarm
 
-Current Android, Google Play, SMS and unattended-email trade-offs are documented in [Alert channel options](docs/alert-channel-options.md). Gmail SMTP and Resend HTTPS are implemented as separate email providers. Gmail is the default for personal setup; Resend is advanced because every production user must verify a domain they own.
+The local alarm is off by default. It can use the built-in beep or a sound from Android's alarm picker, repeat at a selected interval, temporarily raise alarm volume, and stop at a chosen battery level. The active alarm can be dismissed from the dashboard or notification. Sound tests stop automatically after five seconds.
 
-Initial distribution is through GitHub Releases. The signing and release checklist is documented in [Direct APK releases](docs/direct-apk-releases.md); a public artifact is intentionally deferred until the long-lived release signing key is created and backed up.
+## Permissions
 
-The next milestone is real-hardware validation. [Physical-device and Telegram validation](docs/physical-device-and-telegram-test.md) provides both a fully guided path and a compact experienced-user path for USB debugging, debug-APK installation, Telegram setup, background checks, real charger events, reboot recovery and overnight idle testing.
+| Permission or access | Why it is used |
+| --- | --- |
+| Notifications | Shows the quiet ongoing monitoring status and outage information. |
+| Foreground service | Lets monitoring continue while the app screen is closed. |
+| Start after boot | Restarts enabled monitoring after a device reboot. |
+| Internet and network state | Sends configured internet alerts and shows connectivity status. |
+| Send SMS | Used only when the user configures and enables device SMS. |
+| Modify audio settings | Temporarily raises and restores alarm volume when that option is enabled. |
+| Alarms and reminders | Optional; used only for user-selected exact audible-alarm repeats on supported Android versions. |
 
-The first physical run is recorded in [Samsung Galaxy S10 physical-device validation](docs/device-tests/samsung-sm-g973f-android-12.md). On Android 12 the real screen-on and screen-off AC outage/restoration cycles, removed-from-Recents operation, reboot recovery, in-place update recovery, Telegram setup, durable test delivery and single-attempt live outage/restoration messages passed without duplicates. Samsung battery usage is Unrestricted and Android reports the app on its device-idle allowlist. Overnight idle remains open.
+FP Grid Monitor does not request contacts, location, camera, microphone, or storage access.
+
+## Privacy and security
+
+- No analytics, advertising, tracking, or FP Grid Monitor backend.
+- Power history, operational history, configuration, and pending delivery state remain on the device.
+- Telegram, Gmail, Resend, and similar credentials are encrypted using a non-exportable Android Keystore key.
+- Credentials and queued messages are excluded from Android backup and device transfer.
+- Alert content is sent only to services and recipients the user configures.
+- Diagnostics and copied reports omit secret credentials.
+
+Using an alert provider is also subject to that provider's privacy policy and network handling.
+
+## Reliability notes
+
+Android and phone manufacturers ultimately control background execution. FP Grid Monitor uses a foreground service, event-driven Android power signals, persisted deadlines, reboot recovery, and a durable alert queue, but no Android app can promise uninterrupted operation on every device.
+
+Before relying on it:
+
+- Send a test through every enabled alert channel.
+- Unplug and reconnect the real charger once while watching the configured delays.
+- Verify operation with the screen off, after removing the app from Recents, and after a reboot.
+- Check it again after Android system updates.
+- Review History for repeated app starts without matching stops, which can indicate process killing or crashes.
+
+## Support and development status
+
+Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for reproducible bugs and feature requests. Remove email addresses, phone numbers, chat identifiers, bot tokens, passwords, and API keys from screenshots and diagnostic text before posting.
+
+Planned work before the first public release includes longer unattended device testing, Android 6 verification, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
