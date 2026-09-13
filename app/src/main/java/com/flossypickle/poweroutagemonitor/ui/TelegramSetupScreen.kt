@@ -46,6 +46,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private enum class TelegramFeedbackArea { SETUP, CREDENTIALS, RECIPIENTS, ACTIVATION, SECURITY }
+
 @Composable
 internal fun TelegramSetupScreen(
     deviceName: String,
@@ -67,13 +69,15 @@ internal fun TelegramSetupScreen(
     var botName by remember { mutableStateOf(config.botDisplayName) }
     var discovered by remember { mutableStateOf(emptyList<TelegramClient.Chat>()) }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var feedbackArea by remember { mutableStateOf<TelegramFeedbackArea?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
 
     fun tokenForOperation(): String? = tokenInput.trim().takeIf(String::isNotEmpty) ?: store.botToken()
-    fun runAsync(operation: suspend () -> Unit) {
+    fun runAsync(area: TelegramFeedbackArea, operation: suspend () -> Unit) {
         if (loading) return
         scope.launch {
+            feedbackArea = area
             loading = true
             feedback = null
             try {
@@ -112,10 +116,19 @@ internal fun TelegramSetupScreen(
                 onClick = {
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/BotFather")))
-                    }.onFailure { feedback = "No app is available to open BotFather." }
+                    }.onFailure {
+                        feedbackArea = TelegramFeedbackArea.SETUP
+                        feedback = "No app is available to open BotFather."
+                    }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Open BotFather") }
+            TelegramOperationStatus(
+                area = TelegramFeedbackArea.SETUP,
+                activeArea = feedbackArea,
+                loading = loading,
+                feedback = feedback
+            )
         }
 
         Text("Bot credentials", style = MaterialTheme.typography.titleMedium,
@@ -136,7 +149,7 @@ internal fun TelegramSetupScreen(
             }
             OutlinedButton(
                 onClick = {
-                    runAsync {
+                    runAsync(TelegramFeedbackArea.CREDENTIALS) {
                         val token = withContext(Dispatchers.IO) { tokenForOperation() }
                         if (token == null) {
                             feedback = "Enter a bot token first."
@@ -154,6 +167,12 @@ internal fun TelegramSetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !loading
             ) { Text("Check bot token") }
+            TelegramOperationStatus(
+                area = TelegramFeedbackArea.CREDENTIALS,
+                activeArea = feedbackArea,
+                loading = loading,
+                feedback = feedback
+            )
         }
 
         Text("Recipients", style = MaterialTheme.typography.titleMedium,
@@ -170,7 +189,7 @@ internal fun TelegramSetupScreen(
             )
             OutlinedButton(
                 onClick = {
-                    runAsync {
+                    runAsync(TelegramFeedbackArea.RECIPIENTS) {
                         val token = withContext(Dispatchers.IO) { tokenForOperation() }
                         if (token == null) {
                             feedback = "Enter a bot token first."
@@ -180,7 +199,7 @@ internal fun TelegramSetupScreen(
                             is TelegramClient.ApiResult.Success -> {
                                 discovered = result.value
                                 feedback = if (result.value.isEmpty()) {
-                                    "No chats found. Send /start to the bot, then try again."
+                                    "No chats found yet. Open the new bot itself in Telegram, send a new message such as hello, then return and tap Find chats again."
                                 } else "Found ${result.value.size} chat(s)."
                             }
                             is TelegramClient.ApiResult.Failure -> feedback = result.message
@@ -190,6 +209,12 @@ internal fun TelegramSetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !loading
             ) { Text("Find chats") }
+            TelegramOperationStatus(
+                area = TelegramFeedbackArea.RECIPIENTS,
+                activeArea = feedbackArea,
+                loading = loading,
+                feedback = feedback
+            )
             discovered.forEach { chat ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -222,7 +247,7 @@ internal fun TelegramSetupScreen(
             }
             Button(
                 onClick = {
-                    runAsync {
+                    runAsync(TelegramFeedbackArea.ACTIVATION) {
                         val requestedEnabled = enabled
                         val destinations = parseDestinations(destinationText)
                         runCatching {
@@ -250,7 +275,7 @@ internal fun TelegramSetupScreen(
             ) { Text("Save configuration") }
             OutlinedButton(
                 onClick = {
-                    runAsync {
+                    runAsync(TelegramFeedbackArea.ACTIVATION) {
                         val token = withContext(Dispatchers.IO) { tokenForOperation() }
                         val destinations = parseDestinations(destinationText)
                         if (token == null || destinations.isEmpty()) {
@@ -278,17 +303,12 @@ internal fun TelegramSetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !loading
             ) { Text("Send test message") }
-        }
-
-        if (loading) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        feedback?.let {
-            TelegramCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
+            TelegramOperationStatus(
+                area = TelegramFeedbackArea.ACTIVATION,
+                activeArea = feedbackArea,
+                loading = loading,
+                feedback = feedback
+            )
         }
 
         Text("Security", style = MaterialTheme.typography.titleMedium,
@@ -304,7 +324,7 @@ internal fun TelegramSetupScreen(
                 Text("This removes the stored token and all chat IDs.", color = MaterialTheme.colorScheme.error)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
-                        runAsync {
+                        runAsync(TelegramFeedbackArea.SECURITY) {
                             withContext(Dispatchers.IO) { store.clear() }
                             config = store.config()
                             enabled = false
@@ -320,7 +340,39 @@ internal fun TelegramSetupScreen(
                     TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
                 }
             }
+            TelegramOperationStatus(
+                area = TelegramFeedbackArea.SECURITY,
+                activeArea = feedbackArea,
+                loading = loading,
+                feedback = feedback
+            )
         }
+    }
+}
+
+@Composable
+private fun TelegramOperationStatus(
+    area: TelegramFeedbackArea,
+    activeArea: TelegramFeedbackArea?,
+    loading: Boolean,
+    feedback: String?
+) {
+    if (activeArea != area) return
+    if (loading) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CircularProgressIndicator()
+            Text("Working…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else if (feedback != null) {
+        Text(
+            feedback,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

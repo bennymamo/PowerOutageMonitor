@@ -37,6 +37,7 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - `integrations.alerts` defines independent destinations such as Telegram, SMS, email, webhooks, ntfy and Gotify.
 - `integrations.alerts.AlertQueueEngine` owns provider-neutral de-duplication, in-flight leases and retry decisions; `storage.AlertQueueStore` persists that queue without exposing it before unlock.
 - `integrations.alerts.telegram` owns Telegram's API client, provider adapter and configuration. Adding another destination does not change outage detection.
+- Telegram setup shows network progress and results beside the control that started each operation. Chat discovery recognizes direct messages, group/channel posts, callback messages and bot membership updates.
 - `integrations.alerts.email` contains independent Gmail SMTP and Resend HTTPS adapters. Gmail is the default user-facing option because it needs no domain; Resend is an advanced option for users with a verified sending domain.
 - `integrations.alerts.sms` owns device capability checks, number normalization, Android sent-result handling and SMS configuration. SMS deliveries bypass the internet constraint but use the same queue, retry and diagnostics model.
 - `AlertDeliveryCoordinator` keeps non-secret events in device-protected storage when an outage is detected before unlock, then materializes per-recipient queue items when credentials become available.

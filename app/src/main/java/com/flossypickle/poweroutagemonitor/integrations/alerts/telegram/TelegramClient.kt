@@ -30,18 +30,26 @@ internal class TelegramClient {
         val response = request(token, "getUpdates", JSONObject().apply {
             put("limit", 100)
             put("timeout", 0)
-            put("allowed_updates", org.json.JSONArray(listOf("message", "edited_message", "channel_post")))
+            put(
+                "allowed_updates",
+                org.json.JSONArray(
+                    listOf(
+                        "message",
+                        "edited_message",
+                        "channel_post",
+                        "callback_query",
+                        "my_chat_member",
+                        "chat_member"
+                    )
+                )
+            )
         })
         return response.mapSuccess { root ->
             val updates = root.getJSONArray("result")
             buildList {
                 for (index in 0 until updates.length()) {
                     val update = updates.getJSONObject(index)
-                    val message = update.optJSONObject("message")
-                        ?: update.optJSONObject("edited_message")
-                        ?: update.optJSONObject("channel_post")
-                        ?: continue
-                    val chat = message.optJSONObject("chat") ?: continue
+                    val chat = update.chatObject() ?: continue
                     val id = chat.optLong("id", Long.MIN_VALUE)
                     if (id == Long.MIN_VALUE) continue
                     val label = chat.optString("title").ifBlank {
@@ -53,6 +61,16 @@ internal class TelegramClient {
             }.distinctBy(Chat::chatId)
         }
     }
+
+    private fun JSONObject.chatObject(): JSONObject? =
+        optJSONObject("message")?.optJSONObject("chat")
+            ?: optJSONObject("edited_message")?.optJSONObject("chat")
+            ?: optJSONObject("channel_post")?.optJSONObject("chat")
+            ?: optJSONObject("callback_query")
+                ?.optJSONObject("message")
+                ?.optJSONObject("chat")
+            ?: optJSONObject("my_chat_member")?.optJSONObject("chat")
+            ?: optJSONObject("chat_member")?.optJSONObject("chat")
 
     fun sendMessage(token: String, chatId: String, text: String): DeliveryResult {
         val response = request(token, "sendMessage", JSONObject().apply {
