@@ -7,6 +7,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import java.util.concurrent.TimeUnit
 
 /** Schedules one persistent network-constrained work chain per queue item. */
@@ -20,9 +21,15 @@ internal class AlertDeliveryScheduler(private val context: Context) {
     )
 
     private fun enqueue(itemId: String, delayMs: Long, policy: ExistingWorkPolicy) {
+        val constraints = Constraints.Builder().apply {
+            val providerId = AlertQueueStore(context).find(itemId)?.providerId
+            if (AlertProviderRegistry.requiresInternet(providerId)) {
+                setRequiredNetworkType(NetworkType.CONNECTED)
+            }
+        }.build()
         val request = OneTimeWorkRequestBuilder<AlertDeliveryWorker>()
             .setInputData(Data.Builder().putString(AlertDeliveryWorker.KEY_ITEM_ID, itemId).build())
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(constraints)
             .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
             .addTag(TAG)
             .build()

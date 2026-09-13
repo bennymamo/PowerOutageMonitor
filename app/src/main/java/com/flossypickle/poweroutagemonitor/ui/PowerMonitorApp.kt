@@ -35,6 +35,7 @@ private enum class AppScreen(val label: String) {
     DIAGNOSTICS("Diagnostics"),
     TEST_MODE("Test mode"),
     TELEGRAM("Telegram"),
+    SMS("SMS"),
     EMAIL("Email"),
     GMAIL_EMAIL("Gmail"),
     RESEND_EMAIL("Resend")
@@ -78,7 +79,7 @@ internal fun PowerMonitorApp(
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
     BackHandler(enabled = screen != AppScreen.STATUS) {
         screen = when (screen) {
-            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
+            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM, AppScreen.SMS,
             AppScreen.EMAIL -> AppScreen.SETTINGS
             AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> AppScreen.EMAIL
             AppScreen.HISTORY, AppScreen.SETTINGS -> AppScreen.STATUS
@@ -96,6 +97,7 @@ internal fun PowerMonitorApp(
                                         AppScreen.DIAGNOSTICS,
                                         AppScreen.TEST_MODE,
                                         AppScreen.TELEGRAM,
+                                        AppScreen.SMS,
                                         AppScreen.EMAIL,
                                         AppScreen.GMAIL_EMAIL,
                                         AppScreen.RESEND_EMAIL
@@ -138,6 +140,7 @@ internal fun PowerMonitorApp(
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
                 onOpenTestMode = { screen = AppScreen.TEST_MODE },
                 onOpenTelegram = { screen = AppScreen.TELEGRAM },
+                onOpenSms = { screen = AppScreen.SMS },
                 onOpenEmail = { screen = AppScreen.EMAIL }
             )
             AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
@@ -158,6 +161,12 @@ internal fun PowerMonitorApp(
                 onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.TELEGRAM -> TelegramSetupScreen(
+                deviceName = settings.deviceName,
+                padding = padding,
+                onConfigurationChanged = onAlertConfigurationChanged,
+                onBack = { screen = AppScreen.SETTINGS }
+            )
+            AppScreen.SMS -> SmsSetupScreen(
                 deviceName = settings.deviceName,
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,

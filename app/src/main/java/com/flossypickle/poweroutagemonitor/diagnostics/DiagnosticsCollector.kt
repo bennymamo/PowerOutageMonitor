@@ -10,6 +10,8 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsCapability
+import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
@@ -101,6 +103,8 @@ internal class DiagnosticsCollector(private val context: Context) {
         val telegram = TelegramConfigStore(context).config()
         val gmail = GmailSmtpConfigStore(context).config()
         val resend = ResendEmailConfigStore(context).config()
+        val sms = SmsConfigStore(context).config()
+        val smsCapability = SmsCapability.capture(context)
         val deliveries = AlertQueueStore(context).read()
         val health = SystemHealthSnapshot.capture(context)
         val audibleSettings = AudibleAlarmStore(context).settings()
@@ -134,6 +138,10 @@ internal class DiagnosticsCollector(private val context: Context) {
             else if (gmail.hasAppPassword) add("Gmail saved, disabled")
             if (resend.enabled) add("Resend enabled (${resend.recipients.size})")
             else if (resend.hasApiKey) add("Resend saved, disabled")
+            if (sms.enabled) add("SMS enabled (${sms.recipients.size})")
+            else if (sms.recipients.isNotEmpty()) add("SMS saved, disabled")
+            if (!smsCapability.supported) add("Device SMS unavailable")
+            else if (!smsCapability.permissionGranted) add("SMS permission not allowed")
         }.ifEmpty { listOf("None") }.joinToString(" · "),
         queuedDeliveries = deliveries.count {
             it.status == AlertQueueEngine.Status.PENDING || it.status == AlertQueueEngine.Status.IN_FLIGHT

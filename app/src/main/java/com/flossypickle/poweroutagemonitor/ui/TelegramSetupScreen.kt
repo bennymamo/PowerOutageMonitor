@@ -87,7 +87,7 @@ internal fun TelegramSetupScreen(
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(onClick = onBack) { Text("‹ Alert channels") }
+        TextButton(onClick = onBack) { Text("‹ Settings") }
         Text("Telegram", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold)
         Text("Use your own Telegram bot to send alerts directly from this device.",

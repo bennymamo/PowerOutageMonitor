@@ -266,7 +266,7 @@ private fun ReadyStep(
     }
     WizardCard {
         Text("After setup", fontWeight = FontWeight.SemiBold)
-        Text("Connect the permanent charger and confirm Status shows external power. Configure Telegram or Gmail under Settings › Alert channels, then send a test message.",
+        Text("Connect the permanent charger and confirm Status shows external power. Configure Telegram, Gmail or device SMS under Settings › Alert channels, then send a test message.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Every option can be changed later in Settings.",
             color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)

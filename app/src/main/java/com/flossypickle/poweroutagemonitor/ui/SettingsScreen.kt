@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsCapability
+import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStore
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
@@ -88,6 +90,7 @@ internal fun SettingsScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
     onOpenTelegram: () -> Unit,
+    onOpenSms: () -> Unit,
     onOpenEmail: () -> Unit
 ) {
     var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
@@ -104,6 +107,8 @@ internal fun SettingsScreen(
     val resendConfig = ResendEmailConfigStore(context).config()
     val emailEnabled = gmailConfig.enabled || resendConfig.enabled
     val emailSaved = gmailConfig.hasAppPassword || resendConfig.hasApiKey
+    val smsConfig = SmsConfigStore(context).config()
+    val smsCapability = SmsCapability.capture(context)
     var confirmClearHistory by remember { mutableStateOf(false) }
     val soundPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -133,10 +138,12 @@ internal fun SettingsScreen(
                 SettingsCategoryCard(
                     "Alert channels",
                     when {
-                        telegramConfig.enabled && emailEnabled -> "Telegram and email are enabled"
+                        listOf(telegramConfig.enabled, emailEnabled, smsConfig.enabled).count { it } > 1 ->
+                            "Multiple alert channels are enabled"
                         telegramConfig.enabled -> "Telegram is enabled"
                         emailEnabled -> "Email is enabled"
-                        telegramConfig.hasToken || emailSaved ->
+                        smsConfig.enabled -> "SMS is enabled"
+                        telegramConfig.hasToken || emailSaved || smsConfig.recipients.isNotEmpty() ->
                             "Alert setup is saved but disabled"
                         else -> "No alert channel is configured"
                     }
@@ -203,6 +210,20 @@ internal fun SettingsScreen(
                 )
                 OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
                     Text("Configure Telegram")
+                }
+                SettingText("Device SMS", when {
+                    !smsCapability.supported -> "Unavailable on this device"
+                    smsConfig.enabled -> "Enabled"
+                    smsConfig.recipients.isNotEmpty() -> "Saved, disabled"
+                    else -> "Not configured"
+                })
+                Text(
+                    "Send through the phone's SIM when internet service is unavailable. Carrier charges may apply.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedButton(onClick = onOpenSms, modifier = Modifier.fillMaxWidth()) {
+                    Text("Configure device SMS")
                 }
                 SettingText("Email", when {
                     gmailConfig.enabled && resendConfig.enabled -> "Gmail and Resend enabled"

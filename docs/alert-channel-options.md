@@ -18,7 +18,9 @@ Android still exposes `SmsManager` for direct device-originated SMS. A productio
 
 These are Android OS requirements. A directly sideloaded APK can request `SEND_SMS` from the user and send after it is granted. Google Play separately classifies SMS access as high risk. Its policy lists physical-safety/emergency alerts as a possible `SEND_SMS` exception, but the app must submit a Permissions Declaration and approval is not guaranteed. See the official [Android runtime-permission guide](https://developer.android.com/training/permissions/requesting), [`SmsManager` reference](https://developer.android.com/reference/android/telephony/SmsManager), and [Google Play SMS policy](https://support.google.com/googleplay/android-developer/answer/10208820).
 
-Recommendation: build device SMS only after choosing whether it belongs in the normal app or in a sideload-only build variant. A separate variant keeps the main artifact free of a high-risk permission and preserves a straightforward future Play Store path.
+Current implementation: device SMS is included in the direct-APK build because that is the chosen initial distribution. Its setup page requests `SEND_SMS` only after the user opens the feature and taps the permission action. It checks messaging capability, requires an Android-selected default SMS subscription, supports multiple numbers, splits long messages with `SmsManager`, and records the sent result of every part. SMS queue work does not require internet. Normal carrier charges can apply.
+
+A future Google Play artifact may omit SMS through a separate build variant if restricted-permission approval is unavailable. This is a packaging concern; the provider remains isolated from outage detection and other alert adapters.
 
 ## Email — Gmail default, Resend advanced
 
@@ -45,7 +47,7 @@ See Google's official [SMTP configuration](https://support.google.com/a/answer/1
 
 1. Use Gmail as the normal personal email setup and Telegram as the simplest bot-based path.
 2. Keep Resend available for users who own a verified domain.
-3. Add device SMS in a sideload-capable build variant when offline-at-site delivery is the priority.
-4. Add a generic HTTPS webhook after those; the existing provider registry and queue already support that shape.
+3. Use device SMS when mobile service is available and site internet may fail with the grid.
+4. Add a generic HTTPS webhook next; the existing provider registry and queue already support that shape.
 
 No provider should change outage detection or History. Each provider must expose availability, configuration, destinations, a test action and a delivery result through the existing alert-provider boundary.
