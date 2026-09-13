@@ -51,6 +51,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
@@ -85,7 +87,8 @@ internal fun SettingsScreen(
     onClearHistory: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
-    onOpenTelegram: () -> Unit
+    onOpenTelegram: () -> Unit,
+    onOpenEmail: () -> Unit
 ) {
     var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
 
@@ -97,6 +100,10 @@ internal fun SettingsScreen(
     val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
     val context = LocalContext.current
     val telegramConfig = TelegramConfigStore(context).config()
+    val gmailConfig = GmailSmtpConfigStore(context).config()
+    val resendConfig = ResendEmailConfigStore(context).config()
+    val emailEnabled = gmailConfig.enabled || resendConfig.enabled
+    val emailSaved = gmailConfig.hasAppPassword || resendConfig.hasApiKey
     var confirmClearHistory by remember { mutableStateOf(false) }
     val soundPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -126,8 +133,11 @@ internal fun SettingsScreen(
                 SettingsCategoryCard(
                     "Alert channels",
                     when {
+                        telegramConfig.enabled && emailEnabled -> "Telegram and email are enabled"
                         telegramConfig.enabled -> "Telegram is enabled"
-                        telegramConfig.hasToken -> "Telegram is saved but disabled"
+                        emailEnabled -> "Email is enabled"
+                        telegramConfig.hasToken || emailSaved ->
+                            "Alert setup is saved but disabled"
                         else -> "No alert channel is configured"
                     }
                 ) { section = SettingsSection.ALERTS }
@@ -193,6 +203,21 @@ internal fun SettingsScreen(
                 )
                 OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
                     Text("Configure Telegram")
+                }
+                SettingText("Email", when {
+                    gmailConfig.enabled && resendConfig.enabled -> "Gmail and Resend enabled"
+                    gmailConfig.enabled -> "Gmail enabled"
+                    resendConfig.enabled -> "Resend enabled"
+                    emailSaved -> "Saved, disabled"
+                    else -> "Not configured"
+                })
+                Text(
+                    "Gmail is the easiest option and needs no domain. Resend remains available for users with a verified domain.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                OutlinedButton(onClick = onOpenEmail, modifier = Modifier.fillMaxWidth()) {
+                    Text("Configure email")
                 }
             }
 

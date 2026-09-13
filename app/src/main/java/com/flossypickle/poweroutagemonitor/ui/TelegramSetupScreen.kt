@@ -254,7 +254,7 @@ internal fun TelegramSetupScreen(
                                 client.sendMessage(
                                     token,
                                     destination.chatId,
-                                    "POWER MONITOR TEST\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
+                                    "FP GRID MONITOR TEST\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
                                 )
                             }
                         }

@@ -8,6 +8,8 @@ import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
@@ -97,6 +99,8 @@ internal class DiagnosticsCollector(private val context: Context) {
         lastObservationEpochMs: Long
     ): DiagnosticsReport {
         val telegram = TelegramConfigStore(context).config()
+        val gmail = GmailSmtpConfigStore(context).config()
+        val resend = ResendEmailConfigStore(context).config()
         val deliveries = AlertQueueStore(context).read()
         val health = SystemHealthSnapshot.capture(context)
         val audibleSettings = AudibleAlarmStore(context).settings()
@@ -123,11 +127,14 @@ internal class DiagnosticsCollector(private val context: Context) {
         batteryOptimizationExcluded = health.batteryOptimizationExcluded,
         backgroundRestricted = health.backgroundRestricted,
         notificationsAllowed = health.notificationsAllowed,
-        configuredAlertProviders = when {
-            telegram.enabled -> "Telegram enabled (${telegram.destinations.size} destination(s))"
-            telegram.hasToken -> "Telegram saved, disabled"
-            else -> "None"
-        },
+        configuredAlertProviders = buildList {
+            if (telegram.enabled) add("Telegram enabled (${telegram.destinations.size})")
+            else if (telegram.hasToken) add("Telegram saved, disabled")
+            if (gmail.enabled) add("Gmail enabled (${gmail.recipients.size})")
+            else if (gmail.hasAppPassword) add("Gmail saved, disabled")
+            if (resend.enabled) add("Resend enabled (${resend.recipients.size})")
+            else if (resend.hasApiKey) add("Resend saved, disabled")
+        }.ifEmpty { listOf("None") }.joinToString(" · "),
         queuedDeliveries = deliveries.count {
             it.status == AlertQueueEngine.Status.PENDING || it.status == AlertQueueEngine.Status.IN_FLIGHT
         },

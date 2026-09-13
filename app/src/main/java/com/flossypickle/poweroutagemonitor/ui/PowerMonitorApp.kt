@@ -34,7 +34,10 @@ private enum class AppScreen(val label: String) {
     SETTINGS("Settings"),
     DIAGNOSTICS("Diagnostics"),
     TEST_MODE("Test mode"),
-    TELEGRAM("Telegram")
+    TELEGRAM("Telegram"),
+    EMAIL("Email"),
+    GMAIL_EMAIL("Gmail"),
+    RESEND_EMAIL("Resend")
 }
 
 private val primaryScreens = listOf(AppScreen.STATUS, AppScreen.HISTORY, AppScreen.SETTINGS)
@@ -75,7 +78,9 @@ internal fun PowerMonitorApp(
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
     BackHandler(enabled = screen != AppScreen.STATUS) {
         screen = when (screen) {
-            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM -> AppScreen.SETTINGS
+            AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
+            AppScreen.EMAIL -> AppScreen.SETTINGS
+            AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> AppScreen.EMAIL
             AppScreen.HISTORY, AppScreen.SETTINGS -> AppScreen.STATUS
             AppScreen.STATUS -> AppScreen.STATUS
         }
@@ -90,7 +95,10 @@ internal fun PowerMonitorApp(
                             item == AppScreen.SETTINGS && screen in listOf(
                                         AppScreen.DIAGNOSTICS,
                                         AppScreen.TEST_MODE,
-                                        AppScreen.TELEGRAM
+                                        AppScreen.TELEGRAM,
+                                        AppScreen.EMAIL,
+                                        AppScreen.GMAIL_EMAIL,
+                                        AppScreen.RESEND_EMAIL
                             )
                         TextButton(onClick = { screen = item }, modifier = Modifier.weight(1f)) {
                             Text(
@@ -129,7 +137,8 @@ internal fun PowerMonitorApp(
                 onClearHistory,
                 onOpenDiagnostics = { screen = AppScreen.DIAGNOSTICS },
                 onOpenTestMode = { screen = AppScreen.TEST_MODE },
-                onOpenTelegram = { screen = AppScreen.TELEGRAM }
+                onOpenTelegram = { screen = AppScreen.TELEGRAM },
+                onOpenEmail = { screen = AppScreen.EMAIL }
             )
             AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
                 settings = settings,
@@ -153,6 +162,24 @@ internal fun PowerMonitorApp(
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.SETTINGS }
+            )
+            AppScreen.EMAIL -> EmailProvidersScreen(
+                padding = padding,
+                onOpenGmail = { screen = AppScreen.GMAIL_EMAIL },
+                onOpenResend = { screen = AppScreen.RESEND_EMAIL },
+                onBack = { screen = AppScreen.SETTINGS }
+            )
+            AppScreen.GMAIL_EMAIL -> GmailEmailSetupScreen(
+                deviceName = settings.deviceName,
+                padding = padding,
+                onConfigurationChanged = onAlertConfigurationChanged,
+                onBack = { screen = AppScreen.EMAIL }
+            )
+            AppScreen.RESEND_EMAIL -> ResendEmailSetupScreen(
+                deviceName = settings.deviceName,
+                padding = padding,
+                onConfigurationChanged = onAlertConfigurationChanged,
+                onBack = { screen = AppScreen.EMAIL }
             )
         }
     }
