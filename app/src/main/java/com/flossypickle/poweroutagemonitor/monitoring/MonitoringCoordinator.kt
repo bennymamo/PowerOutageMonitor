@@ -37,6 +37,23 @@ internal class MonitoringCoordinator(private val context: Context) {
             ?.let(alerts::persistForEnabledProviders)
         recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)
+        if (after.phase == OutageEngine.Phase.POWERED &&
+            before.phase != OutageEngine.Phase.POWERED
+        ) {
+            store.clearBatteryLowAlertMarker()
+        } else if (after.phase != OutageEngine.Phase.POWERED) {
+            AlertMessageFactory.batteryLowForObservation(
+                state = after,
+                snapshot = snapshot,
+                settings = settings,
+                nowEpochMs = nowEpochMs,
+                alertedOutageStartedEpochMs = store.batteryLowAlertedOutageEpochMs()
+            )?.let { message ->
+                if (alerts.persistForEnabledProviders(message)) {
+                    after.outageStartedEpochMs?.let(store::markBatteryLowAlerted)
+                }
+            }
+        }
         DeadlineScheduler(context).schedule(after, settings)
         audibleAlarm.reconcile(after, snapshot, nowEpochMs)
         alerts.materializePending()

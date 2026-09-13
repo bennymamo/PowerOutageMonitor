@@ -25,7 +25,9 @@ internal class MonitorStore(context: Context) {
         val deviceName: String,
         val historyLimit: Int = DEFAULT_HISTORY_LIMIT,
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
-        val helpLevel: HelpLevel = HelpLevel.GUIDED
+        val helpLevel: HelpLevel = HelpLevel.GUIDED,
+        val batteryLowAlertEnabled: Boolean = false,
+        val batteryLowAlertThreshold: Int = DEFAULT_BATTERY_LOW_THRESHOLD
     )
 
     fun settings(): Settings = Settings(
@@ -41,7 +43,12 @@ internal class MonitorStore(context: Context) {
         }.getOrDefault(ThemeMode.SYSTEM),
         helpLevel = runCatching {
             HelpLevel.valueOf(preferences.getString(KEY_HELP_LEVEL, null) ?: "")
-        }.getOrDefault(HelpLevel.GUIDED)
+        }.getOrDefault(HelpLevel.GUIDED),
+        batteryLowAlertEnabled = preferences.getBoolean(KEY_BATTERY_LOW_ALERT_ENABLED, false),
+        batteryLowAlertThreshold = preferences.getInt(
+            KEY_BATTERY_LOW_ALERT_THRESHOLD,
+            DEFAULT_BATTERY_LOW_THRESHOLD
+        ).coerceIn(BATTERY_LOW_THRESHOLD_RANGE)
     )
 
     fun state(): OutageEngine.State {
@@ -73,7 +80,10 @@ internal class MonitorStore(context: Context) {
 
     fun setMonitoringEnabled(enabled: Boolean) {
         val editor = preferences.edit().putBoolean(KEY_ENABLED, enabled)
-        if (!enabled) writeState(editor, OutageEngine.State())
+        if (!enabled) {
+            writeState(editor, OutageEngine.State())
+            editor.remove(KEY_BATTERY_LOW_ALERTED_OUTAGE)
+        }
         editor.commit()
     }
 
@@ -115,6 +125,29 @@ internal class MonitorStore(context: Context) {
         check(preferences.edit().putString(KEY_HELP_LEVEL, level.name).commit()) {
             "Unable to persist help setting"
         }
+    }
+
+    fun setBatteryLowAlert(enabled: Boolean, threshold: Int) {
+        require(threshold in BATTERY_LOW_THRESHOLD_RANGE)
+        check(preferences.edit()
+            .putBoolean(KEY_BATTERY_LOW_ALERT_ENABLED, enabled)
+            .putInt(KEY_BATTERY_LOW_ALERT_THRESHOLD, threshold)
+            .commit()
+        ) { "Unable to persist low-battery alert setting" }
+    }
+
+    fun batteryLowAlertedOutageEpochMs(): Long? =
+        preferences.optionalLong(KEY_BATTERY_LOW_ALERTED_OUTAGE)
+
+    fun markBatteryLowAlerted(outageStartedEpochMs: Long) {
+        check(preferences.edit()
+            .putLong(KEY_BATTERY_LOW_ALERTED_OUTAGE, outageStartedEpochMs)
+            .commit()
+        ) { "Unable to persist low-battery alert state" }
+    }
+
+    fun clearBatteryLowAlertMarker() {
+        preferences.edit().remove(KEY_BATTERY_LOW_ALERTED_OUTAGE).commit()
     }
 
     fun save(state: OutageEngine.State, snapshot: PowerSnapshot, observedAtEpochMs: Long) {
@@ -159,7 +192,9 @@ internal class MonitorStore(context: Context) {
         const val DEFAULT_RESTORE_DELAY_MS = 30_000L
         const val DEFAULT_DEVICE_NAME = "Grid monitor"
         const val DEFAULT_HISTORY_LIMIT = 200
+        const val DEFAULT_BATTERY_LOW_THRESHOLD = 20
         val HISTORY_LIMIT_RANGE = 10..1_000
+        val BATTERY_LOW_THRESHOLD_RANGE = 5..50
         private const val FILE_NAME = "monitor_state"
         private const val KEY_ENABLED = "monitoring_enabled"
         private const val KEY_SETUP_COMPLETED = "setup_completed"
@@ -170,6 +205,9 @@ internal class MonitorStore(context: Context) {
         private const val KEY_HISTORY_LIMIT = "history_limit"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_HELP_LEVEL = "help_level"
+        private const val KEY_BATTERY_LOW_ALERT_ENABLED = "battery_low_alert_enabled"
+        private const val KEY_BATTERY_LOW_ALERT_THRESHOLD = "battery_low_alert_threshold"
+        private const val KEY_BATTERY_LOW_ALERTED_OUTAGE = "battery_low_alerted_outage"
         private const val KEY_PHASE = "phase"
         private const val KEY_PHASE_SINCE = "phase_since"
         private const val KEY_OUTAGE_STARTED = "outage_started"

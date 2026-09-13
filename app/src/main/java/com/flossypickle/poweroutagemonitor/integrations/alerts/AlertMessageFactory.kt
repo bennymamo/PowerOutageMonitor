@@ -41,6 +41,26 @@ internal object AlertMessageFactory {
         }
     )
 
+    fun testBatteryLow(
+        settings: MonitorStore.Settings,
+        simulatedLostAtEpochMs: Long,
+        simulatedAtEpochMs: Long,
+        batteryPercent: Int = 20
+    ): AlertMessage = AlertMessage(
+        eventId = "test-battery-low-$simulatedAtEpochMs",
+        kind = AlertKind.TEST,
+        title = "TEST · MONITOR BATTERY LOW",
+        body = buildString {
+            appendLine("SIMULATION — the real device battery is unchanged.")
+            appendLine()
+            appendLine("Device: ${settings.deviceName}")
+            appendLine("Simulated power loss: ${formatTime(simulatedLostAtEpochMs)}")
+            appendLine("Simulated battery warning: ${formatTime(simulatedAtEpochMs)}")
+            appendLine("Battery: $batteryPercent%")
+            append("Test status: The grid outage is still active.")
+        }
+    )
+
     fun forTransition(
         before: OutageEngine.State,
         after: OutageEngine.State,
@@ -58,6 +78,38 @@ internal object AlertMessageFactory {
             return restored(before, snapshot, settings, nowEpochMs)
         }
         return null
+    }
+
+    fun batteryLowForObservation(
+        state: OutageEngine.State,
+        snapshot: PowerSnapshot,
+        settings: MonitorStore.Settings,
+        nowEpochMs: Long,
+        alertedOutageStartedEpochMs: Long?
+    ): AlertMessage? {
+        if (!BatteryLowAlertPolicy.shouldSend(
+                state = state,
+                externallyPowered = snapshot.externallyPowered,
+                batteryPercent = snapshot.batteryPercent,
+                enabled = settings.batteryLowAlertEnabled,
+                threshold = settings.batteryLowAlertThreshold,
+                alertedOutageStartedEpochMs = alertedOutageStartedEpochMs
+            )
+        ) return null
+
+        val lostAt = state.outageStartedEpochMs ?: return null
+        return AlertMessage(
+            eventId = eventId(lostAt),
+            kind = AlertKind.BATTERY_LOW,
+            title = "MONITOR BATTERY LOW",
+            body = buildString {
+                appendLine("Device: ${settings.deviceName}")
+                appendLine("Power lost: ${formatTime(lostAt)}")
+                appendLine("Battery warning: ${formatTime(nowEpochMs)}")
+                appendLine("Battery: ${snapshot.batteryPercent}%")
+                append("The grid outage is still active. This monitoring device may shut down soon.")
+            }
+        )
     }
 
     private fun outage(state: OutageEngine.State, settings: MonitorStore.Settings): AlertMessage {

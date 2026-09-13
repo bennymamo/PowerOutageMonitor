@@ -56,13 +56,37 @@ class AlertMessageFactoryTest {
     @Test
     fun `test messages are unmistakable and use independent ids`() {
         val outage = AlertMessageFactory.testOutage(settings(), 10_000L)
+        val batteryLow = AlertMessageFactory.testBatteryLow(settings(), 10_000L, 20_000L)
         val restored = AlertMessageFactory.testRestored(settings(), 10_000L, 25_000L)
 
         assertEquals(AlertKind.TEST, outage.kind)
+        assertEquals(AlertKind.TEST, batteryLow.kind)
         assertEquals(AlertKind.TEST, restored.kind)
         assertTrue(outage.title.startsWith("TEST"))
         assertTrue(restored.body.startsWith("SIMULATION"))
+        assertTrue(batteryLow.title.contains("BATTERY LOW"))
+        assertTrue(batteryLow.body.startsWith("SIMULATION"))
         assertTrue(outage.eventId != restored.eventId)
+    }
+
+    @Test
+    fun `low battery warning belongs to the active outage`() {
+        val outage = state(OutageEngine.Phase.OUTAGE, confirmedAt = 70_000L)
+        val message = AlertMessageFactory.batteryLowForObservation(
+            state = outage,
+            snapshot = snapshot(false).copy(batteryPercent = 20),
+            settings = settings().copy(
+                batteryLowAlertEnabled = true,
+                batteryLowAlertThreshold = 20
+            ),
+            nowEpochMs = 120_000L,
+            alertedOutageStartedEpochMs = null
+        )
+
+        assertEquals(AlertKind.BATTERY_LOW, message?.kind)
+        assertEquals("power-event-10000", message?.eventId)
+        assertTrue(message?.body?.contains("20%") == true)
+        assertTrue(message?.body?.contains("may shut down soon") == true)
     }
 
     private fun state(phase: OutageEngine.Phase, confirmedAt: Long?) = OutageEngine.State(

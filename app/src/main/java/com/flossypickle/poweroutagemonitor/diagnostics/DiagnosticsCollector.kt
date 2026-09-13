@@ -43,6 +43,7 @@ internal data class DiagnosticsReport(
     val sentDeliveries: Int = 0,
     val failedDeliveries: Int = 0,
     val lastDeliveryError: String? = null,
+    val batteryLowAlert: String = "Off",
     val audibleAlarmEnabled: Boolean = false,
     val audibleAlarmActive: Boolean = false,
     val audibleAlarmRepeatMinutes: Long = 5,
@@ -76,6 +77,7 @@ internal data class DiagnosticsReport(
         appendLine("Sent deliveries: $sentDeliveries")
         appendLine("Failed deliveries: $failedDeliveries")
         lastDeliveryError?.let { appendLine("Last delivery error: $it") }
+        appendLine("Low device-battery alert: $batteryLowAlert")
         appendLine("Audible alarm enabled: ${yesNo(audibleAlarmEnabled)}")
         appendLine("Audible alarm active: ${yesNo(audibleAlarmActive)}")
         appendLine("Audible repeat interval: ${formatMinutes(audibleAlarmRepeatMinutes)}")
@@ -150,6 +152,9 @@ internal class DiagnosticsCollector(private val context: Context) {
         sentDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.SENT },
         failedDeliveries = deliveries.count { it.status == AlertQueueEngine.Status.FAILED },
         lastDeliveryError = deliveries.asReversed().firstNotNullOfOrNull { it.lastError },
+        batteryLowAlert = if (settings.batteryLowAlertEnabled) {
+            "Once per outage at ${settings.batteryLowAlertThreshold}%"
+        } else "Off",
         audibleAlarmEnabled = audibleSettings.enabled,
         audibleAlarmActive = AudibleAlarmCoordinator(context).isActive(state, snapshot),
         audibleAlarmRepeatMinutes = audibleSettings.repeatIntervalMs / 60_000L,

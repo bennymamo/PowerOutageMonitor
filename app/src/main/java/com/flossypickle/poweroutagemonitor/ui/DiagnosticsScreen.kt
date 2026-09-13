@@ -129,6 +129,7 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Notifications", if (report.notificationsAllowed) "Allowed" else "Blocked")
             DiagnosticRow("Power source", report.configuredPowerProviders)
             DiagnosticRow("Alert channels", report.configuredAlertProviders)
+            DiagnosticRow("Low battery warning", report.batteryLowAlert)
             DiagnosticRow("Queued", report.queuedDeliveries.toString())
             DiagnosticRow("Waiting to retry", report.retryingDeliveries.toString())
             DiagnosticRow("Sent", report.sentDeliveries.toString())

@@ -63,6 +63,7 @@ private enum class SettingsSection(val title: String) {
     SETUP("Setup & testing"),
     ALERTS("Alert channels"),
     AUDIBLE("Audible alarm"),
+    BATTERY_ALERTS("Battery alerts"),
     DEVICE("Device"),
     OUTAGE("Outage timing"),
     RESTORATION("Restoration"),
@@ -82,6 +83,7 @@ internal fun SettingsScreen(
     onHistoryLimitChange: (Int) -> Unit,
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
     onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit,
+    onBatteryLowAlertChange: (Boolean, Int) -> Unit,
     audibleSettings: AudibleAlarmStore.Settings,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     audibleAlarmActive: Boolean,
@@ -156,6 +158,12 @@ internal fun SettingsScreen(
                         "On · repeats every ${formatCustomDelay(audibleSettings.repeatIntervalMs)}"
                     } else "Off"
                 ) { section = SettingsSection.AUDIBLE }
+                SettingsCategoryCard(
+                    "Battery alerts",
+                    if (settings.batteryLowAlertEnabled) {
+                        "Warn once per outage at ${settings.batteryLowAlertThreshold}%"
+                    } else "Off"
+                ) { section = SettingsSection.BATTERY_ALERTS }
                 SettingsCategoryCard("Device", "Name used in alerts") {
                     section = SettingsSection.DEVICE
                 }
@@ -409,6 +417,39 @@ internal fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
+            }
+
+            SettingsSection.BATTERY_ALERTS -> SettingsCard {
+                SettingSwitch(
+                    title = "Low battery during an outage",
+                    explanation = "Send one extra alert if this device's battery falls to the selected level while a confirmed grid outage is still active.",
+                    checked = settings.batteryLowAlertEnabled,
+                    onCheckedChange = {
+                        onBatteryLowAlertChange(it, settings.batteryLowAlertThreshold)
+                    }
+                )
+                Text(
+                    "This warning uses every enabled alert channel and is sent at most once for each outage, even after a reboot.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                if (settings.batteryLowAlertEnabled) {
+                    Text("Warn at", fontWeight = FontWeight.Medium)
+                    BATTERY_LOW_ALERT_THRESHOLDS.forEach { value ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                onBatteryLowAlertChange(true, value)
+                            }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = settings.batteryLowAlertThreshold == value,
+                                onClick = { onBatteryLowAlertChange(true, value) }
+                            )
+                            Text(if (value == 20) "$value% (recommended)" else "$value%")
+                        }
+                    }
+                }
             }
 
             SettingsSection.DEVICE -> SettingsCard {
@@ -832,6 +873,7 @@ private val AUDIBLE_REPEAT_INTERVALS = listOf(
 )
 
 private val AUDIBLE_BATTERY_LIMITS = listOf(10, 20, 30, 40)
+private val BATTERY_LOW_ALERT_THRESHOLDS = listOf(10, 15, 20, 25, 30)
 
 private fun openExactAlarmSettings(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return

@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     onHistoryLimitChange = ::updateHistoryLimit,
                     onThemeModeChange = ::updateThemeMode,
                     onHelpLevelChange = ::updateHelpLevel,
+                    onBatteryLowAlertChange = ::updateBatteryLowAlert,
                     onAudibleSettingsChange = ::updateAudibleSettings,
                     onDismissAudibleAlarm = ::dismissAudibleAlarm,
                     onTestAudibleAlarm = ::testAudibleAlarm,
@@ -278,6 +279,11 @@ class MainActivity : ComponentActivity() {
 
     private fun updateHelpLevel(level: MonitorStore.HelpLevel) {
         MonitorStore(this).setHelpLevel(level)
+        refreshStoredState()
+    }
+
+    private fun updateBatteryLowAlert(enabled: Boolean, threshold: Int) {
+        MonitorStore(this).setBatteryLowAlert(enabled, threshold)
         refreshStoredState()
     }
 

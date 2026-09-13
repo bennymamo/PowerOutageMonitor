@@ -32,7 +32,7 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessageFactory
 
-private enum class SimulationStage { READY, OUTAGE, RESTORED }
+private enum class SimulationStage { READY, OUTAGE, BATTERY_LOW, RESTORED }
 
 @Composable
 internal fun TestModeScreen(
@@ -44,6 +44,7 @@ internal fun TestModeScreen(
     var stage by rememberSaveable { mutableStateOf(SimulationStage.READY) }
     var lostAt by rememberSaveable { mutableLongStateOf(0L) }
     var restoredAt by rememberSaveable { mutableLongStateOf(0L) }
+    var batteryLowAt by rememberSaveable { mutableLongStateOf(0L) }
     var deliveryFeedback by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
@@ -76,11 +77,20 @@ internal fun TestModeScreen(
             ) { Text("Simulate confirmed outage") }
             OutlinedButton(
                 onClick = {
+                    batteryLowAt = System.currentTimeMillis()
+                    stage = SimulationStage.BATTERY_LOW
+                    deliveryFeedback = null
+                },
+                enabled = stage == SimulationStage.OUTAGE,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Simulate low monitor battery") }
+            OutlinedButton(
+                onClick = {
                     restoredAt = System.currentTimeMillis()
                     stage = SimulationStage.RESTORED
                     deliveryFeedback = null
                 },
-                enabled = stage == SimulationStage.OUTAGE,
+                enabled = stage == SimulationStage.OUTAGE || stage == SimulationStage.BATTERY_LOW,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Simulate restored power") }
             Text("Previewing is local. Use the separate send button below to exercise configured channels.",
@@ -94,6 +104,9 @@ internal fun TestModeScreen(
                 SimulationStage.READY -> Text("Run a simulation to preview an alert.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SimulationStage.OUTAGE -> AlertPreview(AlertMessageFactory.testOutage(settings, lostAt))
+                SimulationStage.BATTERY_LOW -> AlertPreview(
+                    AlertMessageFactory.testBatteryLow(settings, lostAt, batteryLowAt)
+                )
                 SimulationStage.RESTORED -> AlertPreview(
                     AlertMessageFactory.testRestored(settings, lostAt, restoredAt)
                 )
@@ -103,6 +116,11 @@ internal fun TestModeScreen(
         if (stage != SimulationStage.READY) {
             val message = when (stage) {
                 SimulationStage.OUTAGE -> AlertMessageFactory.testOutage(settings, lostAt)
+                SimulationStage.BATTERY_LOW -> AlertMessageFactory.testBatteryLow(
+                    settings,
+                    lostAt,
+                    batteryLowAt
+                )
                 SimulationStage.RESTORED -> AlertMessageFactory.testRestored(settings, lostAt, restoredAt)
                 SimulationStage.READY -> null
             }
@@ -129,6 +147,7 @@ internal fun TestModeScreen(
                     stage = SimulationStage.READY
                     lostAt = 0L
                     restoredAt = 0L
+                    batteryLowAt = 0L
                     deliveryFeedback = null
                 },
                 modifier = Modifier.fillMaxWidth()
