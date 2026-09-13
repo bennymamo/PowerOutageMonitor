@@ -146,7 +146,7 @@ internal class MonitorStore(context: Context) {
     companion object {
         const val DEFAULT_OUTAGE_DELAY_MS = 60_000L
         const val DEFAULT_RESTORE_DELAY_MS = 30_000L
-        const val DEFAULT_DEVICE_NAME = "Power monitor"
+        const val DEFAULT_DEVICE_NAME = "Grid monitor"
         const val DEFAULT_HISTORY_LIMIT = 200
         val HISTORY_LIMIT_RANGE = 10..1_000
         private const val FILE_NAME = "monitor_state"

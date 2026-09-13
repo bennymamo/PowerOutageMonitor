@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
     )
     private var audibleSettings = androidx.compose.runtime.mutableStateOf(AudibleAlarmStore.Settings())
     private var audibleAlarmActive = androidx.compose.runtime.mutableStateOf(false)
+    private var exactAlarmAccessGranted = androidx.compose.runtime.mutableStateOf(true)
     private var lastObservationEpochMs = androidx.compose.runtime.mutableLongStateOf(0)
     private var deliveryWarning = androidx.compose.runtime.mutableStateOf<String?>(null)
     private var alertChannels = androidx.compose.runtime.mutableStateOf("None configured")
@@ -110,6 +111,7 @@ class MainActivity : ComponentActivity() {
                     operationalHistory = operationalHistory.value,
                     audibleSettings = audibleSettings.value,
                     audibleAlarmActive = audibleAlarmActive.value,
+                    exactAlarmAccessGranted = exactAlarmAccessGranted.value,
                     lastObservationEpochMs = lastObservationEpochMs.longValue,
                     deliveryWarning = deliveryWarning.value,
                     alertChannels = alertChannels.value,
@@ -163,6 +165,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         systemHealthMonitor.refresh()
+        val store = MonitorStore(this)
+        AudibleAlarmCoordinator(this).reconcile(store.state(), store.lastSnapshot())
+        refreshStoredState()
     }
 
     private fun registerAppReceiver() {
@@ -279,7 +284,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun testAudibleAlarm() {
-        AudibleAlarmPlayer(this).play(audibleSettings.value.useMaximumVolume)
+        val audible = audibleSettings.value
+        AudibleAlarmPlayer(this).play(audible.useMaximumVolume, audible.soundUri)
     }
 
     private fun clearHistory() {
@@ -303,6 +309,7 @@ class MainActivity : ComponentActivity() {
             monitorState.value,
             store.lastSnapshot()
         )
+        exactAlarmAccessGranted.value = AudibleAlarmCoordinator(this).exactAccessGranted()
         val deliveries = AlertQueueStore(this).read()
         deliverySummaries.value = AlertDeliverySummary.byEvent(deliveries)
         alertChannels.value = AlertProviderRegistry(this).statusSummary()

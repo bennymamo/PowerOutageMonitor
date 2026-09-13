@@ -1,9 +1,15 @@
 package com.flossypickle.poweroutagemonitor.ui
 
 import androidx.activity.compose.BackHandler
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +42,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,6 +79,7 @@ internal fun SettingsScreen(
     audibleSettings: AudibleAlarmStore.Settings,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     audibleAlarmActive: Boolean,
+    exactAlarmAccessGranted: Boolean,
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
     onClearHistory: () -> Unit,
@@ -87,8 +95,20 @@ internal fun SettingsScreen(
     var deviceName by remember { mutableStateOf(settings.deviceName) }
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
     val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
-    val telegramConfig = TelegramConfigStore(LocalContext.current).config()
+    val context = LocalContext.current
+    val telegramConfig = TelegramConfigStore(context).config()
     var confirmClearHistory by remember { mutableStateOf(false) }
+    val soundPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            pickedRingtoneUri(result.data)?.let { selected ->
+                onAudibleSettingsChange(
+                    audibleSettings.copy(soundUri = selected.toString())
+                )
+            }
+        }
+    }
 
     SettingsPage(
         title = section.title,
@@ -194,7 +214,45 @@ internal fun SettingsScreen(
                 OutlinedButton(
                     onClick = onTestAudibleAlarm,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Play one test beep") }
+                ) { Text("Play one test sound") }
+                Text("Sound", fontWeight = FontWeight.Medium)
+                SettingText(
+                    "Selected",
+                    audibleSettings.soundUri?.let { ringtoneTitle(context, it) }
+                        ?: "Built-in beep"
+                )
+                OutlinedButton(
+                    onClick = {
+                        soundPicker.launch(
+                            Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                                .putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                    RingtoneManager.TYPE_ALARM
+                                )
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                .putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                                    audibleSettings.soundUri?.let(Uri::parse)
+                                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                                )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Choose Android alarm sound") }
+                if (audibleSettings.soundUri != null) {
+                    TextButton(
+                        onClick = {
+                            onAudibleSettingsChange(audibleSettings.copy(soundUri = null))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Use built-in beep") }
+                }
+                Text(
+                    "If the selected sound cannot be opened, FP Grid Monitor uses its built-in beep.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
                 Text("Repeat interval", fontWeight = FontWeight.Medium)
                 AUDIBLE_REPEAT_INTERVALS.forEach { (value, label) ->
                     Row(
@@ -215,6 +273,48 @@ internal fun SettingsScreen(
                         )
                         Text(label)
                     }
+                }
+                Text("Repeat timing", fontWeight = FontWeight.Medium)
+                Text(
+                    "Best effort saves battery but Android may delay a repeat while the phone is deeply idle. Exact asks Android to keep the selected timing.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
+                )
+                AudibleAlarmStore.ScheduleMode.entries.forEach { mode ->
+                    val label = when (mode) {
+                        AudibleAlarmStore.ScheduleMode.BEST_EFFORT ->
+                            "Best effort (recommended)"
+                        AudibleAlarmStore.ScheduleMode.EXACT -> "Exact"
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            onAudibleSettingsChange(audibleSettings.copy(scheduleMode = mode))
+                        }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = audibleSettings.scheduleMode == mode,
+                            onClick = {
+                                onAudibleSettingsChange(
+                                    audibleSettings.copy(scheduleMode = mode)
+                                )
+                            }
+                        )
+                        Text(label)
+                    }
+                }
+                if (audibleSettings.scheduleMode == AudibleAlarmStore.ScheduleMode.EXACT &&
+                    !exactAlarmAccessGranted
+                ) {
+                    Text(
+                        "Android has not allowed exact alarms yet. Repeats will use best effort until you allow Alarms & reminders.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    OutlinedButton(
+                        onClick = { openExactAlarmSettings(context) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Allow exact alarms") }
                 }
                 Text("Protect the device battery", fontWeight = FontWeight.Medium)
                 Text(
@@ -251,7 +351,7 @@ internal fun SettingsScreen(
                     }
                 )
                 Text(
-                    "The alarm stops when power returns, monitoring is disabled, the battery limit is reached, or you dismiss it. Android may delay repeats while the device is deeply idle.",
+                    "The alarm stops when power returns, monitoring is disabled, the battery limit is reached, or you dismiss it.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
@@ -636,3 +736,28 @@ private val AUDIBLE_REPEAT_INTERVALS = listOf(
 )
 
 private val AUDIBLE_BATTERY_LIMITS = listOf(10, 20, 30, 40)
+
+private fun openExactAlarmSettings(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    val primary = Intent(
+        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+        Uri.parse("package:${context.packageName}")
+    )
+    val fallback = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.parse("package:${context.packageName}")
+    )
+    runCatching { context.startActivity(primary) }
+        .recoverCatching { context.startActivity(fallback) }
+}
+
+@Suppress("DEPRECATION")
+private fun pickedRingtoneUri(intent: Intent?): Uri? = if (Build.VERSION.SDK_INT >= 33) {
+    intent?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+} else {
+    intent?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+}
+
+private fun ringtoneTitle(context: Context, uri: String): String = runCatching {
+    RingtoneManager.getRingtone(context, Uri.parse(uri))?.getTitle(context)
+}.getOrNull()?.takeIf(String::isNotBlank) ?: "Android alarm sound"

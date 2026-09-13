@@ -194,6 +194,14 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Enabled", yesNo(report.audibleAlarmEnabled))
             DiagnosticRow("Currently sounding", yesNo(report.audibleAlarmActive))
             DiagnosticRow("Repeat interval", formatMinutes(report.audibleAlarmRepeatMinutes))
+            DiagnosticRow("Repeat timing", report.audibleAlarmScheduleMode)
+            DiagnosticRow("Sound", report.audibleAlarmSound)
+            if (report.audibleAlarmScheduleMode == "Exact") {
+                DiagnosticRow(
+                    "Exact alarm access",
+                    if (report.exactAlarmAccessGranted) "Allowed" else "Using best effort"
+                )
+            }
         }
 
         Text(guidance.title, style = MaterialTheme.typography.titleMedium,
@@ -219,7 +227,7 @@ internal fun DiagnosticsScreen(
             OutlinedButton(
                 onClick = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Power monitor diagnostics", report.asPlainText()))
+                    clipboard.setPrimaryClip(ClipData.newPlainText("FP Grid Monitor diagnostics", report.asPlainText()))
                     Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f)

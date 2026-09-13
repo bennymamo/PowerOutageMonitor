@@ -6,18 +6,36 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 
-/** Schedules a best-effort wake-up for the next user-configured repeat. */
+/** Schedules the next alarm repeat, safely falling back when exact access is unavailable. */
 internal class AudibleAlarmScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
 
-    fun schedule(atEpochMs: Long) {
+    fun schedule(atEpochMs: Long, mode: AudibleAlarmStore.ScheduleMode) {
         val operation = operation()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (AudibleAlarmSchedulePolicy.useExact(
+                exactRequested = mode == AudibleAlarmStore.ScheduleMode.EXACT,
+                sdkInt = Build.VERSION.SDK_INT,
+                exactAccessGranted = exactAccessGranted()
+            )
+        ) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    atEpochMs,
+                    operation
+                )
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, atEpochMs, operation)
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atEpochMs, operation)
         } else {
             alarmManager.set(AlarmManager.RTC_WAKEUP, atEpochMs, operation)
         }
     }
+
+    fun exactAccessGranted(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
 
     fun cancel() = alarmManager.cancel(operation())
 
@@ -35,4 +53,9 @@ internal class AudibleAlarmScheduler(private val context: Context) {
             "com.flossypickle.poweroutagemonitor.DISMISS_AUDIBLE_ALARM"
         private const val REQUEST_CODE = 4102
     }
+}
+
+internal object AudibleAlarmSchedulePolicy {
+    fun useExact(exactRequested: Boolean, sdkInt: Int, exactAccessGranted: Boolean): Boolean =
+        exactRequested && (sdkInt < Build.VERSION_CODES.S || exactAccessGranted)
 }

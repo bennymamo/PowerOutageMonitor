@@ -1,4 +1,4 @@
-# Power Outage Monitor
+# FP Grid Monitor
 
 An Android power-outage monitor by Flossy Pickle. Package: `com.flossypickle.poweroutagemonitor`.
 
@@ -22,6 +22,7 @@ Android 6.0 (API 23) minimum; compile/target API 37. Kotlin and Jetpack Compose,
 - Support boot recovery before first unlock using device-protected monitoring state; keep credentials separate.
 - Store Telegram bot tokens with a non-exportable Android Keystore key and exclude credentials and destinations from backup and device transfer.
 - No cloud backend, analytics or advertising.
+- Publish the first installable builds as directly downloadable APKs through GitHub Releases.
 
 Implemented transitions: waiting for connection -> powered -> pending outage -> confirmed outage -> pending restoration -> powered. Early restoration cancels a pending outage. Disconnection during pending restoration continues the same outage. Unknown readings never imply a power loss.
 
@@ -47,7 +48,7 @@ Implemented transitions: waiting for connection -> powered -> pending outage -> 
 - Outage and restoration delays provide common one-tap presets plus a validated custom value from 0 seconds to 24 hours.
 - Settings opens as a clean category list; device, timing, restoration, appearance, reliability, history, safety, about, testing and alert controls each have a focused subpage.
 - Appearance supports System, Dark and Light themes. System is the default and follows the device setting.
-- Audible alarm settings are isolated in their own category. The alarm is off by default, starts only for confirmed outages, repeats at a chosen interval, can temporarily use maximum alarm volume, stops at a chosen battery level, and can be dismissed from the dashboard or monitoring notification.
+- Audible alarm settings are isolated in their own category. The alarm is off by default, starts only for confirmed outages, repeats at a chosen interval, can use the built-in beep or an Android alarm sound, can temporarily use maximum alarm volume, stops at a chosen battery level, and can be dismissed from the dashboard or monitoring notification. Repeat scheduling can be Best effort or Exact; Exact falls back safely until Android grants Alarms & reminders access.
 - `SetupWizardScreen` is shown only on a true fresh install. Existing installs migrate past it, and every choice remains editable in Settings.
 
 The app remains one Gradle module for a fast, lightweight build. Package contracts allow later extraction into separate Gradle modules without coupling the state machine to Android or any provider.
@@ -60,9 +61,9 @@ Open this existing directory in Android Studio and use its bundled JDK. From Pow
 .\gradlew.bat assembleDebug testDebugUnitTest lintDebug
 ```
 
-Permissions are limited to foreground service operation, notification display, restart after boot, network-state detection, alarm-volume adjustment and internet access for user-configured alert providers. The app transmits a message only when the user explicitly tests or enables an alert channel. Power loss indicates charger disconnection rather than independently verified mains failure.
+Permissions are limited to foreground service operation, notification display, restart after boot, network-state detection, alarm-volume adjustment, optional exact alarm scheduling and internet access for user-configured alert providers. The app transmits a message only when the user explicitly tests or enables an alert channel. Power loss indicates charger disconnection rather than independently verified mains failure.
 
-A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. Android can delay this inexact alarm under Doze; exact-alarm special access is deliberately not requested.
+A standalone outage-rule engine is connected through a coordinator that persists every observation and transition. In-process deadlines are backed by an idle-aware AlarmManager wake-up. The core outage-confirmation deadline remains best effort. Audible repeats can use best-effort scheduling or user-selected exact scheduling; on Android 12 and newer the settings page explains and opens the required Alarms & reminders access screen.
 
 While monitoring is enabled, the foreground service listens dynamically for `ACTION_BATTERY_CHANGED`, `ACTION_POWER_CONNECTED` and `ACTION_POWER_DISCONNECTED`. The explicit connection events trigger a fresh read of Android's sticky battery snapshot; their intentionally sparse payload is never interpreted as a power state. This adds prompt vendor-independent event signals without polling or a manifest receiver that would depend on implicit-broadcast background behavior.
 
@@ -72,7 +73,7 @@ The dark theme uses navy surfaces with mint online-power and amber caution indic
 
 ## Validation
 
-Debug build, 35 unit tests and Android lint passed on 11 September 2026. API 36 emulator checks verified the grid-first light and dark dashboards, launcher graphic, grouped Settings UI, System/Dark/Light selection, Android Back behavior, combined grid/operational History UI, live Diagnostics, simulated alert preview and the separate Telegram setup flow. Test mode showed its explicit provider-send action and correct no-provider guidance while leaving the real state, history and queue unchanged. An end-to-end simulated device event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app; an in-place APK upgrade verified the same behavior through `MY_PACKAGE_REPLACED`. The monitoring notification remained silent, non-vibrating, low priority and ongoing. Android 6.0 and physical-device behavior are not yet verified.
+Debug build, 39 unit tests and Android lint passed on 12 September 2026. API 36 emulator checks verified the grid-first light and dark dashboards, launcher graphic, FP Grid Monitor app label, grouped Settings UI, System/Dark/Light selection, Android Back behavior, combined grid/operational History UI, live Diagnostics, simulated alert preview and the separate Telegram setup flow. The Audible alarm page was checked at phone width, Android's installed-sound picker opened correctly, and selecting Exact timing showed its best-effort fallback plus the Alarms & reminders shortcut while access was unavailable. Test mode showed its explicit provider-send action and correct no-provider guidance while leaving the real state, history and queue unchanged. An end-to-end simulated device event waited for the first AC connection, armed, persisted a pending loss, fired its AlarmManager deadline, confirmed the outage after 10 seconds, confirmed stable restoration after 30 seconds, and stored the completed record with battery levels. A full emulator reboot verified that `LOCKED_BOOT_COMPLETED` restarted the foreground service from device-protected state without opening the app; an in-place APK upgrade verified the same behavior through `MY_PACKAGE_REPLACED`. The monitoring notification remained silent, non-vibrating, low priority and ongoing. Android 6.0 and physical-device behavior are not yet verified.
 
 An audible-alarm emulator run temporarily enabled immediate outage confirmation. AC loss produced a confirmed outage, played one alarm tone, scheduled the next repeat, and exposed dismissal on both the dashboard and ongoing notification. Dismissal removed both controls and canceled the repeat; AC power, the 60-second delay and the default-off alarm state were restored. A separate test beep temporarily raised the alarm stream and returned it to its original volume. Do Not Disturb behavior and real-speaker loudness still require physical-device checks.
 
@@ -102,4 +103,6 @@ The delivery queue allows one item per event, alert kind, provider and destinati
 
 An alert captured before the first unlock is retained if a provider is still marked enabled but its credential-protected destination is temporarily unavailable. Saving a repaired Telegram configuration immediately materializes that retained event into the durable delivery queue.
 
-Current Android, Google Play, SMS and unattended-email trade-offs are documented in [Alert channel options](docs/alert-channel-options.md). The next provider remains a product decision because it affects permissions, distribution and credential setup.
+Current Android, Google Play, SMS and unattended-email trade-offs are documented in [Alert channel options](docs/alert-channel-options.md). Email is the selected next channel; a Resend HTTPS adapter is recommended because it needs no SMTP library or interactive login after its one-time account, API-key and domain setup.
+
+Initial distribution is through GitHub Releases. The signing and release checklist is documented in [Direct APK releases](docs/direct-apk-releases.md); a public artifact is intentionally deferred until the long-lived release signing key is created and backed up.

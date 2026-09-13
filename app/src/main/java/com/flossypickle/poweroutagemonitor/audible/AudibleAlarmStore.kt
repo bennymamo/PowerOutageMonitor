@@ -10,11 +10,18 @@ internal class AudibleAlarmStore(context: Context) {
     } else context.applicationContext
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
+    enum class ScheduleMode {
+        BEST_EFFORT,
+        EXACT
+    }
+
     data class Settings(
         val enabled: Boolean = false,
         val repeatIntervalMs: Long = DEFAULT_REPEAT_INTERVAL_MS,
         val stopBatteryPercent: Int = DEFAULT_STOP_BATTERY_PERCENT,
-        val useMaximumVolume: Boolean = true
+        val useMaximumVolume: Boolean = true,
+        val scheduleMode: ScheduleMode = ScheduleMode.BEST_EFFORT,
+        val soundUri: String? = null
     )
 
     fun settings() = Settings(
@@ -25,7 +32,14 @@ internal class AudibleAlarmStore(context: Context) {
             KEY_STOP_BATTERY_PERCENT,
             DEFAULT_STOP_BATTERY_PERCENT
         ).coerceIn(1, 99),
-        useMaximumVolume = preferences.getBoolean(KEY_MAXIMUM_VOLUME, true)
+        useMaximumVolume = preferences.getBoolean(KEY_MAXIMUM_VOLUME, true),
+        scheduleMode = runCatching {
+            ScheduleMode.valueOf(
+                preferences.getString(KEY_SCHEDULE_MODE, null)
+                    ?: ScheduleMode.BEST_EFFORT.name
+            )
+        }.getOrDefault(ScheduleMode.BEST_EFFORT),
+        soundUri = preferences.getString(KEY_SOUND_URI, null)
     )
 
     fun updateSettings(settings: Settings) {
@@ -36,6 +50,8 @@ internal class AudibleAlarmStore(context: Context) {
             .putLong(KEY_REPEAT_INTERVAL, settings.repeatIntervalMs)
             .putInt(KEY_STOP_BATTERY_PERCENT, settings.stopBatteryPercent)
             .putBoolean(KEY_MAXIMUM_VOLUME, settings.useMaximumVolume)
+            .putString(KEY_SCHEDULE_MODE, settings.scheduleMode.name)
+            .putString(KEY_SOUND_URI, settings.soundUri)
             .commit()) { "Unable to persist audible alarm settings" }
     }
 
@@ -68,6 +84,8 @@ internal class AudibleAlarmStore(context: Context) {
         private const val KEY_REPEAT_INTERVAL = "repeat_interval_ms"
         private const val KEY_STOP_BATTERY_PERCENT = "stop_battery_percent"
         private const val KEY_MAXIMUM_VOLUME = "maximum_volume"
+        private const val KEY_SCHEDULE_MODE = "schedule_mode"
+        private const val KEY_SOUND_URI = "sound_uri"
         private const val KEY_ACTIVE_OUTAGE = "active_outage"
         private const val KEY_DISMISSED_OUTAGE = "dismissed_outage"
         private const val KEY_LAST_PLAYED = "last_played"

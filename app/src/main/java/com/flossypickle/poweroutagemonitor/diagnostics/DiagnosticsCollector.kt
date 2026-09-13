@@ -42,11 +42,14 @@ internal data class DiagnosticsReport(
     val audibleAlarmEnabled: Boolean = false,
     val audibleAlarmActive: Boolean = false,
     val audibleAlarmRepeatMinutes: Long = 5,
+    val audibleAlarmScheduleMode: String = "Best effort",
+    val exactAlarmAccessGranted: Boolean = true,
+    val audibleAlarmSound: String = "Built-in beep",
     val operationalInterruptions: Int = 0,
     val lastOperationalInterruption: String? = null
 ) {
     fun asPlainText(): String = buildString {
-        appendLine("Power Outage Monitor diagnostics")
+        appendLine("FP Grid Monitor diagnostics")
         appendLine("App version: $appVersion")
         appendLine("Android: $androidVersion")
         appendLine("Device: $device")
@@ -72,6 +75,9 @@ internal data class DiagnosticsReport(
         appendLine("Audible alarm enabled: ${yesNo(audibleAlarmEnabled)}")
         appendLine("Audible alarm active: ${yesNo(audibleAlarmActive)}")
         appendLine("Audible repeat interval: ${formatMinutes(audibleAlarmRepeatMinutes)}")
+        appendLine("Audible repeat timing: $audibleAlarmScheduleMode")
+        appendLine("Exact alarm access: ${yesNo(exactAlarmAccessGranted)}")
+        appendLine("Audible sound: $audibleAlarmSound")
         appendLine("Unrecorded operational interruptions: $operationalInterruptions")
         lastOperationalInterruption?.let {
             appendLine("Last unrecorded interruption: $it")
@@ -132,6 +138,14 @@ internal class DiagnosticsCollector(private val context: Context) {
         audibleAlarmEnabled = audibleSettings.enabled,
         audibleAlarmActive = AudibleAlarmCoordinator(context).isActive(state, snapshot),
         audibleAlarmRepeatMinutes = audibleSettings.repeatIntervalMs / 60_000L,
+        audibleAlarmScheduleMode = audibleSettings.scheduleMode.name.lowercase()
+            .replace('_', ' ').replaceFirstChar(Char::titlecase),
+        exactAlarmAccessGranted = AudibleAlarmCoordinator(context).exactAccessGranted(),
+        audibleAlarmSound = if (audibleSettings.soundUri == null) {
+            "Built-in beep"
+        } else {
+            "Android alarm sound"
+        },
         operationalInterruptions = operationalInterruptions.size,
         lastOperationalInterruption = operationalInterruptions.maxByOrNull {
             it.timestampEpochMs

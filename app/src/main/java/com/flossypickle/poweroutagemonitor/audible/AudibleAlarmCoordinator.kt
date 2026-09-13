@@ -32,8 +32,11 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
             scheduledTick = scheduledTick
         )
         alarmStore.saveRuntime(decision.runtime)
-        decision.nextAlarmAtEpochMs?.let(scheduler::schedule) ?: scheduler.cancel()
-        if (decision.playNow) AudibleAlarmPlayer(context).play(settings.useMaximumVolume)
+        decision.nextAlarmAtEpochMs?.let { scheduler.schedule(it, settings.scheduleMode) }
+            ?: scheduler.cancel()
+        if (decision.playNow) {
+            AudibleAlarmPlayer(context).play(settings.useMaximumVolume, settings.soundUri)
+        }
     }
 
     fun dismissCurrent() {
@@ -66,6 +69,8 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
             runtime.dismissedOutageId != outageId &&
             snapshot?.batteryPercent?.let { it > settings.stopBatteryPercent } != false
     }
+
+    fun exactAccessGranted(): Boolean = scheduler.exactAccessGranted()
 
     private fun broadcastChange() {
         context.sendBroadcast(
