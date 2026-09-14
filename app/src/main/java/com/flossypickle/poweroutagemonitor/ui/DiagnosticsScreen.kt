@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,6 +70,24 @@ internal fun DiagnosticsScreen(
         report = collector.collect(settings, state, snapshot, lastObservationEpochMs)
     }
     val guidance = remember { DeviceGuidance.forManufacturer(Build.MANUFACTURER) }
+    val exportReport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri, "w")?.bufferedWriter()?.use {
+                    it.write(report.asPlainText())
+                } ?: error("The selected file could not be opened.")
+            }.fold(
+                onSuccess = {
+                    Toast.makeText(context, "Diagnostics exported", Toast.LENGTH_SHORT).show()
+                },
+                onFailure = {
+                    Toast.makeText(context, "Diagnostics could not be exported", Toast.LENGTH_LONG).show()
+                }
+            )
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
@@ -205,6 +225,20 @@ internal fun DiagnosticsScreen(
             }
         }
 
+        Text("Recovery backups", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary)
+        DiagnosticCard {
+            DiagnosticRow("Automatic backups", yesNo(report.automaticBackupEnabled))
+            DiagnosticRow("Destination", report.automaticBackupDestination)
+            DiagnosticRow("Frequency", report.automaticBackupFrequency)
+            DiagnosticRow("Copies kept", report.automaticBackupRetainedCopies.toString())
+            DiagnosticRow("Last success", report.lastBackupSuccess)
+            report.lastBackupError?.let {
+                Text("Last backup error: $it", color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp)
+            }
+        }
+
         Text(guidance.title, style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         DiagnosticCard {
@@ -234,8 +268,16 @@ internal fun DiagnosticsScreen(
                 modifier = Modifier.weight(1f)
             ) { Text("Copy report") }
         }
+        OutlinedButton(
+            onClick = { exportReport.launch(diagnosticsFileName()) },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Export report as text file") }
     }
 }
+
+private fun diagnosticsFileName(): String = "fp-grid-monitor-diagnostics-${
+    java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+}.txt"
 
 @Composable
 private fun DiagnosticCard(

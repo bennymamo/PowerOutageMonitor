@@ -18,6 +18,7 @@ import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.configuration.BackupScheduleStore
 import java.text.DateFormat
 import java.util.Date
 
@@ -52,7 +53,13 @@ internal data class DiagnosticsReport(
     val exactAlarmAccessGranted: Boolean = true,
     val audibleAlarmSound: String = "Built-in beep",
     val operationalInterruptions: Int = 0,
-    val lastOperationalInterruption: String? = null
+    val lastOperationalInterruption: String? = null,
+    val automaticBackupEnabled: Boolean = false,
+    val automaticBackupDestination: String = "Not connected",
+    val automaticBackupFrequency: String = "Off",
+    val automaticBackupRetainedCopies: Int = 0,
+    val lastBackupSuccess: String = "Never",
+    val lastBackupError: String? = null
 ) {
     fun asPlainText(): String = buildString {
         appendLine("FP Grid Monitor diagnostics")
@@ -89,6 +96,12 @@ internal data class DiagnosticsReport(
         lastOperationalInterruption?.let {
             appendLine("Last unrecorded interruption: $it")
         }
+        appendLine("Automatic backups enabled: ${yesNo(automaticBackupEnabled)}")
+        appendLine("Backup destination: $automaticBackupDestination")
+        appendLine("Backup frequency: $automaticBackupFrequency")
+        appendLine("Backup copies retained: $automaticBackupRetainedCopies")
+        appendLine("Last successful backup: $lastBackupSuccess")
+        lastBackupError?.let { appendLine("Last backup error: $it") }
     }
 
     private fun yesNo(value: Boolean) = if (value) "Yes" else "No"
@@ -113,6 +126,9 @@ internal class DiagnosticsCollector(private val context: Context) {
         val audibleSettings = AudibleAlarmStore(context).settings()
         val powerSourceStore = PowerSourceStore(context)
         val powerSourceStatus = powerSourceStore.lastStatus()
+        val backupStore = BackupScheduleStore(context)
+        val backupSettings = backupStore.settings()
+        val backupStatus = backupStore.status()
         val operationalInterruptions = OperationalHistoryStore(context).read().filter {
             it.kind == OperationalHistoryStore.KIND_APP_RECOVERED ||
                 it.kind == OperationalHistoryStore.KIND_MONITORING_RECOVERED
@@ -188,7 +204,21 @@ internal class DiagnosticsCollector(private val context: Context) {
             it.timestampEpochMs
         }?.let {
             DateFormat.getDateTimeInstance().format(Date(it.timestampEpochMs))
-        }
+        },
+        automaticBackupEnabled = backupSettings.enabled,
+        automaticBackupDestination = backupSettings.folderLabel ?: "Not connected",
+        automaticBackupFrequency = if (backupSettings.enabled) {
+            when (backupSettings.intervalHours) {
+                24L -> "Every day"
+                168L -> "Every 7 days"
+                else -> "Every ${backupSettings.intervalHours} hours"
+            }
+        } else "Off",
+        automaticBackupRetainedCopies = backupSettings.retainedCopies,
+        lastBackupSuccess = backupStatus.lastSuccessAtEpochMs?.let {
+            DateFormat.getDateTimeInstance().format(Date(it))
+        } ?: "Never",
+        lastBackupError = backupStatus.lastError
         )
     }
 
