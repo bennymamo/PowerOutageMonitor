@@ -170,6 +170,8 @@ Using an alert provider is also subject to that provider's privacy policy and ne
 
 Android and phone manufacturers ultimately control background execution. FP Grid Monitor uses a foreground service, event-driven Android power signals, persisted deadlines, reboot recovery, and a durable alert queue, but no Android app can promise uninterrupted operation on every device.
 
+Do not use Android's **Force stop** button for routine closing. Force stop deliberately prevents an app from starting itself, removes its alarms and notifications, and stops boot recovery until Android considers the app started again. Open FP Grid Monitor after a force stop and confirm that monitoring is active.
+
 Before relying on it:
 
 - Send a test through every enabled alert channel.

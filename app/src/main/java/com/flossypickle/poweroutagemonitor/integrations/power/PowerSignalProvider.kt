@@ -10,6 +10,59 @@ internal data class PowerSignal(
 
 internal enum class GridAvailability { AVAILABLE, UNAVAILABLE, UNKNOWN }
 
+internal enum class PowerSignalHealth {
+    FRESH,
+    MISSING,
+    PROVIDER_UNKNOWN,
+    STALE,
+    INVALID_TIMESTAMP
+}
+
+internal data class EvaluatedPowerSignal(
+    val availability: GridAvailability,
+    val health: PowerSignalHealth,
+    val signal: PowerSignal?
+)
+
+/**
+ * Safety boundary shared by every present and future grid source.
+ *
+ * A provider timeout, an old cloud value, or a malformed clock must become
+ * UNKNOWN. Only fresh evidence is allowed to enter the outage state machine.
+ */
+internal object PowerSignalPolicy {
+    const val DEFAULT_FUTURE_TOLERANCE_MS = 30_000L
+
+    fun evaluate(
+        signal: PowerSignal?,
+        nowEpochMs: Long,
+        staleAfterMs: Long,
+        futureToleranceMs: Long = DEFAULT_FUTURE_TOLERANCE_MS
+    ): EvaluatedPowerSignal {
+        require(staleAfterMs >= 0)
+        require(futureToleranceMs >= 0)
+
+        val health = when {
+            signal == null -> PowerSignalHealth.MISSING
+            signal.availability == GridAvailability.UNKNOWN -> PowerSignalHealth.PROVIDER_UNKNOWN
+            signal.observedAtEpochMs <= 0L ||
+                signal.observedAtEpochMs > nowEpochMs + futureToleranceMs ->
+                PowerSignalHealth.INVALID_TIMESTAMP
+            nowEpochMs - signal.observedAtEpochMs > staleAfterMs -> PowerSignalHealth.STALE
+            else -> PowerSignalHealth.FRESH
+        }
+        return EvaluatedPowerSignal(
+            availability = if (health == PowerSignalHealth.FRESH) {
+                signal!!.availability
+            } else {
+                GridAvailability.UNKNOWN
+            },
+            health = health,
+            signal = signal
+        )
+    }
+}
+
 /**
  * Implementations may be event-driven (Android, WebSocket, MQTT) or perform a
  * one-shot refresh (REST/SNMP). They never decide whether an outage is confirmed.
