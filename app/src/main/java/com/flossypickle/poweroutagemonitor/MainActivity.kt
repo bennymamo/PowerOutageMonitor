@@ -30,6 +30,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertProviderRegistry
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
@@ -57,6 +58,10 @@ class MainActivity : ComponentActivity() {
     private var hasEnabledAlertChannel = androidx.compose.runtime.mutableStateOf(false)
     private var hasSentTestAlert = androidx.compose.runtime.mutableStateOf(false)
     private var systemHealth = androidx.compose.runtime.mutableStateOf(SystemHealthSnapshot())
+    private var selectedPowerSource = androidx.compose.runtime.mutableStateOf(
+        PowerSourceStore.Source.ANDROID_CHARGER
+    )
+    private var powerSourceStatus = androidx.compose.runtime.mutableStateOf<PowerSourceStore.Status?>(null)
     private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
         emptyMap<String, AlertDeliverySummary.Event>()
     )
@@ -128,6 +133,8 @@ class MainActivity : ComponentActivity() {
                     hasEnabledAlertChannel = hasEnabledAlertChannel.value,
                     hasSentTestAlert = hasSentTestAlert.value,
                     systemHealth = systemHealth.value,
+                    selectedPowerSource = selectedPowerSource.value,
+                    powerSourceStatus = powerSourceStatus.value,
                     deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
                     onSettingsChange = ::updateSettings,
@@ -141,6 +148,7 @@ class MainActivity : ComponentActivity() {
                     onAudibleSettingsChange = ::updateAudibleSettings,
                     onDismissAudibleAlarm = ::dismissAudibleAlarm,
                     onTestAudibleAlarm = ::testAudibleAlarm,
+                    onPowerSourceChanged = ::powerSourceChanged,
                     onClearHistory = ::clearHistory,
                     onSendTestAlert = ::sendTestAlert,
                     onAlertConfigurationChanged = ::refreshStoredState
@@ -331,6 +339,11 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun powerSourceChanged() {
+        MonitoringService.reloadPowerSource(this)
+        refreshStoredState()
+    }
+
     private fun clearHistory() {
         EventHistoryStore(this).clear()
         OperationalHistoryStore(this).clear()
@@ -342,8 +355,11 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshStoredState() {
         val store = MonitorStore(this)
+        val sourceStore = PowerSourceStore(this)
         monitorState.value = store.state()
         settings.value = store.settings()
+        selectedPowerSource.value = sourceStore.selectedSource()
+        powerSourceStatus.value = sourceStore.lastStatus()
         lastObservationEpochMs.longValue = store.lastObservationEpochMs()
         history.value = EventHistoryStore(this).read()
         operationalHistory.value = OperationalHistoryStore(this).read()

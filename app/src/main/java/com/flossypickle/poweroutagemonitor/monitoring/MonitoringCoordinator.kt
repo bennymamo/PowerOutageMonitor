@@ -18,14 +18,18 @@ internal class MonitoringCoordinator(private val context: Context) {
     private val audibleAlarm = AudibleAlarmCoordinator(context)
 
     @Synchronized
-    fun process(snapshot: PowerSnapshot, nowEpochMs: Long = System.currentTimeMillis()): OutageEngine.State {
+    fun process(
+        snapshot: PowerSnapshot,
+        nowEpochMs: Long = System.currentTimeMillis(),
+        gridPowered: Boolean? = snapshot.externallyPowered
+    ): OutageEngine.State {
         val settings = store.settings()
         if (!settings.monitoringEnabled) return store.state()
 
         val before = store.state()
         val after = OutageEngine.update(
             state = before,
-            powered = snapshot.externallyPowered,
+            powered = gridPowered,
             nowEpochMs = nowEpochMs,
             batteryPercent = snapshot.batteryPercent,
             outageDelayMs = settings.outageDelayMs,

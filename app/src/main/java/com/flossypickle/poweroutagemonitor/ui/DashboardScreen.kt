@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.OutageEngine
@@ -41,6 +43,8 @@ import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -68,6 +72,8 @@ internal fun DashboardScreen(
     alertChannels: String,
     systemHealth: SystemHealthSnapshot,
     audibleAlarmActive: Boolean,
+    selectedPowerSource: PowerSourceStore.Source,
+    powerSourceStatus: PowerSourceStore.Status?,
     padding: PaddingValues,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onDismissAudibleAlarm: () -> Unit
@@ -90,8 +96,23 @@ internal fun DashboardScreen(
     }
     val recentlyRestored = lastEvent?.kind == EventHistoryStore.KIND_CONFIRMED_OUTAGE &&
         statusClock - lastEvent.restoredAtEpochMs in 0 until RESTORED_STATUS_DURATION_MS
+    val sourceReading = powerSourceStatus?.takeIf {
+        it.source == selectedPowerSource &&
+            System.currentTimeMillis() - it.observedAtEpochMs in 0..SOURCE_FRESH_MS
+    }
+    val lastGridReadingEpochMs = if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
+        powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
+    } else lastObservationEpochMs
+    val effectivePowered = when (selectedPowerSource) {
+        PowerSourceStore.Source.ANDROID_CHARGER -> snapshot?.externallyPowered
+        PowerSourceStore.Source.ECOFLOW_MODBUS -> when (sourceReading?.availability) {
+            GridAvailability.AVAILABLE -> true
+            GridAvailability.UNAVAILABLE -> false
+            GridAvailability.UNKNOWN, null -> null
+        }
+    }
     val status = gridStatus(
-        powered = snapshot?.externallyPowered,
+        powered = effectivePowered,
         phase = monitorState.phase,
         enabled = settings.monitoringEnabled,
         recentlyRestored = recentlyRestored,
@@ -172,7 +193,7 @@ internal fun DashboardScreen(
                         trackColor = colors.surfaceVariant
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ReadingTile("POWER INPUT", sourceText(snapshot?.plugged), Modifier.weight(1f))
+                        ReadingTile("DEVICE POWER INPUT", sourceText(snapshot?.plugged), Modifier.weight(1f))
                         ReadingTile("BATTERY STATE", statusText(snapshot?.batteryStatus), Modifier.weight(1f))
                     }
                 }
@@ -220,6 +241,23 @@ internal fun DashboardScreen(
                         ) { Text("Dismiss audible alarm") }
                     }
                     StatusRow(
+                        "Grid source",
+                        when (selectedPowerSource) {
+                            PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger"
+                            PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow PowerOcean"
+                        },
+                        colors.primary
+                    )
+                    if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
+                        StatusRow(
+                            "Source reading",
+                            sourceReading?.detail ?: "Unavailable or stale",
+                            if (sourceReading?.availability == GridAvailability.UNKNOWN || sourceReading == null) {
+                                Color(0xFFF0C580)
+                            } else colors.onSurfaceVariant
+                        )
+                    }
+                    StatusRow(
                         "Internet",
                         if (systemHealth.internetAvailable) "Available" else "Unavailable",
                         if (systemHealth.internetAvailable) colors.primary else Color(0xFFF0C580)
@@ -229,11 +267,11 @@ internal fun DashboardScreen(
                         alertChannels,
                         if (alertChannels == "None configured") Color(0xFFF0C580) else colors.primary
                     )
-                    if (lastObservationEpochMs > 0) {
+                    if (lastGridReadingEpochMs > 0) {
                         StatusRow(
                             "Last grid reading",
                             DateFormat.getTimeInstance(DateFormat.SHORT)
-                                .format(Date(lastObservationEpochMs)),
+                                .format(Date(lastGridReadingEpochMs)),
                             colors.onSurfaceVariant
                         )
                     }
@@ -271,7 +309,7 @@ internal fun DashboardScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Connect external power once to arm grid-outage detection.",
+                    "Wait for the selected source to report grid power once to arm detection.",
                     color = colors.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -308,8 +346,22 @@ private fun ReadingTile(label: String, value: String, modifier: Modifier = Modif
 @Composable
 private fun StatusRow(label: String, value: String, valueColor: Color) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        Text(value, color = valueColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(0.4f)
+        )
+        Text(
+            value,
+            color = valueColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.End,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(0.6f)
+        )
     }
 }
 
@@ -323,32 +375,43 @@ private fun gridStatus(
     !enabled -> GridStatus(
         "Ⅱ", "MONITORING PAUSED", "Grid changes are not being recorded.", GridTone.MUTED
     )
+    powered == null && phase == OutageEngine.Phase.PENDING_OUTAGE -> GridStatus(
+        "?", "SOURCE UNAVAILABLE", "The outage confirmation timer will restart after a valid reading.", GridTone.CAUTION
+    )
+    powered == null && phase == OutageEngine.Phase.PENDING_RESTORE -> GridStatus(
+        "?", "SOURCE UNAVAILABLE", "The restoration timer will restart after a valid reading.", GridTone.CAUTION
+    )
+    powered == null && phase == OutageEngine.Phase.OUTAGE -> GridStatus(
+        "?", "OUTAGE STATUS UNKNOWN", "The confirmed outage remains open until valid grid evidence returns.", GridTone.CAUTION
+    )
     phase == OutageEngine.Phase.PENDING_OUTAGE -> GridStatus(
-        "⚠", "POSSIBLE OUTAGE", "External power disappeared; confirming the outage.", GridTone.CAUTION
+        "⚠", "POSSIBLE OUTAGE", "Grid evidence disappeared; confirming the outage.", GridTone.CAUTION
     )
     phase == OutageEngine.Phase.OUTAGE -> GridStatus(
-        "!", "OUTAGE CONFIRMED", "External power remains unavailable.", GridTone.DANGER
+        "!", "OUTAGE CONFIRMED", "The selected source still reports no grid power.", GridTone.DANGER
     )
     phase == OutageEngine.Phase.PENDING_RESTORE -> GridStatus(
         "↻", "CHECKING RESTORATION", "Power returned; checking that it remains stable.", GridTone.CAUTION
     )
     phase == OutageEngine.Phase.WAITING -> GridStatus(
-        "○", "WAITING TO ARM", "Connect external power once to start detection.", GridTone.MUTED
+        "○", "WAITING TO ARM", "Waiting for the selected source to report grid power.", GridTone.MUTED
     )
     recentlyRestored -> GridStatus(
-        "✓", "POWER RESTORED", "Stable external power returned after the outage.", GridTone.GOOD
+        "✓", "POWER RESTORED", "Stable grid power returned after the outage.", GridTone.GOOD
     )
     powered == true -> GridStatus(
-        "⚡", "GRID POWER ONLINE", "External power is reaching this device.", GridTone.GOOD
+        "⚡", "GRID POWER ONLINE", "The selected source reports mains power available.", GridTone.GOOD
     )
     powered == false -> GridStatus(
         "⚠", "ON BATTERY", if (outageDelayMs == 0L) "Confirming grid status."
         else "Waiting for the outage confirmation rule.", GridTone.CAUTION
     )
     else -> GridStatus(
-        "?", "GRID STATE UNKNOWN", "Waiting for Android's power reading.", GridTone.MUTED
+        "?", "GRID STATE UNKNOWN", "Waiting for a trustworthy source reading.", GridTone.MUTED
     )
 }
+
+private const val SOURCE_FRESH_MS = 15_000L
 
 private fun sourceText(plugged: Int?) = when (plugged) {
     0 -> "None"
@@ -391,7 +454,7 @@ private fun monitorLabel(enabled: Boolean, phase: OutageEngine.Phase) = when {
 
 private fun monitorExplanation(enabled: Boolean, phase: OutageEngine.Phase) = when {
     !enabled -> "Use the switch above to resume background grid monitoring."
-    phase == OutageEngine.Phase.WAITING -> "Connect external power once to arm outage detection."
+    phase == OutageEngine.Phase.WAITING -> "Waiting for the selected source to report grid power."
     phase == OutageEngine.Phase.PENDING_OUTAGE -> "Power is absent; waiting for the confirmation delay."
     phase == OutageEngine.Phase.OUTAGE -> "A sustained grid outage has been confirmed."
     phase == OutageEngine.Phase.PENDING_RESTORE -> "Power returned; checking that it remains stable."

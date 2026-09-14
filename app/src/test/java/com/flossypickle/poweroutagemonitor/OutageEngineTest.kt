@@ -59,6 +59,28 @@ class OutageEngineTest {
         assertEquals(state, step(state, null, 100))
     }
 
+    @Test fun unknownRestartsPendingOutageConfirmation() {
+        val pending = step(State(Phase.POWERED), false, 10)
+        val interruptedEvidence = step(pending, null, 50)
+
+        assertEquals(Phase.PENDING_OUTAGE, interruptedEvidence.phase)
+        assertEquals(50L, interruptedEvidence.phaseSinceEpochMs)
+        assertEquals(50L, interruptedEvidence.outageStartedEpochMs)
+        assertEquals(Phase.PENDING_OUTAGE, step(interruptedEvidence, false, 109).phase)
+        assertEquals(Phase.OUTAGE, step(interruptedEvidence, false, 110).phase)
+    }
+
+    @Test fun unknownRestartsPendingRestorationConfirmation() {
+        val outage = State(Phase.OUTAGE, 70, 10, 90, 70)
+        val restoring = step(outage, true, 100)
+        val interruptedEvidence = step(restoring, null, 120)
+
+        assertEquals(Phase.PENDING_RESTORE, interruptedEvidence.phase)
+        assertEquals(120L, interruptedEvidence.phaseSinceEpochMs)
+        assertEquals(Phase.PENDING_RESTORE, step(interruptedEvidence, true, 149).phase)
+        assertEquals(Phase.POWERED, step(interruptedEvidence, true, 150).phase)
+    }
+
     @Test fun zeroDelayConfirmsAndRestoresImmediately() {
         val outage = OutageEngine.update(State(Phase.POWERED), false, 1, 80, 0, 0)
         assertEquals(Phase.OUTAGE, outage.phase)

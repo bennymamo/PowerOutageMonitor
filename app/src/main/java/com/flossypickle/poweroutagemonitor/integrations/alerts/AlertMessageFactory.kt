@@ -20,7 +20,7 @@ internal object AlertMessageFactory {
                 appendLine("Device: ${settings.deviceName}")
                 appendLine("Simulated power loss: ${formatTime(simulatedAtEpochMs)}")
                 appendLine("Configured alert delay: ${formatDuration(settings.outageDelayMs)}")
-                append("Test status: Running on battery")
+                append("Test status: Grid power unavailable")
             }
         )
 
@@ -125,7 +125,7 @@ internal object AlertMessageFactory {
                 appendLine("Confirmed: ${formatTime(confirmedAt)}")
                 appendLine("Alert delay: ${formatDuration(settings.outageDelayMs)}")
                 state.outageStartBatteryPercent?.let { appendLine("Battery at power loss: $it%") }
-                append("The device is now running on battery.")
+                append("The selected grid source reports that mains power is unavailable.")
             }
         )
     }
@@ -149,7 +149,7 @@ internal object AlertMessageFactory {
                 val start = state.outageStartBatteryPercent
                 val end = snapshot.batteryPercent
                 if (start != null && end != null) appendLine("Battery: $start% to $end%")
-                append("External power is stable again.")
+                append("The selected grid source reports stable mains power again.")
             }
         )
     }

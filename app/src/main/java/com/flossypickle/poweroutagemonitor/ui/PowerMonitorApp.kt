@@ -27,6 +27,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -60,6 +61,8 @@ internal fun PowerMonitorApp(
     hasEnabledAlertChannel: Boolean,
     hasSentTestAlert: Boolean,
     systemHealth: SystemHealthSnapshot,
+    selectedPowerSource: PowerSourceStore.Source,
+    powerSourceStatus: PowerSourceStore.Status?,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
@@ -73,6 +76,7 @@ internal fun PowerMonitorApp(
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
+    onPowerSourceChanged: () -> Unit,
     onClearHistory: () -> Unit,
     onSendTestAlert: (AlertMessage) -> Boolean,
     onAlertConfigurationChanged: () -> Unit
@@ -143,7 +147,8 @@ internal fun PowerMonitorApp(
         when (screen) {
             AppScreen.STATUS -> DashboardScreen(
                 snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
-                alertChannels, systemHealth, audibleAlarmActive, padding,
+                alertChannels, systemHealth, audibleAlarmActive, selectedPowerSource,
+                powerSourceStatus, padding,
                 onMonitoringEnabledChange, onDismissAudibleAlarm
             )
             AppScreen.HISTORY -> HistoryScreen(
@@ -163,6 +168,9 @@ internal fun PowerMonitorApp(
                 exactAlarmAccessGranted,
                 onDismissAudibleAlarm,
                 onTestAudibleAlarm,
+                selectedPowerSource,
+                powerSourceStatus,
+                onPowerSourceChanged,
                 onClearHistory,
                 onOpenSetupChecklist = {
                     returnToChecklist = false

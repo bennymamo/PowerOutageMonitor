@@ -23,7 +23,25 @@ internal object OutageEngine {
         batteryTemperatureTenthsCelsius: Int? = null
     ): State {
         require(outageDelayMs >= 0 && restoreDelayMs >= 0)
-        if (powered == null) return state
+        if (powered == null) {
+            // A network or inverter source can temporarily disappear. Keep the visible
+            // phase, but require the full confirmation period again once evidence resumes.
+            return if (state.phase == Phase.PENDING_OUTAGE ||
+                state.phase == Phase.PENDING_RESTORE
+            ) state.copy(
+                phaseSinceEpochMs = nowEpochMs,
+                outageStartedEpochMs = if (state.phase == Phase.PENDING_OUTAGE) {
+                    nowEpochMs
+                } else state.outageStartedEpochMs,
+                outageStartBatteryPercent = if (state.phase == Phase.PENDING_OUTAGE) {
+                    batteryPercent
+                } else state.outageStartBatteryPercent,
+                outageStartBatteryTemperatureTenthsCelsius =
+                    if (state.phase == Phase.PENDING_OUTAGE) {
+                        batteryTemperatureTenthsCelsius
+                    } else state.outageStartBatteryTemperatureTenthsCelsius
+            ) else state
+        }
 
         return when (state.phase) {
             Phase.WAITING -> if (powered) State(Phase.POWERED, nowEpochMs) else state

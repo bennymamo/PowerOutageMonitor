@@ -17,6 +17,7 @@ import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import java.text.DateFormat
 import java.util.Date
 
@@ -110,6 +111,8 @@ internal class DiagnosticsCollector(private val context: Context) {
         val deliveries = AlertQueueStore(context).read()
         val health = SystemHealthSnapshot.capture(context)
         val audibleSettings = AudibleAlarmStore(context).settings()
+        val powerSourceStore = PowerSourceStore(context)
+        val powerSourceStatus = powerSourceStore.lastStatus()
         val operationalInterruptions = OperationalHistoryStore(context).read().filter {
             it.kind == OperationalHistoryStore.KIND_APP_RECOVERED ||
                 it.kind == OperationalHistoryStore.KIND_MONITORING_RECOVERED
@@ -133,6 +136,20 @@ internal class DiagnosticsCollector(private val context: Context) {
         batteryOptimizationExcluded = health.batteryOptimizationExcluded,
         backgroundRestricted = health.backgroundRestricted,
         notificationsAllowed = health.notificationsAllowed,
+        configuredPowerProviders = when (powerSourceStore.selectedSource()) {
+            PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger (active)"
+            PowerSourceStore.Source.ECOFLOW_MODBUS -> buildString {
+                append("EcoFlow PowerOcean (active)")
+                if (Build.VERSION.SDK_INT >= 37 && context.checkSelfPermission(
+                        "android.permission.ACCESS_LOCAL_NETWORK"
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    append(" · local network permission missing")
+                }
+                powerSourceStatus?.takeIf { it.source == PowerSourceStore.Source.ECOFLOW_MODBUS }
+                    ?.let { append(" · ${it.availability.name.lowercase()}") }
+            }
+        },
         configuredAlertProviders = buildList {
             if (telegram.enabled) add("Telegram enabled (${telegram.destinations.size})")
             else if (telegram.hasToken) add("Telegram saved, disabled")

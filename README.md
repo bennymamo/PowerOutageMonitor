@@ -2,7 +2,7 @@
 
 ## Purpose
 
-FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. Keep the device connected to a normal wall charger and the app watches whether Android reports that external power is present. If power disappears long enough to count as an outage, it records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
+FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. It can watch Android's external-power signal from a normal wall charger or, for supported battery-backup homes, read an EcoFlow PowerOcean inverter over the local network. If the selected source reports that grid power has disappeared long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
@@ -11,6 +11,7 @@ The app is being developed by [Flossy Pickle](https://flossypickle.com). It has 
 ## What it can do
 
 - Detect external power loss and stable restoration without constant polling.
+- Optionally read grid-connected/islanded state directly from a local EcoFlow PowerOcean inverter.
 - Ignore brief cable movement with configurable outage and restoration delays.
 - Continue monitoring with the screen off and resume after a reboot, as far as the device manufacturer allows.
 - Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, and possible unclean shutdowns.
@@ -33,6 +34,23 @@ FP Grid Monitor treats the charger's connection as evidence of grid power:
 
 The app checks whether Android considers an external power source connected. It does not use the battery's *charging/not charging* label as proof of an outage, because many devices stop charging when their battery is full.
 
+### EcoFlow PowerOcean detection
+
+Homes with whole-house battery backup need a different source because the phone charger can remain powered during a grid outage. FP Grid Monitor includes an optional, read-only local PowerOcean connection under **Settings → Power sources**.
+
+The connection reads the inverter's grid operating mode, grid-side voltage, and frequency over Modbus TCP on the home network. It checks them together: contradictory, malformed, timed-out, or stale values become **Unknown** and cannot confirm an outage. No EcoFlow cloud login is stored, and the app contains no Modbus command that changes inverter settings.
+
+Requirements:
+
+1. An EcoFlow installer or partner must enable Modbus TCP on the inverter; it is normally disabled.
+2. The inverter needs a stable private IPv4 address, preferably reserved in the router.
+3. The usual connection is TCP port `502`, unit `1`.
+4. The phone, router, Wi-Fi, and necessary network equipment must stay powered during an outage.
+5. On Android 17 and newer, allow Local network access when the EcoFlow setup page asks for it.
+6. Run the app's read-only connection test, activate EcoFlow as the grid source, then perform a controlled real grid-loss and restoration test before relying on alerts.
+
+EcoFlow does not publicly document this local register interface. Support for standard PowerOcean hardware and the register map come from the community-maintained [EF-PowerOcean-TcpModbus project](https://github.com/MaxGrmm/EF-PowerOcean-TcpModbus). Inverter firmware could change the behavior, so FP Grid Monitor fails closed to **Unknown** rather than guessing. EcoFlow mode checks every five seconds and keeps the device CPU and Wi-Fi awake, so it uses more energy than charger-based monitoring.
+
 ## Is it suitable for your setup?
 
 ### Advantages
@@ -41,13 +59,14 @@ The app checks whether Android considers an external power source connected. It 
 - Detects and records locally even when the internet is unavailable.
 - Requires no FP Grid Monitor server or subscription.
 - Supports both internet alerts and device SMS.
-- Uses event-driven monitoring to keep idle CPU and network use low.
+- Charger monitoring is event-driven, keeping idle CPU and network use low.
 - Stores alert credentials using Android Keystore encryption.
 
 ### Limitations
 
-- It detects loss of power to the phone's charger, not the electricity grid directly.
+- The default charger source detects loss of power to the phone, not the electricity grid directly.
 - A charger connected through a UPS, power station, backed-up socket, faulty cable, or switched USB port may give a misleading result.
+- EcoFlow monitoring depends on a community-discovered local interface, compatible inverter firmware, and working backed-up network equipment.
 - Telegram and email cannot arrive until the monitoring device regains internet access. SMS needs a working SIM/mobile network and may cost money.
 - Some Android manufacturers aggressively stop background apps. Their battery settings can change between phone models and software versions.
 - An old or damaged lithium battery should not be left charging unattended. Inspect the device and battery before using it continuously.
@@ -149,6 +168,8 @@ The local alarm is off by default. It can use the built-in beep or a sound from 
 | Foreground service | Lets monitoring continue while the app screen is closed. |
 | Start after boot | Restarts enabled monitoring after a device reboot. |
 | Internet and network state | Sends configured internet alerts and shows connectivity status. |
+| Local network | Android 17 and newer require this runtime permission for the optional direct EcoFlow connection. |
+| Wi-Fi state and wake lock | Keeps optional local EcoFlow monitoring responsive while the screen is off. |
 | Send SMS | Used only when the user configures and enables device SMS. |
 | Modify audio settings | Temporarily raises and restores alarm volume when that option is enabled. |
 | Alarms and reminders | Optional; used only for user-selected exact audible-alarm repeats on supported Android versions. |
@@ -185,3 +206,5 @@ Before relying on it:
 Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for reproducible bugs and feature requests. Remove email addresses, phone numbers, chat identifiers, bot tokens, passwords, and API keys from screenshots and diagnostic text before posting.
 
 Planned work before the first public release includes longer unattended device testing, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
+
+The optional EcoFlow source also requires validation against the actual inverter during one controlled grid outage before it should be treated as production-ready.

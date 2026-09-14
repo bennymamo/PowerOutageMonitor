@@ -15,6 +15,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
+import android.net.wifi.WifiManager
 import androidx.core.content.ContextCompat
 import com.flossypickle.poweroutagemonitor.MainActivity
 import com.flossypickle.poweroutagemonitor.OutageEngine
@@ -22,6 +24,11 @@ import com.flossypickle.poweroutagemonitor.R
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmReceiver
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmScheduler
+import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSignal
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSignalPolicy
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowModbusPowerSignalProvider
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 
@@ -30,13 +37,22 @@ internal class MonitoringService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var coordinator: MonitoringCoordinator
     private lateinit var audibleAlarm: AudibleAlarmCoordinator
-    private val deadlineCheck = Runnable { reconcileCurrentPower() }
+    private var activeSource = PowerSourceStore.Source.ANDROID_CHARGER
+    private var ecoFlowProvider: EcoFlowModbusPowerSignalProvider? = null
+    private var latestBatterySnapshot: PowerSnapshot? = null
+    private var ecoFlowCpuLock: PowerManager.WakeLock? = null
+    private var ecoFlowWifiLock: WifiManager.WifiLock? = null
+    private var lastEcoFlowAvailability: GridAvailability? = null
+    private var ecoFlowHadUnknown = false
+    private var lastEcoFlowStatusPersistedAt = 0L
+    private var lastEcoFlowUiRefreshAt = 0L
+    private val deadlineCheck = Runnable { reconcileSelectedPower() }
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let(::process)
+                Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let(::onBatterySnapshot)
                 Intent.ACTION_POWER_CONNECTED,
-                Intent.ACTION_POWER_DISCONNECTED -> reconcileCurrentPower()
+                Intent.ACTION_POWER_DISCONNECTED -> reconcileSelectedPower()
             }
         }
     }
@@ -46,6 +62,7 @@ internal class MonitoringService : Service() {
         isRunning = true
         coordinator = MonitoringCoordinator(this)
         audibleAlarm = AudibleAlarmCoordinator(this)
+        activeSource = PowerSourceStore(this).selectedSource()
         val settings = MonitorStore(this).settings()
         OperationalHistoryStore(this).recordMonitoringStarted(settings.historyLimit)
         createNotificationChannel()
@@ -69,7 +86,8 @@ internal class MonitoringService : Service() {
                 refreshNotification()
             }
             ACTION_REFRESH_NOTIFICATION -> refreshNotification()
-            else -> reconcileCurrentPower()
+            ACTION_RELOAD_POWER_SOURCE -> reloadPowerSource()
+            else -> reconcileSelectedPower()
         }
         return START_STICKY
     }
@@ -77,6 +95,11 @@ internal class MonitoringService : Service() {
     override fun onDestroy() {
         isRunning = false
         handler.removeCallbacks(deadlineCheck)
+        ecoFlowProvider?.stop()
+        ecoFlowProvider = null
+        lastEcoFlowAvailability = null
+        ecoFlowHadUnknown = false
+        releaseEcoFlowLocks()
         runCatching { unregisterReceiver(batteryReceiver) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -109,16 +132,173 @@ internal class MonitoringService : Service() {
         }
     }
 
-    private fun reconcileCurrentPower() {
+    private fun currentBatterySnapshot(): PowerSnapshot {
         val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        PowerSnapshot.from(intent)?.let(::process)
+        return PowerSnapshot.from(intent)
+            ?.also { latestBatterySnapshot = it }
+            ?: latestBatterySnapshot
+            ?: MonitorStore(this).lastSnapshot()
+            ?: PowerSnapshot(plugged = -1, batteryPercent = null, batteryStatus = 1,
+                batteryTemperatureTenthsCelsius = null)
     }
 
-    private fun process(snapshot: PowerSnapshot) {
-        val state = coordinator.process(snapshot)
+    private fun reconcileSelectedPower() {
+        val selected = PowerSourceStore(this).selectedSource()
+        if (selected != activeSource ||
+            selected == PowerSourceStore.Source.ECOFLOW_MODBUS && ecoFlowProvider == null
+        ) {
+            reloadPowerSource()
+            return
+        }
+        when (selected) {
+            PowerSourceStore.Source.ANDROID_CHARGER -> processAndroid(currentBatterySnapshot())
+            PowerSourceStore.Source.ECOFLOW_MODBUS -> ecoFlowProvider?.refresh()
+        }
+    }
+
+    private fun reloadPowerSource() {
+        ecoFlowProvider?.stop()
+        ecoFlowProvider = null
+        lastEcoFlowAvailability = null
+        ecoFlowHadUnknown = false
+        lastEcoFlowStatusPersistedAt = 0L
+        lastEcoFlowUiRefreshAt = 0L
+        releaseEcoFlowLocks()
+        activeSource = PowerSourceStore(this).selectedSource()
+        if (activeSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
+            val config = PowerSourceStore(this).ecoFlowConfig()
+            if (!config.isValid) {
+                PowerSourceStore(this).select(PowerSourceStore.Source.ANDROID_CHARGER)
+                activeSource = PowerSourceStore.Source.ANDROID_CHARGER
+                processAndroid(currentBatterySnapshot())
+                return
+            }
+            ecoFlowProvider = EcoFlowModbusPowerSignalProvider(
+                host = config.host,
+                port = config.port,
+                unitId = config.unitId
+            ).also { provider ->
+                acquireEcoFlowLocks()
+                provider.start { signal -> handler.post { processEcoFlow(signal) } }
+            }
+        } else {
+            processAndroid(currentBatterySnapshot())
+        }
+    }
+
+    private fun onBatterySnapshot(snapshot: PowerSnapshot) {
+        latestBatterySnapshot = snapshot
+        if (activeSource == PowerSourceStore.Source.ANDROID_CHARGER) {
+            processAndroid(snapshot)
+        } else {
+            val now = System.currentTimeMillis()
+            val status = PowerSourceStore(this).lastStatus()?.takeIf {
+                it.source == PowerSourceStore.Source.ECOFLOW_MODBUS &&
+                    now - it.observedAtEpochMs in 0..ECOFLOW_STALE_AFTER_MS
+            }
+            val gridPowered = when (status?.availability) {
+                GridAvailability.AVAILABLE -> true
+                GridAvailability.UNAVAILABLE -> false
+                GridAvailability.UNKNOWN, null -> null
+            }
+            // Device-battery changes must still reach the coordinator so the low-battery
+            // alert and audible-alarm cutoff work while EcoFlow owns the grid decision.
+            process(snapshot, gridPowered, now)
+        }
+    }
+
+    private fun processAndroid(snapshot: PowerSnapshot) {
+        val now = System.currentTimeMillis()
+        PowerSourceStore(this).recordSignal(PowerSignal(
+            availability = when (snapshot.externallyPowered) {
+                true -> GridAvailability.AVAILABLE
+                false -> GridAvailability.UNAVAILABLE
+                null -> GridAvailability.UNKNOWN
+            },
+            observedAtEpochMs = now,
+            providerId = ANDROID_PROVIDER_ID,
+            detail = "Android external-power signal"
+        ))
+        process(snapshot, snapshot.externallyPowered, now)
+    }
+
+    private fun processEcoFlow(signal: PowerSignal) {
+        val availabilityChanged = signal.availability != lastEcoFlowAvailability
+        val persistStatus = availabilityChanged ||
+            signal.observedAtEpochMs - lastEcoFlowStatusPersistedAt >= STATUS_PERSIST_INTERVAL_MS
+        PowerSourceStore(this).recordSignal(signal, persistStatus)
+        if (persistStatus) lastEcoFlowStatusPersistedAt = signal.observedAtEpochMs
+        val evaluated = PowerSignalPolicy.evaluate(
+            signal = signal,
+            nowEpochMs = System.currentTimeMillis(),
+            staleAfterMs = ECOFLOW_STALE_AFTER_MS
+        )
+        val powered = when (evaluated.availability) {
+            GridAvailability.AVAILABLE -> true
+            GridAvailability.UNAVAILABLE -> false
+            GridAvailability.UNKNOWN -> null
+        }
+        val monitorStore = MonitorStore(this)
+        val state = monitorStore.state()
+        val settings = monitorStore.settings()
+        val deadlineReached = OutageEngine.deadlineEpochMs(
+            state, settings.outageDelayMs, settings.restoreDelayMs
+        )?.let { signal.observedAtEpochMs >= it } == true
+        when {
+            powered == null && !ecoFlowHadUnknown -> {
+                ecoFlowHadUnknown = true
+                process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
+            }
+            powered == null -> Unit
+            ecoFlowHadUnknown -> {
+                ecoFlowHadUnknown = false
+                process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
+                process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+            }
+            availabilityChanged || deadlineReached ->
+                process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+        }
+        if (signal.observedAtEpochMs - lastEcoFlowUiRefreshAt >= UI_REFRESH_INTERVAL_MS) {
+            lastEcoFlowUiRefreshAt = signal.observedAtEpochMs
+            sendBroadcast(Intent(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED).setPackage(packageName))
+            refreshNotification()
+        }
+        lastEcoFlowAvailability = signal.availability
+    }
+
+    private fun process(snapshot: PowerSnapshot, gridPowered: Boolean?, observedAtEpochMs: Long) {
+        val state = coordinator.process(snapshot, observedAtEpochMs, gridPowered)
         scheduleInProcessDeadline(state)
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(state, snapshot))
+    }
+
+    @Suppress("DEPRECATION")
+    private fun acquireEcoFlowLocks() {
+        runCatching {
+            ecoFlowCpuLock = getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:ecoflow-monitor")
+                .apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            ecoFlowWifiLock = getSystemService(WifiManager::class.java)
+                .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "$packageName:ecoflow-wifi")
+                .apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }.onFailure {
+            releaseEcoFlowLocks()
+            android.util.Log.e("MonitoringService", "Unable to keep EcoFlow connection awake", it)
+        }
+    }
+
+    private fun releaseEcoFlowLocks() {
+        runCatching { ecoFlowWifiLock?.takeIf { it.isHeld }?.release() }
+        runCatching { ecoFlowCpuLock?.takeIf { it.isHeld }?.release() }
+        ecoFlowWifiLock = null
+        ecoFlowCpuLock = null
     }
 
     private fun refreshNotification() {
@@ -151,9 +331,18 @@ internal class MonitoringService : Service() {
     }
 
     private fun buildNotification(state: OutageEngine.State, snapshot: PowerSnapshot?): Notification {
-        val title = when (state.phase) {
+        val sourceStore = PowerSourceStore(this)
+        val ecoFlowUnknown = sourceStore.selectedSource() == PowerSourceStore.Source.ECOFLOW_MODBUS &&
+            sourceStore.lastStatus()?.let {
+                it.source != PowerSourceStore.Source.ECOFLOW_MODBUS ||
+                    it.availability == GridAvailability.UNKNOWN ||
+                    System.currentTimeMillis() - it.observedAtEpochMs !in 0..ECOFLOW_STALE_AFTER_MS
+            } != false
+        val title = if (ecoFlowUnknown) {
+            "Monitoring · EcoFlow reading unavailable"
+        } else when (state.phase) {
             OutageEngine.Phase.WAITING -> "Monitoring · waiting for power"
-            OutageEngine.Phase.POWERED -> "Monitoring · external power connected"
+            OutageEngine.Phase.POWERED -> "Monitoring · grid power online"
             OutageEngine.Phase.PENDING_OUTAGE -> "Checking possible power loss"
             OutageEngine.Phase.OUTAGE -> "Power outage confirmed"
             OutageEngine.Phase.PENDING_RESTORE -> "Checking power restoration"
@@ -244,9 +433,29 @@ internal class MonitoringService : Service() {
             )
         }
 
+        fun reloadPowerSource(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MonitoringService::class.java)
+                    .setAction(ACTION_RELOAD_POWER_SOURCE)
+            )
+        }
+
+        fun handleDeadline(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(context, Intent(context, MonitoringService::class.java))
+        }
+
         private const val ACTION_AUDIBLE_TICK =
             "com.flossypickle.poweroutagemonitor.SERVICE_AUDIBLE_TICK"
         private const val ACTION_REFRESH_NOTIFICATION =
             "com.flossypickle.poweroutagemonitor.REFRESH_MONITOR_NOTIFICATION"
+        private const val ACTION_RELOAD_POWER_SOURCE =
+            "com.flossypickle.poweroutagemonitor.RELOAD_POWER_SOURCE"
+        private const val ANDROID_PROVIDER_ID = "android_charger"
+        private const val ECOFLOW_STALE_AFTER_MS = 15_000L
+        private const val UI_REFRESH_INTERVAL_MS = 15_000L
+        private const val STATUS_PERSIST_INTERVAL_MS = 5 * 60_000L
     }
 }
