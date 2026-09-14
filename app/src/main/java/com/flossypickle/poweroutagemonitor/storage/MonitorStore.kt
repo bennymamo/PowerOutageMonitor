@@ -78,6 +78,15 @@ internal class MonitorStore(context: Context) {
 
     fun lastObservationEpochMs(): Long = preferences.getLong(KEY_LAST_OBSERVATION, 0)
 
+    fun restoredDeliveriesPaused(): Boolean =
+        preferences.getBoolean(KEY_RESTORED_DELIVERIES_PAUSED, false)
+
+    fun setRestoredDeliveriesPaused(paused: Boolean) {
+        check(preferences.edit().putBoolean(KEY_RESTORED_DELIVERIES_PAUSED, paused).commit()) {
+            "Unable to persist restored delivery state"
+        }
+    }
+
     fun setMonitoringEnabled(enabled: Boolean) {
         val editor = preferences.edit().putBoolean(KEY_ENABLED, enabled)
         if (!enabled) {
@@ -161,6 +170,30 @@ internal class MonitorStore(context: Context) {
             .commit()
     }
 
+    fun restoreRuntime(
+        state: OutageEngine.State,
+        snapshot: PowerSnapshot?,
+        observedAtEpochMs: Long,
+        monitoringEnabled: Boolean
+    ) {
+        val editor = preferences.edit().putBoolean(KEY_ENABLED, monitoringEnabled)
+        writeState(editor, state)
+        if (snapshot == null) {
+            editor.remove(KEY_LAST_PLUGGED)
+                .remove(KEY_LAST_BATTERY)
+                .remove(KEY_LAST_STATUS)
+                .remove(KEY_LAST_TEMPERATURE)
+        } else {
+            editor.putInt(KEY_LAST_PLUGGED, snapshot.plugged)
+                .putInt(KEY_LAST_STATUS, snapshot.batteryStatus)
+                .putOptionalInt(KEY_LAST_BATTERY, snapshot.batteryPercent)
+                .putOptionalInt(KEY_LAST_TEMPERATURE, snapshot.batteryTemperatureTenthsCelsius)
+        }
+        check(editor.putLong(KEY_LAST_OBSERVATION, observedAtEpochMs).commit()) {
+            "Unable to restore monitoring state"
+        }
+    }
+
     private fun writeState(editor: SharedPreferences.Editor, state: OutageEngine.State) {
         editor.putString(KEY_PHASE, state.phase.name)
             .putLong(KEY_PHASE_SINCE, state.phaseSinceEpochMs)
@@ -219,5 +252,6 @@ internal class MonitorStore(context: Context) {
         private const val KEY_LAST_STATUS = "last_status"
         private const val KEY_LAST_TEMPERATURE = "last_temperature"
         private const val KEY_LAST_OBSERVATION = "last_observation"
+        private const val KEY_RESTORED_DELIVERIES_PAUSED = "restored_deliveries_paused"
     }
 }

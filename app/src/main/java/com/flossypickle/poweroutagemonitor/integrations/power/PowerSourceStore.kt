@@ -54,6 +54,23 @@ internal class PowerSourceStore(context: Context) {
             .commit()
     }
 
+    /** Restores connection details but requires a fresh test before EcoFlow can be selected. */
+    fun restoreEcoFlowConfig(config: EcoFlowConfig) {
+        require(config.host.isEmpty() || config.isValid)
+        preferences.edit()
+            .putString(KEY_SELECTED_SOURCE, Source.ANDROID_CHARGER.name)
+            .putString(KEY_ECOFLOW_HOST, config.host.trim())
+            .putInt(KEY_ECOFLOW_PORT, config.port)
+            .putInt(KEY_ECOFLOW_UNIT, config.unitId)
+            .remove(KEY_ECOFLOW_TESTED_CONFIG)
+            .remove(KEY_STATUS_SOURCE)
+            .remove(KEY_STATUS_AVAILABILITY)
+            .remove(KEY_STATUS_OBSERVED_AT)
+            .remove(KEY_STATUS_DETAIL)
+            .commit()
+        PowerSourceRuntime.status = null
+    }
+
     fun recordEcoFlowTest(signal: PowerSignal) {
         require(signal.providerId == ECOFLOW_PROVIDER_ID)
         val editor = preferences.edit()

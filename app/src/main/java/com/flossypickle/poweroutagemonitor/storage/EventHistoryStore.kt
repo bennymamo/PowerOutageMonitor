@@ -41,6 +41,11 @@ internal class EventHistoryStore(context: Context) {
     @Synchronized
     fun clear() = write(emptyList())
 
+    @Synchronized
+    fun replaceAll(records: List<Record>, maxRecords: Int) {
+        write(records.take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE)))
+    }
+
     private fun write(records: List<Record>) {
         val array = JSONArray()
         records.forEach { item ->

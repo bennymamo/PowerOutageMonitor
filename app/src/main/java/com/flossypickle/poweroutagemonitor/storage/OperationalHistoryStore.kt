@@ -95,6 +95,10 @@ internal class OperationalHistoryStore(context: Context) {
 
     fun clear() = synchronized(LOCK) { writeLocked(emptyList()) }
 
+    fun replaceAll(records: List<Record>, maxRecords: Int) = synchronized(LOCK) {
+        writeLocked(records.take(maxRecords.coerceIn(MonitorStore.HISTORY_LIMIT_RANGE)))
+    }
+
     private fun append(record: Record, maxRecords: Int) = synchronized(LOCK) {
         appendLocked(record, maxRecords)
     }

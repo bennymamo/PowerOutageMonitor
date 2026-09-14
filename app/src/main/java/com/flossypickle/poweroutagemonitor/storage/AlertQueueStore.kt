@@ -74,6 +74,12 @@ internal class AlertQueueStore(context: Context) {
         writeUnlocked(readUnlocked().filter { it.status !in terminalStates })
     }
 
+    fun clearAll() = synchronized(lock) { writeUnlocked(emptyList()) }
+
+    fun replaceAll(items: List<AlertQueueEngine.Item>) = synchronized(lock) {
+        writeUnlocked(items)
+    }
+
     private fun readUnlocked(): List<AlertQueueEngine.Item> = runCatching {
         if (!file.baseFile.exists()) return emptyList()
         val array = JSONArray(file.openRead().bufferedReader().use { it.readText() })

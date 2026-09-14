@@ -24,6 +24,8 @@ The app is being developed by [Flossy Pickle](https://flossypickle.com). It has 
 - Send configurable monitor heartbeats and repeated updates during long outages.
 - Show diagnostics, setup checks, internet status, and provider failures without exposing credentials.
 - Offer System, Dark, and Light themes and Guided or Experienced setup instructions.
+- Create and restore selective, password-encrypted recovery archives, including credentials and history when selected.
+- Schedule encrypted recovery copies to a user-chosen local folder or a folder exposed by a cloud-storage app.
 
 ## How detection works
 
@@ -177,6 +179,20 @@ The local alarm is off by default. It can use the built-in beep or a sound from 
 
 Under **Settings → Scheduled updates**, source-unavailable alerts default to a five-minute delay, monitor heartbeats default to once per day, and long-outage updates default to every six hours. Each can be disabled or changed independently using minutes, hours, or days. These messages use every enabled alert channel, so normal SMS charges may apply. A source-unavailable message means the app cannot determine grid state; it is deliberately separate from a confirmed outage alert.
 
+## Backup and restore
+
+Open **Settings → Data & backup** to create or restore a `.fpgrid` recovery archive. The user chooses which sections to include or restore: app settings, alert channels and keys, power sources, history, and live state with pending deliveries. The archive also records the app version that created it.
+
+Every archive is encrypted in full with a password of at least ten characters. FP Grid Monitor uses a password-strengthening step followed by authenticated AES-256-GCM encryption, so the contents are unreadable and changes or corruption are detected. The file is not a ZIP and cannot be opened with an unzip tool. FP Grid Monitor cannot recover a forgotten password.
+
+Restore first unlocks and validates the complete archive, then shows its version and available sections before anything changes. Monitoring must be off during restore. Restored pending alerts stay paused unless **Resume monitoring after restore** is explicitly selected; this avoids duplicate alerts while the old device may still be active.
+
+The advanced backup editor can show the decrypted structured document, including credentials, after the user unlocks it. It creates a separate encrypted copy and validates every edited value before saving. Use it for controlled testing and keep the screen private while secrets are visible.
+
+Automatic backups use Android's folder picker. A user can choose a local folder or, when its Android app supports folder access, a Google Drive, OneDrive, or Dropbox folder. FP Grid Monitor receives access only to that selected folder and never receives the user's cloud login. Frequency, retained-copy count, password, and included sections are configurable. After restoring onto another device, Android requires the user to reconnect the destination folder before scheduling can resume.
+
+Android permissions, manufacturer battery settings, cloud-account sessions, and access grants to folders or custom sound files cannot be transferred. Review Diagnostics and reconnect those items on a replacement device.
+
 ## Permissions
 
 | Permission or access | Why it is used |
@@ -191,14 +207,14 @@ Under **Settings → Scheduled updates**, source-unavailable alerts default to a
 | Modify audio settings | Temporarily raises and restores alarm volume when that option is enabled. |
 | Alarms and reminders | Optional; used only for user-selected exact audible-alarm repeats on supported Android versions. |
 
-FP Grid Monitor does not request contacts, location, camera, microphone, or storage access.
+FP Grid Monitor does not request contacts, location, camera, microphone, or broad storage access. Android's system file and folder pickers grant access only to the backup file or folder the user chooses.
 
 ## Privacy and security
 
 - No analytics, advertising, tracking, or FP Grid Monitor backend.
 - Power history, operational history, configuration, and pending delivery state remain on the device.
-- Telegram, Gmail, Resend, and similar credentials are encrypted using a non-exportable Android Keystore key.
-- Credentials and queued messages are excluded from Android backup and device transfer.
+- Telegram, Gmail, Resend, EcoFlow, and automatic-backup credentials are encrypted at rest using a non-exportable Android Keystore key.
+- Credentials and queued messages are excluded from Android's automatic device backup. They move only when the user includes them in a password-encrypted `.fpgrid` archive.
 - Alert content is sent only to services and recipients the user configures.
 - Diagnostics and copied reports omit secret credentials.
 

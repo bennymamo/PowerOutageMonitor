@@ -33,6 +33,10 @@ internal class PendingAlertEventStore(context: Context) {
 
     fun clear() = synchronized(lock) { writeUnlocked(emptyList()) }
 
+    fun replaceAll(messages: List<AlertMessage>) = synchronized(lock) {
+        writeUnlocked(messages.takeLast(MAX_PENDING_EVENTS))
+    }
+
     private fun readUnlocked(): List<AlertMessage> = runCatching {
         if (!file.baseFile.exists()) return emptyList()
         val array = JSONArray(file.openRead().bufferedReader().use { it.readText() })

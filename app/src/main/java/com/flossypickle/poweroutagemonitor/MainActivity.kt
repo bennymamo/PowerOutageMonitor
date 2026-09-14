@@ -42,6 +42,9 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.ui.PowerMonitorApp
 import com.flossypickle.poweroutagemonitor.ui.theme.PowerOutageMonitorTheme
+import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
+import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
+import com.flossypickle.poweroutagemonitor.configuration.BackupManager
 
 class MainActivity : ComponentActivity() {
     private var snapshot = androidx.compose.runtime.mutableStateOf<PowerSnapshot?>(null)
@@ -161,6 +164,7 @@ class MainActivity : ComponentActivity() {
                     onTestAudibleAlarm = ::testAudibleAlarm,
                     onPowerSourceChanged = ::powerSourceChanged,
                     onClearHistory = ::clearHistory,
+                    onBackupRestore = ::restoreBackup,
                     onSendTestAlert = ::sendTestAlert,
                     onAlertConfigurationChanged = ::alertConfigurationChanged
                 )
@@ -238,8 +242,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setMonitoringEnabled(enabled: Boolean) {
-        MonitorStore(this).setMonitoringEnabled(enabled)
+        val monitorStore = MonitorStore(this)
+        monitorStore.setMonitoringEnabled(enabled)
         if (enabled) {
+            monitorStore.setRestoredDeliveriesPaused(false)
+            AlertDeliveryCoordinator(this).materializePending()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) {
@@ -368,6 +375,23 @@ class MainActivity : ComponentActivity() {
         EventHistoryStore(this).clear()
         OperationalHistoryStore(this).clear()
         refreshStoredState()
+    }
+
+    private fun restoreBackup(
+        document: BackupDocument,
+        categories: Set<BackupCategory>,
+        resumeMonitoring: Boolean
+    ): String? {
+        if (MonitorStore(this).settings().monitoringEnabled) {
+            return "Turn off monitoring before restoring a backup."
+        }
+        return runCatching {
+            BackupManager(this).restore(document, categories, resumeMonitoring)
+            refreshStoredState()
+            if (resumeMonitoring && MonitorStore(this).settings().monitoringEnabled) {
+                setMonitoringEnabled(true)
+            }
+        }.exceptionOrNull()?.let { it.message?.take(180) ?: "Restore could not be completed." }
     }
 
     private fun sendTestAlert(message: AlertMessage): Boolean =

@@ -29,6 +29,8 @@ import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
+import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
 
 private enum class AppScreen(val label: String) {
     STATUS("Status"),
@@ -85,6 +87,7 @@ internal fun PowerMonitorApp(
     onTestAudibleAlarm: () -> Unit,
     onPowerSourceChanged: () -> Unit,
     onClearHistory: () -> Unit,
+    onBackupRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?,
     onSendTestAlert: (AlertMessage) -> Boolean,
     onAlertConfigurationChanged: () -> Unit
 ) {
@@ -184,6 +187,7 @@ internal fun PowerMonitorApp(
                 onTestAudibleAlarm,
                 selectedPowerSource,
                 onClearHistory,
+                onBackupRestore,
                 onOpenPowerSources = {
                     returnToChecklist = false
                     screen = AppScreen.POWER_SOURCES

@@ -27,6 +27,8 @@ internal class AlertDeliveryScheduler(private val context: Context) {
         ExistingWorkPolicy.KEEP
     )
 
+    fun cancelAll() = WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
+
     private fun enqueue(itemId: String, delayMs: Long, policy: ExistingWorkPolicy) {
         val constraints = Constraints.Builder().apply {
             val providerId = AlertQueueStore(context).find(itemId)?.providerId

@@ -34,6 +34,8 @@ import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
+import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
+import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
 
 private enum class SettingsSection(val title: String) {
     HOME("Settings"),
@@ -49,6 +51,7 @@ private enum class SettingsSection(val title: String) {
     HELP("Help & guidance"),
     RELIABILITY("Reliability"),
     HISTORY("History"),
+    DATA_BACKUP("Data & backup"),
     SAFETY("Safety & privacy"),
     ABOUT("About")
 }
@@ -72,6 +75,7 @@ internal fun SettingsScreen(
     onTestAudibleAlarm: () -> Unit,
     selectedPowerSource: PowerSourceStore.Source,
     onClearHistory: () -> Unit,
+    onBackupRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?,
     onOpenPowerSources: () -> Unit,
     onOpenSetupChecklist: () -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -172,6 +176,10 @@ internal fun SettingsScreen(
                 SettingsCategoryCard("History", "Retention and local data controls") {
                     section = SettingsSection.HISTORY
                 }
+                SettingsCategoryCard(
+                    "Data & backup",
+                    "Encrypted backup, restore and automatic recovery copies"
+                ) { section = SettingsSection.DATA_BACKUP }
                 SettingsCategoryCard("Safety & privacy", "Battery care and data use") {
                     section = SettingsSection.SAFETY
                 }
@@ -240,6 +248,11 @@ internal fun SettingsScreen(
                 settings = settings,
                 onHistoryLimitChange = onHistoryLimitChange,
                 onClearHistory = onClearHistory
+            )
+
+            SettingsSection.DATA_BACKUP -> DataBackupSettingsContent(
+                settings = settings,
+                onRestore = onBackupRestore
             )
 
             SettingsSection.SAFETY -> SafetyPrivacySettingsContent()

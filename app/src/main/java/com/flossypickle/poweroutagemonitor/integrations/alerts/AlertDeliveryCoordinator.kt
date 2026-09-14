@@ -6,6 +6,7 @@ import android.os.UserManager
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.EnabledAlertProvidersStore
 import com.flossypickle.poweroutagemonitor.storage.PendingAlertEventStore
+import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import java.util.UUID
 
 /** Bridges Direct Boot events into the credential-protected per-destination delivery queue. */
@@ -24,6 +25,7 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
     }
 
     fun materializePending() {
+        if (MonitorStore(context).restoredDeliveriesPaused()) return
         if (!isUserUnlocked()) return
         val registry = AlertProviderRegistry(context)
         val destinations = registry.enabledDestinations()
