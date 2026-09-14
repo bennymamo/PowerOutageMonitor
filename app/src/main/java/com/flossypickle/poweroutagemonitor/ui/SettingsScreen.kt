@@ -16,21 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
@@ -96,9 +88,6 @@ internal fun SettingsScreen(
     BackHandler(enabled = section != SettingsSection.HOME) {
         section = SettingsSection.HOME
     }
-    var deviceName by remember { mutableStateOf(settings.deviceName) }
-    LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
-    val save: (Long, Long, Boolean, String) -> Unit = onSettingsChange
     val context = LocalContext.current
     val telegramConfig = TelegramConfigStore(context).config()
     val gmailConfig = GmailSmtpConfigStore(context).config()
@@ -252,109 +241,25 @@ internal fun SettingsScreen(
                 onDismissAudibleAlarm = onDismissAudibleAlarm,
                 onTestAudibleAlarm = onTestAudibleAlarm
             )
-            SettingsSection.BATTERY_ALERTS -> SettingsCard {
-                SettingSwitch(
-                    title = "Low battery during an outage",
-                    explanation = "Send one extra alert if this device's battery falls to the selected level while a confirmed grid outage is still active.",
-                    checked = settings.batteryLowAlertEnabled,
-                    onCheckedChange = {
-                        onBatteryLowAlertChange(it, settings.batteryLowAlertThreshold)
-                    }
-                )
-                Text(
-                    "This warning uses every enabled alert channel and is sent at most once for each outage, even after a reboot.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                if (settings.batteryLowAlertEnabled) {
-                    Text("Warn at", fontWeight = FontWeight.Medium)
-                    BATTERY_LOW_ALERT_THRESHOLDS.forEach { value ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                onBatteryLowAlertChange(true, value)
-                            }.padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = settings.batteryLowAlertThreshold == value,
-                                onClick = { onBatteryLowAlertChange(true, value) }
-                            )
-                            Text(if (value == 20) "$value% (recommended)" else "$value%")
-                        }
-                    }
-                }
-            }
+            SettingsSection.BATTERY_ALERTS -> BatteryAlertSettingsContent(
+                settings = settings,
+                onChange = onBatteryLowAlertChange
+            )
 
-            SettingsSection.DEVICE -> SettingsCard {
-                Text("Friendly device name", fontWeight = FontWeight.Medium)
-                Text(
-                    "This name identifies the monitor in alerts.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                OutlinedTextField(
-                    value = deviceName,
-                    onValueChange = { if (it.length <= 50) deviceName = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Device name") }
-                )
-                Button(onClick = {
-                    save(
-                        settings.outageDelayMs,
-                        settings.restoreDelayMs,
-                        settings.sendRestoreNotification,
-                        deviceName
-                    )
-                }) { Text("Save name") }
-            }
+            SettingsSection.DEVICE -> DeviceSettingsContent(
+                settings = settings,
+                onSave = onSettingsChange
+            )
 
-            SettingsSection.OUTAGE -> SettingsCard {
-                Text("Confirm grid outage after", fontWeight = FontWeight.Medium)
-                Text(
-                    "Short power interruptions that end before this delay are logged without declaring an outage.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                DelayOptions(OUTAGE_DELAYS, settings.outageDelayMs) { value ->
-                    save(
-                        value,
-                        settings.restoreDelayMs,
-                        settings.sendRestoreNotification,
-                        settings.deviceName
-                    )
-                }
-            }
+            SettingsSection.OUTAGE -> OutageTimingSettingsContent(
+                settings = settings,
+                onSave = onSettingsChange
+            )
 
-            SettingsSection.RESTORATION -> SettingsCard {
-                Text("Confirm grid restoration after", fontWeight = FontWeight.Medium)
-                Text(
-                    "Wait for power to remain stable before closing an outage.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                DelayOptions(RESTORE_DELAYS, settings.restoreDelayMs) { value ->
-                    save(
-                        settings.outageDelayMs,
-                        value,
-                        settings.sendRestoreNotification,
-                        settings.deviceName
-                    )
-                }
-                SettingSwitch(
-                    title = "Send restoration alerts",
-                    explanation = "Notify configured alert channels when stable power returns.",
-                    checked = settings.sendRestoreNotification,
-                    onCheckedChange = { enabled ->
-                        save(
-                            settings.outageDelayMs,
-                            settings.restoreDelayMs,
-                            enabled,
-                            settings.deviceName
-                        )
-                    }
-                )
-            }
+            SettingsSection.RESTORATION -> RestorationSettingsContent(
+                settings = settings,
+                onSave = onSettingsChange
+            )
 
             SettingsSection.APPEARANCE -> SettingsCard {
                 Text("Theme", fontWeight = FontWeight.Medium)
@@ -514,27 +419,6 @@ private fun SettingsPage(
     }
 }
 
-@Composable
-private fun SettingsCategoryCard(title: String, summary: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(summary, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
-            Text("›", color = MaterialTheme.colorScheme.primary, fontSize = 26.sp)
-        }
-    }
-}
-
 @Suppress("DEPRECATION")
 private fun appVersionName(context: Context): String = try {
     val info = if (Build.VERSION.SDK_INT >= 33) {
@@ -549,128 +433,6 @@ private fun appVersionName(context: Context): String = try {
 } catch (_: PackageManager.NameNotFoundException) {
     "Unknown"
 }
-
-@Composable
-internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-internal fun SettingSwitch(
-    title: String,
-    explanation: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, fontWeight = FontWeight.Medium)
-            Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun DelayOptions(
-    options: List<Pair<Long, String>>,
-    selected: Long,
-    onSelect: (Long) -> Unit
-) {
-    val isPreset = options.any { it.first == selected }
-    var customSeconds by remember(selected) {
-        mutableStateOf(if (isPreset) "" else (selected / 1_000L).toString())
-    }
-    options.forEach { (value, label) ->
-        Row(
-            Modifier.fillMaxWidth().clickable { onSelect(value) }.padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(selected = value == selected, onClick = { onSelect(value) })
-            Text(label)
-        }
-    }
-    if (!isPreset) {
-        Text(
-            "Current custom delay: ${formatCustomDelay(selected)}",
-            color = MaterialTheme.colorScheme.primary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-    OutlinedTextField(
-        value = customSeconds,
-        onValueChange = { value ->
-            if (value.length <= 5 && value.all(Char::isDigit)) customSeconds = value
-        },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text("Custom delay in seconds") },
-        supportingText = { Text("0 to 86,400 seconds") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true
-    )
-    val parsedSeconds = customSeconds.toLongOrNull()
-    OutlinedButton(
-        onClick = {
-            parsedSeconds
-                ?.takeIf { it in 0L..86_400L }
-                ?.let { onSelect(it * 1_000L) }
-        },
-        enabled = parsedSeconds != null && parsedSeconds in 0L..86_400L,
-        modifier = Modifier.fillMaxWidth()
-    ) { Text("Save custom delay") }
-}
-
-private fun formatCustomDelay(milliseconds: Long): String {
-    val seconds = milliseconds / 1_000L
-    val hours = seconds / 3_600L
-    val minutes = seconds % 3_600L / 60L
-    val remainingSeconds = seconds % 60L
-    return buildList {
-        if (hours > 0) add("${hours}h")
-        if (minutes > 0) add("${minutes}m")
-        if (remainingSeconds > 0 || isEmpty()) add("${remainingSeconds}s")
-    }.joinToString(" ")
-}
-
-@Composable
-internal fun SettingText(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Text(value, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-    }
-}
-
-private val OUTAGE_DELAYS = listOf(
-    0L to "Immediately",
-    10_000L to "10 seconds",
-    30_000L to "30 seconds",
-    60_000L to "1 minute",
-    120_000L to "2 minutes",
-    300_000L to "5 minutes",
-    600_000L to "10 minutes"
-)
-
-private val RESTORE_DELAYS = listOf(
-    0L to "Immediately",
-    10_000L to "10 seconds",
-    30_000L to "30 seconds",
-    60_000L to "1 minute",
-    120_000L to "2 minutes"
-)
 
 private val HISTORY_LIMITS = listOf(
     50 to "Last 50 events",
@@ -696,5 +458,3 @@ private val HELP_LEVEL_OPTIONS = listOf(
         "Show concise technical notes and fewer setup hints."
     )
 )
-
-private val BATTERY_LOW_ALERT_THRESHOLDS = listOf(10, 15, 20, 25, 30)
