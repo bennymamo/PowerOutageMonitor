@@ -122,12 +122,13 @@ internal fun EcoFlowCloudSetupScreen(
                 Text("1. Tap Open EcoFlow Developer below.")
                 Text("2. Tap the person icon at the top-right. Choose Log in if you already have an EcoFlow account, or Create EcoFlow Account if you do not.")
                 Text("3. Choose Become a Developer and complete the developer registration if EcoFlow asks for it.")
-                Text("4. In the developer console, create an application for your personal home-monitoring use.")
-                Text("5. Open that application's credentials and copy its Access Key and Secret Key.")
-                Text("6. Return here, paste both keys, and tap Save credentials.")
-                Text("7. Tap Find my EcoFlow devices. Then inspect the PowerOcean entry.")
+                Text("4. EcoFlow may show Under review. This is normal: wait for its approval, which EcoFlow says can take up to 5 working days. You cannot create keys while the review is pending.")
+                Text("5. After approval, return to the developer console and create an application for your personal home-monitoring use.")
+                Text("6. Open that application's credentials and copy its Access Key and Secret Key.")
+                Text("7. Return here, paste both keys, and tap Save credentials.")
+                Text("8. Tap Find my EcoFlow devices. Then inspect the PowerOcean entry.")
             } else {
-                Text("Create Developer API credentials, then save and test them here.")
+                Text("Complete EcoFlow developer approval (up to 5 working days), create API credentials, then save and test them here.")
             }
             OutlinedButton(
                 onClick = {
