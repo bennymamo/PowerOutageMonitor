@@ -145,10 +145,12 @@ internal fun DelayOptions(
 
 internal fun formatCustomDelay(milliseconds: Long): String {
     val seconds = milliseconds / 1_000L
-    val hours = seconds / 3_600L
+    val days = seconds / 86_400L
+    val hours = seconds % 86_400L / 3_600L
     val minutes = seconds % 3_600L / 60L
     val remainingSeconds = seconds % 60L
     return buildList {
+        if (days > 0) add("${days}d")
         if (hours > 0) add("${hours}h")
         if (minutes > 0) add("${minutes}m")
         if (remainingSeconds > 0 || isEmpty()) add("${remainingSeconds}s")

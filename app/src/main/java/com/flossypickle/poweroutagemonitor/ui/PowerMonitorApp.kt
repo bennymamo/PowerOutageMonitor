@@ -24,6 +24,7 @@ import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliverySummary
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
 import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthSnapshot
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
@@ -63,6 +64,8 @@ internal fun PowerMonitorApp(
     systemHealth: SystemHealthSnapshot,
     selectedPowerSource: PowerSourceStore.Source,
     powerSourceStatus: PowerSourceStore.Status?,
+    scheduledAlertSettings: ScheduledAlertStore.Settings,
+    scheduledAlertState: ScheduledAlertStore.State,
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onSettingsChange: (Long, Long, Boolean, String) -> Unit,
@@ -73,6 +76,7 @@ internal fun PowerMonitorApp(
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
     onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit,
     onBatteryLowAlertChange: (Boolean, Int) -> Unit,
+    onScheduledAlertSettingsChange: (ScheduledAlertStore.Settings) -> Unit,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
@@ -148,7 +152,7 @@ internal fun PowerMonitorApp(
             AppScreen.STATUS -> DashboardScreen(
                 snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
                 alertChannels, systemHealth, audibleAlarmActive, selectedPowerSource,
-                powerSourceStatus, padding,
+                powerSourceStatus, scheduledAlertSettings, scheduledAlertState, padding,
                 onMonitoringEnabledChange, onDismissAudibleAlarm
             )
             AppScreen.HISTORY -> HistoryScreen(
@@ -162,6 +166,8 @@ internal fun PowerMonitorApp(
                 onThemeModeChange,
                 onHelpLevelChange,
                 onBatteryLowAlertChange,
+                scheduledAlertSettings,
+                onScheduledAlertSettingsChange,
                 audibleSettings,
                 onAudibleSettingsChange,
                 audibleAlarmActive,

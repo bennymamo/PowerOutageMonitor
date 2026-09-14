@@ -114,11 +114,16 @@ internal fun PowerSourceSettingsContent(
         )
         if (helpLevel.isGuided) {
             Text("Before setup:", fontWeight = FontWeight.Medium)
-            Text("1. Ask the EcoFlow installer to enable read access for Modbus TCP on the PowerOcean inverter.")
-            Text("2. Find the inverter's local IPv4 address in your router or ask the installer.")
+            Text("1. Ask EcoFlow support, your installer, or another certified EcoFlow partner to enable Modbus control on the inverter.")
+            Text("2. In your router, expand likely embedded-device entries such as ESP, lwIP, wlan or Unknown and note each private IPv4 address.")
             Text("3. Reserve that address in the router so it does not change.")
             Text("4. Keep the router and local network equipment on backup power.")
             Text("5. Save the address, run the read-only test, then activate EcoFlow.")
+            Text(
+                "A network scanner finding no open TCP port 502 usually means Modbus is disabled. It can also mean the inverter is on another subnet or Wi-Fi client isolation is enabled.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
         } else {
             Text(
                 "Requires inverter Modbus TCP access, a stable local IPv4 address, TCP port 502, unit 1, and backed-up LAN equipment.",
@@ -339,7 +344,7 @@ private const val LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NE
 
 private fun connectionErrorMessage(error: Throwable): String = when (error) {
     is java.net.SocketTimeoutException -> "The inverter did not reply before the timeout."
-    is java.net.ConnectException -> "Connection refused. Check the address and ask the installer to enable Modbus TCP."
+    is java.net.ConnectException -> "Connection refused. Check the address and ask EcoFlow support or a certified partner to enable Modbus TCP."
     is java.net.NoRouteToHostException -> "The inverter is not reachable on this network."
     else -> error.message?.take(140) ?: error.javaClass.simpleName
 }

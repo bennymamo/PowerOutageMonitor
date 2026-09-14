@@ -87,6 +87,7 @@ internal class MonitoringService : Service() {
             }
             ACTION_REFRESH_NOTIFICATION -> refreshNotification()
             ACTION_RELOAD_POWER_SOURCE -> reloadPowerSource()
+            ACTION_REFRESH_SCHEDULED_ALERTS -> reconcileSelectedPower()
             else -> reconcileSelectedPower()
         }
         return START_STICKY
@@ -244,19 +245,31 @@ internal class MonitoringService : Service() {
         val deadlineReached = OutageEngine.deadlineEpochMs(
             state, settings.outageDelayMs, settings.restoreDelayMs
         )?.let { signal.observedAtEpochMs >= it } == true
+        var fullStateProcessRan = false
         when {
             powered == null && !ecoFlowHadUnknown -> {
                 ecoFlowHadUnknown = true
                 process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
+                fullStateProcessRan = true
             }
             powered == null -> Unit
             ecoFlowHadUnknown -> {
                 ecoFlowHadUnknown = false
                 process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
                 process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+                fullStateProcessRan = true
             }
-            availabilityChanged || deadlineReached ->
+            availabilityChanged || deadlineReached -> {
                 process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+                fullStateProcessRan = true
+            }
+        }
+        if (!fullStateProcessRan) {
+            coordinator.processScheduledOnly(
+                currentBatterySnapshot(),
+                powered,
+                signal.observedAtEpochMs
+            )
         }
         if (signal.observedAtEpochMs - lastEcoFlowUiRefreshAt >= UI_REFRESH_INTERVAL_MS) {
             lastEcoFlowUiRefreshAt = signal.observedAtEpochMs
@@ -447,12 +460,25 @@ internal class MonitoringService : Service() {
             ContextCompat.startForegroundService(context, Intent(context, MonitoringService::class.java))
         }
 
+        fun handleScheduledAlert(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, MonitoringService::class.java)
+                    .setAction(ACTION_REFRESH_SCHEDULED_ALERTS)
+            )
+        }
+
+        fun refreshScheduledAlerts(context: Context) = handleScheduledAlert(context)
+
         private const val ACTION_AUDIBLE_TICK =
             "com.flossypickle.poweroutagemonitor.SERVICE_AUDIBLE_TICK"
         private const val ACTION_REFRESH_NOTIFICATION =
             "com.flossypickle.poweroutagemonitor.REFRESH_MONITOR_NOTIFICATION"
         private const val ACTION_RELOAD_POWER_SOURCE =
             "com.flossypickle.poweroutagemonitor.RELOAD_POWER_SOURCE"
+        private const val ACTION_REFRESH_SCHEDULED_ALERTS =
+            "com.flossypickle.poweroutagemonitor.REFRESH_SCHEDULED_ALERTS"
         private const val ANDROID_PROVIDER_ID = "android_charger"
         private const val ECOFLOW_STALE_AFTER_MS = 15_000L
         private const val UI_REFRESH_INTERVAL_MS = 15_000L

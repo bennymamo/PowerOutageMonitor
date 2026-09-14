@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,6 +33,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStor
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
 
 private enum class SettingsSection(val title: String) {
     HOME("Settings"),
@@ -40,6 +42,7 @@ private enum class SettingsSection(val title: String) {
     ALERTS("Alert channels"),
     AUDIBLE("Audible alarm"),
     BATTERY_ALERTS("Battery alerts"),
+    SCHEDULED_UPDATES("Scheduled updates"),
     DEVICE("Device"),
     OUTAGE("Outage timing"),
     RESTORATION("Restoration"),
@@ -60,6 +63,8 @@ internal fun SettingsScreen(
     onThemeModeChange: (MonitorStore.ThemeMode) -> Unit,
     onHelpLevelChange: (MonitorStore.HelpLevel) -> Unit,
     onBatteryLowAlertChange: (Boolean, Int) -> Unit,
+    scheduledAlertSettings: ScheduledAlertStore.Settings,
+    onScheduledAlertSettingsChange: (ScheduledAlertStore.Settings) -> Unit,
     audibleSettings: AudibleAlarmStore.Settings,
     onAudibleSettingsChange: (AudibleAlarmStore.Settings) -> Unit,
     audibleAlarmActive: Boolean,
@@ -91,6 +96,7 @@ internal fun SettingsScreen(
     val smsConfig = SmsConfigStore(context).config()
     SettingsPage(
         title = section.title,
+        resetScrollKey = section.name,
         padding = padding,
         onBack = if (section == SettingsSection.HOME) null else {
             { section = SettingsSection.HOME }
@@ -133,6 +139,14 @@ internal fun SettingsScreen(
                         "Warn once per outage at ${settings.batteryLowAlertThreshold}%"
                     } else "Off"
                 ) { section = SettingsSection.BATTERY_ALERTS }
+                SettingsCategoryCard(
+                    "Scheduled updates",
+                    buildList {
+                        if (scheduledAlertSettings.sourceUnavailableEnabled) add("source health")
+                        if (scheduledAlertSettings.heartbeatEnabled) add("heartbeat")
+                        if (scheduledAlertSettings.outageUpdatesEnabled) add("outage updates")
+                    }.joinToString(" · ").ifEmpty { "Off" }
+                ) { section = SettingsSection.SCHEDULED_UPDATES }
                 SettingsCategoryCard("Device", "Name used in alerts") {
                     section = SettingsSection.DEVICE
                 }
@@ -199,6 +213,10 @@ internal fun SettingsScreen(
                 settings = settings,
                 onChange = onBatteryLowAlertChange
             )
+            SettingsSection.SCHEDULED_UPDATES -> ScheduledUpdatesSettingsContent(
+                settings = scheduledAlertSettings,
+                onChange = onScheduledAlertSettingsChange
+            )
 
             SettingsSection.DEVICE -> DeviceSettingsContent(
                 settings = settings,
@@ -243,13 +261,16 @@ internal fun SettingsScreen(
 @Composable
 private fun SettingsPage(
     title: String,
+    resetScrollKey: String,
     padding: PaddingValues,
     onBack: (() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val scrollState = rememberScrollState()
+    LaunchedEffect(resetScrollKey) { scrollState.scrollTo(0) }
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
         Column(
-            Modifier.widthIn(max = 600.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+            Modifier.widthIn(max = 600.dp).fillMaxWidth().verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {

@@ -30,6 +30,8 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertProviderRegistry
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertCoordinator
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringCoordinator
 import com.flossypickle.poweroutagemonitor.monitoring.MonitoringService
@@ -62,6 +64,12 @@ class MainActivity : ComponentActivity() {
         PowerSourceStore.Source.ANDROID_CHARGER
     )
     private var powerSourceStatus = androidx.compose.runtime.mutableStateOf<PowerSourceStore.Status?>(null)
+    private var scheduledAlertSettings = androidx.compose.runtime.mutableStateOf(
+        ScheduledAlertStore.Settings()
+    )
+    private var scheduledAlertState = androidx.compose.runtime.mutableStateOf(
+        ScheduledAlertStore.State()
+    )
     private var deliverySummaries = androidx.compose.runtime.mutableStateOf(
         emptyMap<String, AlertDeliverySummary.Event>()
     )
@@ -135,6 +143,8 @@ class MainActivity : ComponentActivity() {
                     systemHealth = systemHealth.value,
                     selectedPowerSource = selectedPowerSource.value,
                     powerSourceStatus = powerSourceStatus.value,
+                    scheduledAlertSettings = scheduledAlertSettings.value,
+                    scheduledAlertState = scheduledAlertState.value,
                     deliverySummaries = deliverySummaries.value,
                     onMonitoringEnabledChange = ::setMonitoringEnabled,
                     onSettingsChange = ::updateSettings,
@@ -145,13 +155,14 @@ class MainActivity : ComponentActivity() {
                     onThemeModeChange = ::updateThemeMode,
                     onHelpLevelChange = ::updateHelpLevel,
                     onBatteryLowAlertChange = ::updateBatteryLowAlert,
+                    onScheduledAlertSettingsChange = ::updateScheduledAlertSettings,
                     onAudibleSettingsChange = ::updateAudibleSettings,
                     onDismissAudibleAlarm = ::dismissAudibleAlarm,
                     onTestAudibleAlarm = ::testAudibleAlarm,
                     onPowerSourceChanged = ::powerSourceChanged,
                     onClearHistory = ::clearHistory,
                     onSendTestAlert = ::sendTestAlert,
-                    onAlertConfigurationChanged = ::refreshStoredState
+                    onAlertConfigurationChanged = ::alertConfigurationChanged
                 )
             }
         }
@@ -238,6 +249,7 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             DeadlineScheduler(this).cancel()
+            ScheduledAlertCoordinator(this).stop()
             AudibleAlarmCoordinator(this).stop()
             stopService(Intent(this, MonitoringService::class.java))
         }
@@ -316,6 +328,14 @@ class MainActivity : ComponentActivity() {
         refreshStoredState()
     }
 
+    private fun updateScheduledAlertSettings(value: ScheduledAlertStore.Settings) {
+        ScheduledAlertStore(this).updateSettings(value)
+        if (MonitorStore(this).settings().monitoringEnabled) {
+            MonitoringService.refreshScheduledAlerts(this)
+        }
+        refreshStoredState()
+    }
+
     private fun updateAudibleSettings(value: AudibleAlarmStore.Settings) {
         AudibleAlarmStore(this).updateSettings(value)
         val store = MonitorStore(this)
@@ -353,6 +373,14 @@ class MainActivity : ComponentActivity() {
     private fun sendTestAlert(message: AlertMessage): Boolean =
         AlertDeliveryCoordinator(this).enqueueTest(message)
 
+    private fun alertConfigurationChanged() {
+        AlertDeliveryCoordinator(this).materializePending()
+        if (MonitorStore(this).settings().monitoringEnabled) {
+            MonitoringService.refreshScheduledAlerts(this)
+        }
+        refreshStoredState()
+    }
+
     private fun refreshStoredState() {
         val store = MonitorStore(this)
         val sourceStore = PowerSourceStore(this)
@@ -360,6 +388,9 @@ class MainActivity : ComponentActivity() {
         settings.value = store.settings()
         selectedPowerSource.value = sourceStore.selectedSource()
         powerSourceStatus.value = sourceStore.lastStatus()
+        val scheduledStore = ScheduledAlertStore(this)
+        scheduledAlertSettings.value = scheduledStore.settings()
+        scheduledAlertState.value = scheduledStore.state()
         lastObservationEpochMs.longValue = store.lastObservationEpochMs()
         history.value = EventHistoryStore(this).read()
         operationalHistory.value = OperationalHistoryStore(this).read()

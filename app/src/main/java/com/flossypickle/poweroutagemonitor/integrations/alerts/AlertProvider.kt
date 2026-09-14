@@ -7,7 +7,16 @@ internal data class AlertMessage(
     val body: String
 )
 
-internal enum class AlertKind { OUTAGE, RESTORED, BATTERY_LOW, TEST }
+internal enum class AlertKind {
+    OUTAGE,
+    OUTAGE_UPDATE,
+    RESTORED,
+    BATTERY_LOW,
+    SOURCE_UNAVAILABLE,
+    SOURCE_RESTORED,
+    HEARTBEAT,
+    TEST
+}
 
 internal sealed interface DeliveryResult {
     data class Sent(val providerMessageId: String? = null) : DeliveryResult

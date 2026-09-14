@@ -45,6 +45,7 @@ import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -74,6 +75,8 @@ internal fun DashboardScreen(
     audibleAlarmActive: Boolean,
     selectedPowerSource: PowerSourceStore.Source,
     powerSourceStatus: PowerSourceStore.Status?,
+    scheduledAlertSettings: ScheduledAlertStore.Settings,
+    scheduledAlertState: ScheduledAlertStore.State,
     padding: PaddingValues,
     onMonitoringEnabledChange: (Boolean) -> Unit,
     onDismissAudibleAlarm: () -> Unit
@@ -256,6 +259,17 @@ internal fun DashboardScreen(
                                 Color(0xFFF0C580)
                             } else colors.onSurfaceVariant
                         )
+                    }
+                    if (effectivePowered == null && settings.monitoringEnabled &&
+                        scheduledAlertSettings.sourceUnavailableEnabled
+                    ) {
+                        val sourceAlertText = when {
+                            scheduledAlertState.sourceUnavailableAlerted -> "Warning triggered"
+                            scheduledAlertState.sourceUnavailableSinceEpochMs != null ->
+                                "After ${formatCustomDelay(scheduledAlertSettings.sourceUnavailableDelayMs)}"
+                            else -> "Timer starting"
+                        }
+                        StatusRow("Source-loss alert", sourceAlertText, Color(0xFFF0C580))
                     }
                     StatusRow(
                         "Internet",

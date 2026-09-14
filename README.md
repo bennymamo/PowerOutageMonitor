@@ -19,6 +19,8 @@ The app is being developed by [Flossy Pickle](https://flossypickle.com). It has 
 - Queue internet alerts while offline and retry them in the correct order when connectivity returns.
 - Sound an optional repeating local alarm using a built-in beep or an Android alarm sound.
 - Warn once when the monitoring device's battery becomes low during an outage.
+- Warn when the selected power source stops giving trustworthy readings, with a configurable delay.
+- Send configurable monitor heartbeats and repeated updates during long outages.
 - Show diagnostics, setup checks, internet status, and provider failures without exposing credentials.
 - Offer System, Dark, and Light themes and Guided or Experienced setup instructions.
 
@@ -48,6 +50,8 @@ Requirements:
 4. The phone, router, Wi-Fi, and necessary network equipment must stay powered during an outage.
 5. On Android 17 and newer, allow Local network access when the EcoFlow setup page asks for it.
 6. Run the app's read-only connection test, activate EcoFlow as the grid source, then perform a controlled real grid-loss and restoration test before relying on alerts.
+
+Router names are not reliable device identities. PowerOcean communication hardware may appear as an `ESP`, `lwIP`, `wlan`, or unnamed client, and a HomePlug bridge can place it in either a Wi-Fi or wired list. Expand candidate entries to obtain their private IPv4 addresses and use **Test read-only connection** in the app. A timeout or closed TCP port `502` usually means Modbus is disabled, although a different subnet or Wi-Fi client isolation can produce the same result. Failed tests remain **Unknown** and cannot confirm an outage.
 
 EcoFlow does not publicly document this local register interface. Support for standard PowerOcean hardware and the register map come from the community-maintained [EF-PowerOcean-TcpModbus project](https://github.com/MaxGrmm/EF-PowerOcean-TcpModbus). Inverter firmware could change the behavior, so FP Grid Monitor fails closed to **Unknown** rather than guessing. EcoFlow mode checks every five seconds and keeps the device CPU and Wi-Fi awake, so it uses more energy than charger-based monitoring.
 
@@ -159,6 +163,10 @@ Resend is an advanced email option intended for users who already control a veri
 ### Audible alarm
 
 The local alarm is off by default. It can use the built-in beep or a sound from Android's alarm picker, repeat at a selected interval, temporarily raise alarm volume, and stop at a chosen battery level. The active alarm can be dismissed from the dashboard or notification. Sound tests stop automatically after five seconds.
+
+### Scheduled updates
+
+Under **Settings → Scheduled updates**, source-unavailable alerts default to a five-minute delay, monitor heartbeats default to once per day, and long-outage updates default to every six hours. Each can be disabled or changed independently using minutes, hours, or days. These messages use every enabled alert channel, so normal SMS charges may apply. A source-unavailable message means the app cannot determine grid state; it is deliberately separate from a confirmed outage alert.
 
 ## Permissions
 

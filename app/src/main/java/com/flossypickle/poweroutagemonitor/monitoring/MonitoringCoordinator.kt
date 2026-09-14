@@ -7,6 +7,8 @@ import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessageFactory
+import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertCoordinator
+import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
@@ -15,6 +17,7 @@ internal class MonitoringCoordinator(private val context: Context) {
     private val store = MonitorStore(context)
     private val history = EventHistoryStore(context)
     private val alerts = AlertDeliveryCoordinator(context)
+    private val scheduledAlerts = ScheduledAlertCoordinator(context)
     private val audibleAlarm = AudibleAlarmCoordinator(context)
 
     @Synchronized
@@ -41,6 +44,13 @@ internal class MonitoringCoordinator(private val context: Context) {
             ?.let(alerts::persistForEnabledProviders)
         recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)
+        scheduledAlerts.process(
+            monitorState = after,
+            snapshot = snapshot,
+            gridPowered = gridPowered,
+            selectedSource = PowerSourceStore(context).selectedSource(),
+            nowEpochMs = nowEpochMs
+        )
         if (after.phase == OutageEngine.Phase.POWERED &&
             before.phase != OutageEngine.Phase.POWERED
         ) {
@@ -63,6 +73,22 @@ internal class MonitoringCoordinator(private val context: Context) {
         alerts.materializePending()
         context.sendBroadcast(Intent(ACTION_MONITOR_STATE_CHANGED).setPackage(context.packageName))
         return after
+    }
+
+    @Synchronized
+    fun processScheduledOnly(
+        snapshot: PowerSnapshot,
+        gridPowered: Boolean?,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ) {
+        if (!store.settings().monitoringEnabled) return
+        scheduledAlerts.process(
+            monitorState = store.state(),
+            snapshot = snapshot,
+            gridPowered = gridPowered,
+            selectedSource = PowerSourceStore(context).selectedSource(),
+            nowEpochMs = nowEpochMs
+        )
     }
 
     private fun recordCompletedEvent(
