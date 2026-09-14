@@ -67,12 +67,19 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { startMonitoringService() }
 
-    private val receiver = object : BroadcastReceiver() {
+    private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_BATTERY_CHANGED -> PowerSnapshot.from(intent)?.let { snapshot.value = it }
                 Intent.ACTION_POWER_CONNECTED,
                 Intent.ACTION_POWER_DISCONNECTED -> refreshCurrentPowerSnapshot()
+            }
+        }
+    }
+
+    private val appReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
                 MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED -> refreshStoredState()
                 AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED,
                 AudibleAlarmCoordinator.ACTION_AUDIBLE_ALARM_CHANGED -> refreshStoredState()
@@ -153,7 +160,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         if (receiverRegistered) {
-            unregisterReceiver(receiver)
+            unregisterReceiver(systemReceiver)
+            unregisterReceiver(appReceiver)
             receiverRegistered = false
         }
         systemHealthMonitor.stop()
@@ -179,18 +187,26 @@ class MainActivity : ComponentActivity() {
 
     private fun registerAppReceiver() {
         if (receiverRegistered) return
-        val filter = IntentFilter().apply {
+        val systemFilter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        val appFilter = IntentFilter().apply {
             addAction(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED)
             addAction(AlertDeliveryWorker.ACTION_ALERT_DELIVERY_CHANGED)
             addAction(AudibleAlarmCoordinator.ACTION_AUDIBLE_ALARM_CHANGED)
         }
         val sticky = ContextCompat.registerReceiver(
             this,
-            receiver,
-            filter,
+            systemReceiver,
+            systemFilter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        ContextCompat.registerReceiver(
+            this,
+            appReceiver,
+            appFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         receiverRegistered = true

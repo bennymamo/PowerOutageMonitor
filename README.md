@@ -6,7 +6,7 @@ FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power m
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
-> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Android 6 compatibility and longer unattended testing still need physical verification. There is not yet a signed public release APK.
+> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. Longer unattended and old-device physical testing are still required. There is not yet a signed public release APK.
 
 ## What it can do
 
@@ -184,4 +184,4 @@ Before relying on it:
 
 Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for reproducible bugs and feature requests. Remove email addresses, phone numbers, chat identifiers, bot tokens, passwords, and API keys from screenshots and diagnostic text before posting.
 
-Planned work before the first public release includes longer unattended device testing, Android 6 verification, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
+Planned work before the first public release includes longer unattended device testing, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
