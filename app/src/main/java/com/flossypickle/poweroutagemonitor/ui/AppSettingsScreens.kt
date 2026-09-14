@@ -3,11 +3,22 @@ package com.flossypickle.poweroutagemonitor.ui
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -15,17 +26,27 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.sin
 
 /** Appearance, guidance, reliability, local-data and app-information settings. */
 @Composable
@@ -181,11 +202,172 @@ internal fun SafetyPrivacySettingsContent() {
 @Composable
 internal fun AboutSettingsContent() {
     val context = LocalContext.current
+    var headingTaps by remember { mutableStateOf(0) }
+    var versionTaps by remember { mutableStateOf(0) }
+    var foundGrid by remember { mutableStateOf(false) }
+    var foundEngineer by remember { mutableStateOf(false) }
+    var foundStars by remember { mutableStateOf(false) }
+    var starsVisible by remember { mutableStateOf(false) }
+    var authorRevealed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(starsVisible) {
+        if (starsVisible) {
+            delay(6_000)
+            starsVisible = false
+        }
+    }
+
     SettingsCard {
-        SettingText("App version", appVersionName(context))
+        Text(
+            "FP Grid Monitor",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable {
+                headingTaps++
+                if (headingTaps >= 7) {
+                    headingTaps = 0
+                    foundStars = true
+                    starsVisible = true
+                }
+            }
+        )
+        GridLogo(
+            engineerVisible = foundEngineer,
+            onLongPress = { foundEngineer = true }
+        )
+        Row(
+            Modifier.fillMaxWidth().clickable {
+                versionTaps++
+                if (versionTaps >= 5) {
+                    versionTaps = 0
+                    foundGrid = true
+                }
+            },
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("App version", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(appVersionName(context), fontWeight = FontWeight.Medium)
+        }
         SettingText("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         SettingText("Device", "${Build.MANUFACTURER} ${Build.MODEL}")
         SettingText("Package", context.packageName)
+        if (starsVisible) StarField()
+        if (foundGrid) {
+            GridWaveform(
+                canRevealAuthor = foundGrid && foundEngineer && foundStars,
+                onLongPress = { authorRevealed = true }
+            )
+        }
+        if (foundEngineer) {
+            Text(
+                "🥒  Field inspection complete. All conductors look suitably crunchy.",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 12.sp
+            )
+        }
+        if (authorRevealed) {
+            Text(
+                "Written with love, for free, by Bernard Mamo",
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun GridLogo(engineerVisible: Boolean, onLongPress: () -> Unit) {
+    val line = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.tertiary
+    Canvas(
+        Modifier.fillMaxWidth().height(92.dp)
+            .semantics { contentDescription = "FP Grid Monitor electricity-grid logo" }
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { onLongPress() }) }
+    ) {
+        val center = size.width / 2f
+        val top = size.height * .14f
+        val bottom = size.height * .88f
+        val halfBase = size.width.coerceAtMost(240f) * .28f
+        val path = Path().apply {
+            moveTo(center, top)
+            lineTo(center - halfBase, bottom)
+            moveTo(center, top)
+            lineTo(center + halfBase, bottom)
+            moveTo(center - halfBase * .52f, size.height * .48f)
+            lineTo(center + halfBase * .52f, size.height * .48f)
+            moveTo(center - halfBase * .72f, size.height * .68f)
+            lineTo(center + halfBase * .72f, size.height * .68f)
+            moveTo(center - halfBase * .38f, size.height * .48f)
+            lineTo(center + halfBase * .65f, bottom)
+            moveTo(center + halfBase * .38f, size.height * .48f)
+            lineTo(center - halfBase * .65f, bottom)
+        }
+        drawPath(path, line, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5f))
+        drawLine(line, Offset(0f, size.height * .34f), Offset(size.width, size.height * .34f), 3f)
+        if (engineerVisible) {
+            drawRoundRect(
+                color = Color(0xFF73C96B),
+                topLeft = Offset(center + halfBase + 18f, size.height * .57f),
+                size = androidx.compose.ui.geometry.Size(30f, 52f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(15f, 15f)
+            )
+            drawLine(
+                secondary,
+                Offset(center + halfBase + 18f, size.height * .62f),
+                Offset(center + halfBase + 48f, size.height * .62f),
+                8f
+            )
+        }
+    }
+}
+
+@Composable
+private fun GridWaveform(canRevealAuthor: Boolean, onLongPress: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "grid-wave")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
+    val color = MaterialTheme.colorScheme.primary
+    Column(
+        Modifier.fillMaxWidth().pointerInput(canRevealAuthor) {
+            detectTapGestures(onLongPress = { if (canRevealAuthor) onLongPress() })
+        },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Canvas(Modifier.fillMaxWidth().height(54.dp)) {
+            val path = Path()
+            for (x in 0..size.width.toInt()) {
+                val angle = x / size.width * (4 * PI).toFloat() + phase
+                val y = size.height / 2f + sin(angle.toDouble()).toFloat() * size.height * .32f
+                if (x == 0) path.moveTo(x.toFloat(), y) else path.lineTo(x.toFloat(), y)
+            }
+            drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
+        }
+        Text("50 Hz · The grid is humming", color = color, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun StarField() {
+    Box(
+        Modifier.fillMaxWidth().height(90.dp).background(
+            Color(0xFF050B12),
+            androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+        ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "✦       ·    ✧          ⚡       ·       ✦\n     ·          ✦       ·        ✧",
+            color = Color(0xFFFFD580),
+            fontSize = 18.sp
+        )
     }
 }
 
