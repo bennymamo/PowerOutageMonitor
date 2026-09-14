@@ -5,6 +5,7 @@
     <exclude domain="sharedpref" path="resend_email_config.xml" />
     <exclude domain="sharedpref" path="gmail_email_config.xml" />
     <exclude domain="sharedpref" path="sms_config.xml" />
+    <exclude domain="sharedpref" path="ecoflow_cloud_config.xml" />
     <exclude domain="file" path="alert_delivery_queue.json" />
     <exclude domain="device_file" path="pending_alert_events.json" />
     <exclude domain="device_sharedpref" path="enabled_alert_providers.xml" />

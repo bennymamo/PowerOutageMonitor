@@ -38,7 +38,6 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertSto
 private enum class SettingsSection(val title: String) {
     HOME("Settings"),
     SETUP("Setup & testing"),
-    POWER_SOURCES("Power sources"),
     ALERTS("Alert channels"),
     AUDIBLE("Audible alarm"),
     BATTERY_ALERTS("Battery alerts"),
@@ -72,9 +71,8 @@ internal fun SettingsScreen(
     onDismissAudibleAlarm: () -> Unit,
     onTestAudibleAlarm: () -> Unit,
     selectedPowerSource: PowerSourceStore.Source,
-    powerSourceStatus: PowerSourceStore.Status?,
-    onPowerSourceChanged: () -> Unit,
     onClearHistory: () -> Unit,
+    onOpenPowerSources: () -> Unit,
     onOpenSetupChecklist: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenTestMode: () -> Unit,
@@ -113,7 +111,7 @@ internal fun SettingsScreen(
                     if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
                         "EcoFlow PowerOcean is active"
                     } else "Android charger is active"
-                ) { section = SettingsSection.POWER_SOURCES }
+                ) { onOpenPowerSources() }
                 SettingsCategoryCard(
                     "Alert channels",
                     when {
@@ -186,13 +184,6 @@ internal fun SettingsScreen(
                 onOpenSetupChecklist = onOpenSetupChecklist,
                 onOpenDiagnostics = onOpenDiagnostics,
                 onOpenTestMode = onOpenTestMode
-            )
-
-            SettingsSection.POWER_SOURCES -> PowerSourceSettingsContent(
-                selectedSource = selectedPowerSource,
-                sourceStatus = powerSourceStatus,
-                helpLevel = settings.helpLevel,
-                onPowerSourceChanged = onPowerSourceChanged
             )
 
             SettingsSection.ALERTS -> AlertChannelsSettingsContent(

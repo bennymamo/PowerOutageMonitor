@@ -2,7 +2,7 @@
 
 ## Purpose
 
-FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. It can watch Android's external-power signal from a normal wall charger or, for supported battery-backup homes, read an EcoFlow PowerOcean inverter over the local network. If the selected source reports that grid power has disappeared long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
+FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. It can watch Android's external-power signal from a normal wall charger or, for supported battery-backup homes, use an optional EcoFlow PowerOcean module. If the selected source reports that grid power has disappeared long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
@@ -12,6 +12,7 @@ The app is being developed by [Flossy Pickle](https://flossypickle.com). It has 
 
 - Detect external power loss and stable restoration without constant polling.
 - Optionally read grid-connected/islanded state directly from a local EcoFlow PowerOcean inverter.
+- Preview a read-only EcoFlow Cloud connection without installer access or local port 502.
 - Ignore brief cable movement with configurable outage and restoration delays.
 - Continue monitoring with the screen off and resume after a reboot, as far as the device manufacturer allows.
 - Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, and possible unclean shutdowns.
@@ -54,6 +55,14 @@ Requirements:
 Router names are not reliable device identities. PowerOcean communication hardware may appear as an `ESP`, `lwIP`, `wlan`, or unnamed client, and a HomePlug bridge can place it in either a Wi-Fi or wired list. Expand candidate entries to obtain their private IPv4 addresses and use **Test read-only connection** in the app. A timeout or closed TCP port `502` usually means Modbus is disabled, although a different subnet or Wi-Fi client isolation can produce the same result. Failed tests remain **Unknown** and cannot confirm an outage.
 
 EcoFlow does not publicly document this local register interface. Support for standard PowerOcean hardware and the register map come from the community-maintained [EF-PowerOcean-TcpModbus project](https://github.com/MaxGrmm/EF-PowerOcean-TcpModbus). Inverter firmware could change the behavior, so FP Grid Monitor fails closed to **Unknown** rather than guessing. EcoFlow mode checks every five seconds and keeps the device CPU and Wi-Fi awake, so it uses more energy than charger-based monitoring.
+
+### EcoFlow Cloud preview
+
+**Settings → Power sources → EcoFlow Cloud** provides a separate, optional setup page for homes where local Modbus is unavailable. It uses EcoFlow's documented Developer API and the user's own API credentials; it never asks for the normal EcoFlow account password. Credentials are encrypted with Android Keystore and excluded from Android backup and device transfer.
+
+The guided page opens the [EcoFlow Developer Platform](https://developer-eu.ecoflow.com/), explains how to create an application, securely saves its Access Key and Secret Key, finds owned EcoFlow devices, and inspects documented PowerOcean phase voltage, grid flow, home load, solar power, and battery readings. It sends read-only `GET` requests and contains no cloud command that changes inverter settings.
+
+Cloud monitoring remains a preview rather than a selectable outage source. Some PowerOcean cloud values have been reported to stop refreshing when the EcoFlow app and web portal are closed. A successful request is therefore not yet sufficient proof that its data is current. Activation will require a controlled grid-loss and restoration test that proves the selected system's phase-voltage updates remain fresh unattended. Until then, uncertain cloud data cannot enter the outage state machine.
 
 ## Is it suitable for your setup?
 

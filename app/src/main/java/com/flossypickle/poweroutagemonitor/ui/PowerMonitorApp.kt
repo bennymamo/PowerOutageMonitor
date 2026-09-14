@@ -34,6 +34,7 @@ private enum class AppScreen(val label: String) {
     STATUS("Status"),
     HISTORY("History"),
     SETTINGS("Settings"),
+    POWER_SOURCES("Power sources"),
     SETUP_CHECKLIST("Setup checklist"),
     DIAGNOSTICS("Diagnostics"),
     TEST_MODE("Test mode"),
@@ -41,7 +42,9 @@ private enum class AppScreen(val label: String) {
     SMS("SMS"),
     EMAIL("Email"),
     GMAIL_EMAIL("Gmail"),
-    RESEND_EMAIL("Resend")
+    RESEND_EMAIL("Resend"),
+    ECOFLOW_LOCAL("EcoFlow local"),
+    ECOFLOW_CLOUD("EcoFlow Cloud")
 }
 
 private val primaryScreens = listOf(AppScreen.STATUS, AppScreen.HISTORY, AppScreen.SETTINGS)
@@ -108,6 +111,8 @@ internal fun PowerMonitorApp(
             AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
             AppScreen.SMS, AppScreen.EMAIL -> returnFromChecklistChild()
             AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> screen = AppScreen.EMAIL
+            AppScreen.ECOFLOW_LOCAL, AppScreen.ECOFLOW_CLOUD -> screen = AppScreen.POWER_SOURCES
+            AppScreen.POWER_SOURCES -> screen = AppScreen.SETTINGS
             AppScreen.HISTORY, AppScreen.SETTINGS -> screen = AppScreen.STATUS
             AppScreen.STATUS -> Unit
         }
@@ -127,7 +132,10 @@ internal fun PowerMonitorApp(
                                         AppScreen.SMS,
                                         AppScreen.EMAIL,
                                         AppScreen.GMAIL_EMAIL,
-                                        AppScreen.RESEND_EMAIL
+                                        AppScreen.RESEND_EMAIL,
+                                        AppScreen.POWER_SOURCES,
+                                        AppScreen.ECOFLOW_LOCAL,
+                                        AppScreen.ECOFLOW_CLOUD
                             )
                         TextButton(
                             onClick = {
@@ -175,9 +183,11 @@ internal fun PowerMonitorApp(
                 onDismissAudibleAlarm,
                 onTestAudibleAlarm,
                 selectedPowerSource,
-                powerSourceStatus,
-                onPowerSourceChanged,
                 onClearHistory,
+                onOpenPowerSources = {
+                    returnToChecklist = false
+                    screen = AppScreen.POWER_SOURCES
+                },
                 onOpenSetupChecklist = {
                     returnToChecklist = false
                     screen = AppScreen.SETUP_CHECKLIST
@@ -202,6 +212,22 @@ internal fun PowerMonitorApp(
                     returnToChecklist = false
                     screen = AppScreen.EMAIL
                 }
+            )
+            AppScreen.POWER_SOURCES -> PowerSourceSettingsScreen(
+                selectedSource = selectedPowerSource,
+                sourceStatus = powerSourceStatus,
+                helpLevel = settings.helpLevel,
+                padding = padding,
+                onOpenEcoFlowLocal = {
+                    returnToChecklist = false
+                    screen = AppScreen.ECOFLOW_LOCAL
+                },
+                onOpenEcoFlowCloud = {
+                    returnToChecklist = false
+                    screen = AppScreen.ECOFLOW_CLOUD
+                },
+                onPowerSourceChanged = onPowerSourceChanged,
+                onBack = { screen = AppScreen.SETTINGS }
             )
             AppScreen.SETUP_CHECKLIST -> SetupChecklistScreen(
                 settings = settings,
@@ -291,6 +317,19 @@ internal fun PowerMonitorApp(
                 padding = padding,
                 onConfigurationChanged = onAlertConfigurationChanged,
                 onBack = { screen = AppScreen.EMAIL }
+            )
+            AppScreen.ECOFLOW_LOCAL -> EcoFlowLocalSetupScreen(
+                selectedSource = selectedPowerSource,
+                sourceStatus = powerSourceStatus,
+                helpLevel = settings.helpLevel,
+                padding = padding,
+                onPowerSourceChanged = onPowerSourceChanged,
+                onBack = { screen = AppScreen.POWER_SOURCES }
+            )
+            AppScreen.ECOFLOW_CLOUD -> EcoFlowCloudSetupScreen(
+                helpLevel = settings.helpLevel,
+                padding = padding,
+                onBack = { screen = AppScreen.POWER_SOURCES }
             )
         }
     }

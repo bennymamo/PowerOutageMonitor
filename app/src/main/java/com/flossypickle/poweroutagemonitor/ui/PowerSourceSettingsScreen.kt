@@ -6,8 +6,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +47,152 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
+internal fun PowerSourceSettingsScreen(
+    selectedSource: PowerSourceStore.Source,
+    sourceStatus: PowerSourceStore.Status?,
+    helpLevel: MonitorStore.HelpLevel,
+    padding: PaddingValues,
+    onOpenEcoFlowLocal: () -> Unit,
+    onOpenEcoFlowCloud: () -> Unit,
+    onPowerSourceChanged: () -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        TextButton(onClick = onBack) { Text("‹ Settings") }
+        Text(
+            "Power sources",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        PowerSourceSettingsContent(
+            selectedSource = selectedSource,
+            sourceStatus = sourceStatus,
+            helpLevel = helpLevel,
+            onOpenEcoFlowLocal = onOpenEcoFlowLocal,
+            onOpenEcoFlowCloud = onOpenEcoFlowCloud,
+            onPowerSourceChanged = onPowerSourceChanged
+        )
+    }
+}
+
+@Composable
 internal fun PowerSourceSettingsContent(
+    selectedSource: PowerSourceStore.Source,
+    sourceStatus: PowerSourceStore.Status?,
+    helpLevel: MonitorStore.HelpLevel,
+    onOpenEcoFlowLocal: () -> Unit,
+    onOpenEcoFlowCloud: () -> Unit,
+    onPowerSourceChanged: () -> Unit
+) {
+    val context = LocalContext.current
+    val store = remember(context) { PowerSourceStore(context) }
+
+    SetupGuidanceCaption(helpLevel)
+    Text(
+        "Choose one module to decide whether the electricity grid is online. Only the selected module runs. Device battery information remains available with every choice.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    PowerSourceSectionTitle("Built in")
+    SettingsCard {
+        SourceHeading(
+            title = "Phone or tablet charger",
+            status = if (selectedSource == PowerSourceStore.Source.ANDROID_CHARGER) "ACTIVE" else "AVAILABLE"
+        )
+        Text(
+            "Best for a charger connected to a normal socket that loses power with the grid. It needs no account or network.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+        if (selectedSource != PowerSourceStore.Source.ANDROID_CHARGER) {
+            Button(
+                onClick = {
+                    store.select(PowerSourceStore.Source.ANDROID_CHARGER)
+                    onPowerSourceChanged()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Use Android charger") }
+        }
+    }
+
+    PowerSourceSectionTitle("EcoFlow modules")
+    SettingsCard {
+        SourceHeading(
+            title = "Local PowerOcean connection",
+            status = if (selectedSource == PowerSourceStore.Source.ECOFLOW_MODBUS) "ACTIVE" else "OPTIONAL"
+        )
+        Text(
+            "Reads the inverter directly over your home network. Fast and private, but EcoFlow must enable Modbus TCP first.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+        sourceStatus?.takeIf { it.source == PowerSourceStore.Source.ECOFLOW_MODBUS }?.let {
+            SettingText("Last reading", it.detail ?: it.availability.name)
+        }
+        OutlinedButton(onClick = onOpenEcoFlowLocal, modifier = Modifier.fillMaxWidth()) {
+            Text("Set up local connection")
+        }
+    }
+    SettingsCard {
+        SourceHeading(title = "EcoFlow Cloud", status = "PREVIEW")
+        Text(
+            "Uses EcoFlow's internet service and your own encrypted API keys. It needs no installer access or local port 502.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+        OutlinedButton(onClick = onOpenEcoFlowCloud, modifier = Modifier.fillMaxWidth()) {
+            Text("Set up EcoFlow Cloud")
+        }
+    }
+
+    PowerSourceSectionTitle("How to choose")
+    SettingsCard {
+        SettingText("Simplest", "Android charger")
+        SettingText("Most private", "EcoFlow local connection")
+        SettingText("No installer", "EcoFlow Cloud")
+        Text(
+            "EcoFlow Cloud stays in preview until a real PowerOcean test proves that its readings remain fresh with the EcoFlow app and portal closed.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+internal fun EcoFlowLocalSetupScreen(
+    selectedSource: PowerSourceStore.Source,
+    sourceStatus: PowerSourceStore.Status?,
+    helpLevel: MonitorStore.HelpLevel,
+    padding: PaddingValues,
+    onPowerSourceChanged: () -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        TextButton(onClick = onBack) { Text("‹ Power sources") }
+        Text(
+            "EcoFlow local connection",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        EcoFlowLocalSettingsContent(
+            selectedSource = selectedSource,
+            sourceStatus = sourceStatus,
+            helpLevel = helpLevel,
+            onPowerSourceChanged = onPowerSourceChanged
+        )
+    }
+}
+
+@Composable
+private fun EcoFlowLocalSettingsContent(
     selectedSource: PowerSourceStore.Source,
     sourceStatus: PowerSourceStore.Status?,
     helpLevel: MonitorStore.HelpLevel,
@@ -308,7 +460,7 @@ private fun SourceHeading(title: String, status: String) {
 }
 
 @Composable
-private fun PowerSourceSectionTitle(value: String) {
+internal fun PowerSourceSectionTitle(value: String) {
     Text(
         value.uppercase(),
         color = MaterialTheme.colorScheme.primary,
