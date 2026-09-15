@@ -47,6 +47,7 @@ internal class MonitoringService : Service() {
     private var lastEcoFlowStatusPersistedAt = 0L
     private var lastEcoFlowUiRefreshAt = 0L
     private val deadlineCheck = Runnable { reconcileSelectedPower() }
+    private var historyStartRecorded = false
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -63,14 +64,22 @@ internal class MonitoringService : Service() {
         coordinator = MonitoringCoordinator(this)
         audibleAlarm = AudibleAlarmCoordinator(this)
         activeSource = PowerSourceStore(this).selectedSource()
-        val settings = MonitorStore(this).settings()
-        OperationalHistoryStore(this).recordMonitoringStarted(settings.historyLimit)
         createNotificationChannel()
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
         registerBatteryReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!historyStartRecorded) {
+            val cause = when (intent?.action) {
+                ACTION_RESUME_AFTER_UPDATE -> OperationalHistoryStore.RestartCause.APP_UPDATE
+                ACTION_RESUME_AFTER_BOOT -> OperationalHistoryStore.RestartCause.DEVICE_REBOOT
+                else -> null
+            }
+            val historyLimit = MonitorStore(this).settings().historyLimit
+            OperationalHistoryStore(this).recordMonitoringStarted(historyLimit, cause)
+            historyStartRecorded = true
+        }
         if (!MonitorStore(this).settings().monitoringEnabled) {
             stopSelf()
             return START_NOT_STICKY
@@ -110,10 +119,12 @@ internal class MonitoringService : Service() {
         }
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         val settings = MonitorStore(this).settings()
-        OperationalHistoryStore(this).recordMonitoringStopped(
-            maxRecords = settings.historyLimit,
-            userDisabled = !settings.monitoringEnabled
-        )
+        if (historyStartRecorded) {
+            OperationalHistoryStore(this).recordMonitoringStopped(
+                maxRecords = settings.historyLimit,
+                userDisabled = !settings.monitoringEnabled
+            )
+        }
         super.onDestroy()
     }
 
@@ -423,10 +434,18 @@ internal class MonitoringService : Service() {
         var isRunning: Boolean = false
             private set
 
-        fun start(context: Context) {
+        fun start(
+            context: Context,
+            restartCause: OperationalHistoryStore.RestartCause? = null
+        ) {
+            val action = when (restartCause) {
+                OperationalHistoryStore.RestartCause.APP_UPDATE -> ACTION_RESUME_AFTER_UPDATE
+                OperationalHistoryStore.RestartCause.DEVICE_REBOOT -> ACTION_RESUME_AFTER_BOOT
+                null -> null
+            }
             ContextCompat.startForegroundService(
                 context,
-                Intent(context, MonitoringService::class.java)
+                Intent(context, MonitoringService::class.java).apply { this.action = action }
             )
         }
 
@@ -479,6 +498,10 @@ internal class MonitoringService : Service() {
             "com.flossypickle.poweroutagemonitor.RELOAD_POWER_SOURCE"
         private const val ACTION_REFRESH_SCHEDULED_ALERTS =
             "com.flossypickle.poweroutagemonitor.REFRESH_SCHEDULED_ALERTS"
+        private const val ACTION_RESUME_AFTER_UPDATE =
+            "com.flossypickle.poweroutagemonitor.RESUME_AFTER_UPDATE"
+        private const val ACTION_RESUME_AFTER_BOOT =
+            "com.flossypickle.poweroutagemonitor.RESUME_AFTER_BOOT"
         private const val ANDROID_PROVIDER_ID = "android_charger"
         private const val ECOFLOW_STALE_AFTER_MS = 15_000L
         private const val UI_REFRESH_INTERVAL_MS = 15_000L

@@ -40,9 +40,16 @@ No device serial number, network address, Telegram recipient, bot token or other
 - The corrected APK now owns one stoppable playback session. Android audio diagnostics on this device verified the selected sound stops at the five-second preview limit and the app-owned Dismiss action stops active playback immediately.
 - The accelerated 10-second test delays were returned to the recommended 60-second outage and 30-second restoration values. Monitoring remained enabled, the persisted phase was `POWERED`, and the device was on AC power.
 
+## 15 September follow-up: monitoring restart evidence
+
+Read-only Android `ApplicationExitInfo` inspection explained the cluster of unrecorded monitoring starts around midnight: those process exits were `USER REQUESTED` with `installPackageLI`, the normal result of repeated in-place development APK installs. One earlier exit was a system-pressure `SIGNALED` stop; the sticky foreground service restarted roughly two seconds later. The recent retained exit records showed no app crash. The current service is foreground and its notification remains silent.
+
+History now records a system-provided package-update or reboot resume separately from an unexplained service restart. A fresh in-place update on this phone produced `monitoring_resumed_after_update`, rather than another red interruption marker, and the foreground service resumed normally. Old records are retained unchanged so their original evidence is not rewritten.
+
 ## Still required
 
 - Leave the device connected and unused overnight, then inspect History for unexplained app or monitoring interruption markers.
+- Run that overnight window **without installing APKs**. Package replacements were the main source of earlier noisy restart markers; any new unexplained marker during a clean window warrants investigation.
 - Confirm the corrected dashboard or notification Dismiss control during one real outage. Its exact receiver action has passed on this device, but the user-facing control has not yet been repeated after installing the fix.
 - Test the optional audible alarm's battery cutoff and Do Not Disturb behavior. The built-in sound, Android-selected sound, preview limit and immediate stop path have passed.
 - Repeat essential compatibility testing on an Android 6/API 23 device if one is available.

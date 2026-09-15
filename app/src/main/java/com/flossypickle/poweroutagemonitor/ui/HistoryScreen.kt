@@ -108,10 +108,14 @@ private fun OperationalCard(record: OperationalHistoryStore.Record) {
     val title = when (record.kind) {
         OperationalHistoryStore.KIND_APP_OPENED -> "App opened"
         OperationalHistoryStore.KIND_APP_RECOVERED -> "Unrecorded app interruption"
+        OperationalHistoryStore.KIND_APP_UPDATED -> "App reopened after update"
+        OperationalHistoryStore.KIND_APP_REBOOTED -> "App opened after reboot"
         OperationalHistoryStore.KIND_APP_CLOSED -> "App closed"
         OperationalHistoryStore.KIND_MONITORING_STARTED -> "Monitoring started"
         OperationalHistoryStore.KIND_MONITORING_STOPPED -> "Monitoring stopped"
         OperationalHistoryStore.KIND_MONITORING_RECOVERED -> "Unrecorded monitoring interruption"
+        OperationalHistoryStore.KIND_MONITORING_UPDATED -> "Monitoring resumed after update"
+        OperationalHistoryStore.KIND_MONITORING_REBOOTED -> "Monitoring resumed after reboot"
         else -> "App event"
     }
     Card(

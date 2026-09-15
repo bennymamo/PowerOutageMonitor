@@ -21,20 +21,36 @@ internal class OperationalHistoryStore(context: Context) {
         val detail: String
     )
 
+    enum class RestartCause { APP_UPDATE, DEVICE_REBOOT }
+
+    /** A system update or reboot can end an open UI without calling onDestroy. */
+    fun expectAppRestart(cause: RestartCause) = synchronized(LOCK) {
+        if (preferences.getBoolean(KEY_APP_ACTIVE, false)) {
+            preferences.edit().putString(KEY_EXPECTED_APP_RESTART, cause.name).commit()
+        }
+    }
+
     fun recordAppOpened(maxRecords: Int, nowEpochMs: Long = System.currentTimeMillis()) {
         synchronized(LOCK) {
             val previousSessionUnclosed = preferences.getBoolean(KEY_APP_ACTIVE, false)
+            val expectedCause = runCatching {
+                RestartCause.valueOf(preferences.getString(KEY_EXPECTED_APP_RESTART, null) ?: "")
+            }.getOrNull()
             appendLocked(
                 Record(
-                    kind = if (previousSessionUnclosed) KIND_APP_RECOVERED else KIND_APP_OPENED,
+                    kind = appStartKind(previousSessionUnclosed, expectedCause),
                     timestampEpochMs = nowEpochMs,
-                    detail = if (previousSessionUnclosed) {
-                        "The app opened after no close was recorded. The previous UI process may have been killed or crashed."
-                    } else "Dashboard opened"
+                    detail = when {
+                        !previousSessionUnclosed -> "Dashboard opened"
+                        expectedCause == RestartCause.APP_UPDATE -> "Dashboard reopened after an app update"
+                        expectedCause == RestartCause.DEVICE_REBOOT -> "Dashboard opened after a device reboot"
+                        else -> "The app opened after no close was recorded. The previous UI process may have been killed or crashed."
+                    }
                 ),
                 maxRecords
             )
-            preferences.edit().putBoolean(KEY_APP_ACTIVE, true).commit()
+            preferences.edit().putBoolean(KEY_APP_ACTIVE, true)
+                .remove(KEY_EXPECTED_APP_RESTART).commit()
         }
     }
 
@@ -47,17 +63,23 @@ internal class OperationalHistoryStore(context: Context) {
         }
     }
 
-    fun recordMonitoringStarted(maxRecords: Int, nowEpochMs: Long = System.currentTimeMillis()) {
+    fun recordMonitoringStarted(
+        maxRecords: Int,
+        restartCause: RestartCause? = null,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ) {
         synchronized(LOCK) {
             val previousSessionUnclosed = preferences.getBoolean(KEY_SERVICE_ACTIVE, false)
             appendLocked(
                 Record(
-                    kind = startKind(previousSessionUnclosed),
+                    kind = startKind(previousSessionUnclosed, restartCause),
                     timestampEpochMs = nowEpochMs,
-                    detail = if (previousSessionUnclosed) {
-                        "Monitoring started after no stop was recorded. Android, a crash, or device power management may have ended the previous process."
-                    } else {
-                        "Background grid monitoring started"
+                    detail = when (restartCause) {
+                        RestartCause.APP_UPDATE -> "Background monitoring resumed after an app update"
+                        RestartCause.DEVICE_REBOOT -> "Background monitoring resumed after a device reboot"
+                        null -> if (previousSessionUnclosed) {
+                            "Monitoring started after no stop was recorded. Android, a crash, or device power management may have ended the previous process."
+                        } else "Background grid monitoring started"
                     }
                 ),
                 maxRecords
@@ -143,16 +165,34 @@ internal class OperationalHistoryStore(context: Context) {
     companion object {
         const val KIND_APP_OPENED = "app_opened"
         const val KIND_APP_RECOVERED = "app_recovered"
+        const val KIND_APP_UPDATED = "app_reopened_after_update"
+        const val KIND_APP_REBOOTED = "app_opened_after_reboot"
         const val KIND_APP_CLOSED = "app_closed"
         const val KIND_MONITORING_STARTED = "monitoring_started"
         const val KIND_MONITORING_RECOVERED = "monitoring_recovered"
+        const val KIND_MONITORING_UPDATED = "monitoring_resumed_after_update"
+        const val KIND_MONITORING_REBOOTED = "monitoring_resumed_after_reboot"
         const val KIND_MONITORING_STOPPED = "monitoring_stopped"
         private const val FILE_NAME = "operational_history_state"
         private const val KEY_SERVICE_ACTIVE = "service_active"
         private const val KEY_APP_ACTIVE = "app_active"
+        private const val KEY_EXPECTED_APP_RESTART = "expected_app_restart"
         private val LOCK = Any()
 
-        internal fun startKind(previousSessionUnclosed: Boolean) =
-            if (previousSessionUnclosed) KIND_MONITORING_RECOVERED else KIND_MONITORING_STARTED
+        internal fun startKind(previousSessionUnclosed: Boolean, cause: RestartCause? = null) =
+            when (cause) {
+                RestartCause.APP_UPDATE -> KIND_MONITORING_UPDATED
+                RestartCause.DEVICE_REBOOT -> KIND_MONITORING_REBOOTED
+                null -> if (previousSessionUnclosed) KIND_MONITORING_RECOVERED
+                    else KIND_MONITORING_STARTED
+            }
+
+        internal fun appStartKind(previousSessionUnclosed: Boolean, cause: RestartCause? = null) =
+            when {
+                !previousSessionUnclosed -> KIND_APP_OPENED
+                cause == RestartCause.APP_UPDATE -> KIND_APP_UPDATED
+                cause == RestartCause.DEVICE_REBOOT -> KIND_APP_REBOOTED
+                else -> KIND_APP_RECOVERED
+            }
     }
 }

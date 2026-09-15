@@ -15,7 +15,7 @@ The app is being developed by [Flossy Pickle](https://flossypickle.com). It has 
 - Preview a read-only EcoFlow Cloud connection without installer access or local port 502.
 - Ignore brief cable movement with configurable outage and restoration delays.
 - Continue monitoring with the screen off and resume after a reboot, as far as the device manufacturer allows.
-- Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, and possible unclean shutdowns.
+- Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, expected update/reboot resumes, and possible unclean shutdowns.
 - Send alerts through Telegram, Gmail, Resend, or the device's own SMS service.
 - Queue internet alerts while offline and retry them in the correct order when connectivity returns.
 - Sound an optional repeating local alarm using a built-in beep or an Android alarm sound.
