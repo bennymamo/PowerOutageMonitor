@@ -33,6 +33,15 @@ Paste into a private Bitwarden Note and attach the `.jks` file. The private path
 
 The script loads passwords only into its process environment, clears them afterward, and invokes `tools/verify-release.ps1` with the permanent certificate fingerprint. Its `Create` action refuses to overwrite an existing key. **Never rerun key creation to replace the first public signing key.**
 
+If the original Windows account or its DPAPI files are unavailable, download the `.jks` attachment from Bitwarden to a local folder outside the Git/OneDrive project. The portable build helper asks for the two passwords from the saved Note in masked PowerShell prompts and verifies the output against the permanent signing certificate:
+
+```powershell
+.\tools\build-release-from-keystore.ps1 -KeystorePath `
+    (Join-Path $env:USERPROFILE 'Downloads\fp-grid-monitor-release.jks')
+```
+
+Keep or remove that downloaded working copy according to the owner's private-key storage plan; the Bitwarden file attachment is the portable recovery copy. The certificate fingerprint is public information, but the keystore and passwords must stay private.
+
 ## Build configuration already prepared
 
 `app/build.gradle.kts` accepts these environment variables only for release signing:
