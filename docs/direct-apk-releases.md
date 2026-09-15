@@ -13,7 +13,7 @@ The selected first distribution route is a signed APK attached to a GitHub pre-r
 7. Run an unattended physical monitoring window, check History for unexplained starts, and re-test alarm dismissal, charger transitions and provider delivery on the release build.
 8. Create a GitHub **pre-release** with a version tag, concise user notes, the signed APK and its SHA-256 checksum. Only then change the README's installation section from “not available yet” to a versioned download link.
 
-The signing key is part of the app's update identity: every later APK installed over the original must use the same key. The permanent key was created after the owner chose Bitwarden Premium for an encrypted file attachment and password storage. A permanent-key signed candidate has been built and verified, but the GitHub APK must wait until the Bitwarden attachment and physical update checks are complete. The current debug-signed APK is never a public release.
+The signing key is part of the app's update identity: every later APK installed over the original must use the same key. The permanent key was created after the owner chose Bitwarden Premium for an encrypted file attachment and password storage. The owner has saved the Note and attached the keystore; a download/recovery check is still needed. A permanent-key signed candidate has been built and verified, but the GitHub APK must wait until that recovery check and physical update checks are complete. The current debug-signed APK is never a public release.
 
 ## Current Windows signing setup
 
@@ -25,7 +25,7 @@ From the repository root, the owner can copy the details for a Bitwarden **Note*
 .\tools\local-release-key.ps1 -Action CopyBitwardenNote
 ```
 
-Paste into a private Bitwarden Note, attach the `.jks` file from the path printed by the command, and clear the clipboard afterward. Do not put that note or file into GitHub Issues or repository files. After confirming a downloadable Bitwarden attachment, future signed builds use:
+Paste into a private Bitwarden Note and attach the `.jks` file. The private path printed by the command may be inaccessible from a separate sandbox or browser session. For the initial upload, a checksum-verified temporary copy was placed in the owner's local, non-OneDrive Downloads folder and removed after attachment. Do not copy the key into the OneDrive workspace or GitHub, and do not create a replacement key when a path is inaccessible. After confirming a downloadable Bitwarden attachment, future signed builds on the original Windows account use:
 
 ```powershell
 .\tools\local-release-key.ps1 -Action Build
