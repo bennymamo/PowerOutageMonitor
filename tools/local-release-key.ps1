@@ -26,7 +26,11 @@ function New-RandomPassword {
 }
 
 function Read-LocalPassword([string]$path) {
-    $secure = Get-Content -LiteralPath $path -Raw | ConvertTo-SecureString
+    try {
+        $secure = Get-Content -LiteralPath $path -Raw | ConvertTo-SecureString
+    } catch {
+        throw "Cannot unlock the Windows-protected signing password at $path. Run this command in a regular Windows PowerShell session under the original account, outside a sandboxed terminal."
+    }
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try {
         return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
@@ -91,7 +95,7 @@ if ($Action -eq 'Create') {
 
 foreach ($path in @($keystore, $storeSecret, $keySecret, $fingerprintFile)) {
     if (-not (Test-Path -LiteralPath $path)) {
-        throw "Missing signing material: $path"
+        throw "Signing material is not accessible at $path. Use a regular Windows PowerShell session under the original account. Do not create a replacement release key."
     }
 }
 
