@@ -6,6 +6,12 @@ FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power m
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
+## Android devices
+
+The current minimum is **Android 6.0 (API 23)**. A spare older phone can therefore act as a dedicated monitor instead of sitting unused. The basic charger-based detector uses Android's power-connection events, and the app keeps its outage decisions and alert queue on the device. A small ongoing notification supports monitoring while the screen is off. Android 6 emulator testing has passed setup, monitoring, and power transitions.
+
+An old Android version does not guarantee that a particular phone will keep the app running: manufacturer battery rules, a worn battery, unreliable Wi-Fi, or a charger on the wrong circuit can still cause missed alerts. Before using a spare phone as a monitor, check its battery condition and test an unplug/reconnect cycle, screen-off operation, reboot recovery, and each enabled alert destination on that actual device.
+
 > **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. Longer unattended and old-device physical testing are still required. There is not yet a signed public release APK.
 
 ## What it can do
@@ -181,11 +187,11 @@ Under **Settings → Scheduled updates**, source-unavailable alerts default to a
 
 ## Backup and restore
 
-Open **Settings → Data & backup** to create or restore a `.fpgrid` recovery archive. The user chooses which sections to include or restore: app settings, alert channels and keys, power sources, history, and live state with pending deliveries. The archive also records the app version that created it.
+Open **Settings → Data & backup** and choose **Create encrypted backup**, **Automatic backups**, or **Restore backup**. On a replacement phone, tap **Restore an existing backup** on the first setup screen instead of repeating the five-step setup. A `.fpgrid` archive can include app settings, alert channels and keys, power sources, history, and live state with pending deliveries. It also records the app version that created it.
 
 Every archive is encrypted in full with a password of at least ten characters. FP Grid Monitor uses a password-strengthening step followed by authenticated AES-256-GCM encryption, so the contents are unreadable and changes or corruption are detected. The file is not a ZIP and cannot be opened with an unzip tool. FP Grid Monitor cannot recover a forgotten password.
 
-Restore first unlocks and validates the complete archive, then shows its version and available sections before anything changes. Monitoring must be off during restore. Restored pending alerts stay paused unless **Resume monitoring after restore** is explicitly selected; this avoids duplicate alerts while the old device may still be active.
+For a replacement phone, enter the archive password, choose the file in Android's picker, review its version and available sections, then tap **Restore selected data**. Include **App settings** to recover completed setup. A successful restore adds a **Backup restored** marker to History, separating imported records from activity on the new device. Monitoring must be off during restore. Restored pending alerts stay paused unless **Resume monitoring after restore** is explicitly selected; this avoids duplicate alerts while the old device may still be active.
 
 The advanced backup editor can show the decrypted structured document, including credentials, after the user unlocks it. It creates a separate encrypted copy and validates every edited value before saving. Use it for controlled testing and keep the screen private while secrets are visible.
 
@@ -242,7 +248,7 @@ Before relying on it:
 
 Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for reproducible bugs and feature requests. Remove email addresses, phone numbers, chat identifiers, bot tokens, passwords, and API keys from screenshots and diagnostic text before posting.
 
-Planned work before the first public release includes longer unattended device testing, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
+Planned work before the first public release includes a verified backup of the permanent signing key, longer unattended device testing, a signed update test, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
 
 The optional EcoFlow source also requires validation against the actual inverter during one controlled grid outage before it should be treated as production-ready.
 

@@ -92,7 +92,12 @@ internal fun PowerMonitorApp(
     onAlertConfigurationChanged: () -> Unit
 ) {
     if (!settings.setupCompleted) {
-        SetupWizardScreen(settings = settings, snapshot = snapshot, onComplete = onCompleteSetup)
+        SetupWizardScreen(
+            settings = settings,
+            snapshot = snapshot,
+            onComplete = onCompleteSetup,
+            onRestore = onBackupRestore
+        )
         return
     }
     var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }

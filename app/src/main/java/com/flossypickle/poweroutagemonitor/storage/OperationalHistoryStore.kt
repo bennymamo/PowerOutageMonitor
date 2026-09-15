@@ -109,6 +109,18 @@ internal class OperationalHistoryStore(context: Context) {
         }
     }
 
+    /** Marks the boundary between imported History and this device's new activity. */
+    fun recordBackupRestored(maxRecords: Int, nowEpochMs: Long = System.currentTimeMillis()) {
+        append(
+            Record(
+                KIND_BACKUP_RESTORED,
+                nowEpochMs,
+                "A recovery archive was restored on this device. Review Android permissions and reconnect anything the device cannot transfer."
+            ),
+            maxRecords
+        )
+    }
+
     fun read(): List<Record> = synchronized(LOCK) { readLocked() }
 
     fun trimTo(maxRecords: Int) = synchronized(LOCK) {
@@ -173,6 +185,7 @@ internal class OperationalHistoryStore(context: Context) {
         const val KIND_MONITORING_UPDATED = "monitoring_resumed_after_update"
         const val KIND_MONITORING_REBOOTED = "monitoring_resumed_after_reboot"
         const val KIND_MONITORING_STOPPED = "monitoring_stopped"
+        const val KIND_BACKUP_RESTORED = "backup_restored"
         private const val FILE_NAME = "operational_history_state"
         private const val KEY_SERVICE_ACTIVE = "service_active"
         private const val KEY_APP_ACTIVE = "app_active"

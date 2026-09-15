@@ -127,6 +127,9 @@ internal class BackupManager(context: Context) {
             PendingAlertEventStore(appContext).replaceAll(data.pendingEvents)
             currentMonitor.setRestoredDeliveriesPaused(!shouldResume)
         }
+        OperationalHistoryStore(appContext).recordBackupRestored(
+            currentMonitor.settings().historyLimit
+        )
     }
 
     private fun capture(categories: Set<BackupCategory>): BackupDocument {

@@ -52,6 +52,9 @@ private enum class SettingsSection(val title: String) {
     RELIABILITY("Reliability"),
     HISTORY("History"),
     DATA_BACKUP("Data & backup"),
+    BACKUP_CREATE("Create backup"),
+    BACKUP_AUTOMATIC("Automatic backups"),
+    BACKUP_RESTORE("Restore backup"),
     SAFETY("Safety & privacy"),
     ABOUT("About")
 }
@@ -87,7 +90,7 @@ internal fun SettingsScreen(
     var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
 
     BackHandler(enabled = section != SettingsSection.HOME) {
-        section = SettingsSection.HOME
+        section = parentSection(section)
     }
     val context = LocalContext.current
     val telegramConfig = TelegramConfigStore(context).config()
@@ -101,7 +104,7 @@ internal fun SettingsScreen(
         resetScrollKey = section.name,
         padding = padding,
         onBack = if (section == SettingsSection.HOME) null else {
-            { section = SettingsSection.HOME }
+            { section = parentSection(section) }
         }
     ) {
         when (section) {
@@ -250,9 +253,34 @@ internal fun SettingsScreen(
                 onClearHistory = onClearHistory
             )
 
-            SettingsSection.DATA_BACKUP -> DataBackupSettingsContent(
+            SettingsSection.DATA_BACKUP -> {
+                SettingsCategoryCard(
+                    "Create encrypted backup",
+                    "Choose data and save a password-protected recovery file"
+                ) { section = SettingsSection.BACKUP_CREATE }
+                SettingsCategoryCard(
+                    "Automatic backups",
+                    "Schedule encrypted copies in a folder you choose"
+                ) { section = SettingsSection.BACKUP_AUTOMATIC }
+                SettingsCategoryCard(
+                    "Restore backup",
+                    "Unlock, inspect and selectively restore a recovery file"
+                ) { section = SettingsSection.BACKUP_RESTORE }
+            }
+            SettingsSection.BACKUP_CREATE -> DataBackupSettingsContent(
                 settings = settings,
-                onRestore = onBackupRestore
+                onRestore = onBackupRestore,
+                panel = BackupPanel.CREATE
+            )
+            SettingsSection.BACKUP_AUTOMATIC -> DataBackupSettingsContent(
+                settings = settings,
+                onRestore = onBackupRestore,
+                panel = BackupPanel.AUTOMATIC
+            )
+            SettingsSection.BACKUP_RESTORE -> DataBackupSettingsContent(
+                settings = settings,
+                onRestore = onBackupRestore,
+                panel = BackupPanel.RESTORE
             )
 
             SettingsSection.SAFETY -> SafetyPrivacySettingsContent()
@@ -260,6 +288,13 @@ internal fun SettingsScreen(
             SettingsSection.ABOUT -> AboutSettingsContent()
         }
     }
+}
+
+private fun parentSection(section: SettingsSection): SettingsSection = when (section) {
+    SettingsSection.BACKUP_CREATE,
+    SettingsSection.BACKUP_AUTOMATIC,
+    SettingsSection.BACKUP_RESTORE -> SettingsSection.DATA_BACKUP
+    else -> SettingsSection.HOME
 }
 
 @Composable

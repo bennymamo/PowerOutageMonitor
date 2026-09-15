@@ -116,6 +116,7 @@ private fun OperationalCard(record: OperationalHistoryStore.Record) {
         OperationalHistoryStore.KIND_MONITORING_RECOVERED -> "Unrecorded monitoring interruption"
         OperationalHistoryStore.KIND_MONITORING_UPDATED -> "Monitoring resumed after update"
         OperationalHistoryStore.KIND_MONITORING_REBOOTED -> "Monitoring resumed after reboot"
+        OperationalHistoryStore.KIND_BACKUP_RESTORED -> "Backup restored"
         else -> "App event"
     }
     Card(

@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,14 +38,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
+import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
 
 @Composable
 internal fun SetupWizardScreen(
     settings: MonitorStore.Settings,
     snapshot: PowerSnapshot?,
-    onComplete: (String, Long, Long, MonitorStore.HelpLevel) -> Unit
+    onComplete: (String, Long, Long, MonitorStore.HelpLevel) -> Unit,
+    onRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?
 ) {
     var step by rememberSaveable { mutableIntStateOf(0) }
+    var showRestore by rememberSaveable { mutableStateOf(false) }
     var deviceName by rememberSaveable { mutableStateOf(settings.deviceName) }
     var outageDelay by rememberSaveable { mutableLongStateOf(settings.outageDelayMs) }
     var restoreDelay by rememberSaveable { mutableLongStateOf(settings.restoreDelayMs) }
@@ -60,6 +66,18 @@ internal fun SetupWizardScreen(
         }
     }
     val powerTestComplete = sawConnected && sawDisconnected && sawReconnected
+
+    BackHandler(enabled = showRestore || step > 0) {
+        if (showRestore) showRestore = false else step--
+    }
+    if (showRestore) {
+        SetupRestoreScreen(
+            settings = settings,
+            onBack = { showRestore = false },
+            onRestore = onRestore
+        )
+        return
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -101,6 +119,12 @@ internal fun SetupWizardScreen(
                     else -> ReadyStep(deviceName, outageDelay, restoreDelay, powerTestComplete)
                 }
             }
+            if (step == 0) {
+                OutlinedButton(
+                    onClick = { showRestore = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Restore an existing backup") }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (step > 0) {
                     OutlinedButton(onClick = { step-- }, modifier = Modifier.weight(1f)) {
@@ -123,6 +147,40 @@ internal fun SetupWizardScreen(
                 }
             }
             }
+        }
+    }
+}
+
+@Composable
+private fun SetupRestoreScreen(
+    settings: MonitorStore.Settings,
+    onBack: () -> Unit,
+    onRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground
+    ) {
+        Column(
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            TextButton(onClick = onBack) { Text("‹ Setup") }
+            Text("Restore your monitor", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "Have a .fpgrid backup? Unlock it here before setting up this phone again. " +
+                    "Select App settings to recover your completed setup. Monitoring stays off " +
+                    "unless you explicitly choose to resume it.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            DataBackupSettingsContent(
+                settings = settings,
+                onRestore = onRestore,
+                panel = BackupPanel.RESTORE
+            )
         }
     }
 }

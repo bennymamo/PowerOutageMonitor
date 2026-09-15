@@ -44,10 +44,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+internal enum class BackupPanel {
+    CREATE,
+    AUTOMATIC,
+    RESTORE
+}
+
 @Composable
 internal fun DataBackupSettingsContent(
     settings: MonitorStore.Settings,
-    onRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?
+    onRestore: (BackupDocument, Set<BackupCategory>, Boolean) -> String?,
+    panel: BackupPanel
 ) {
     val context = LocalContext.current
     val manager = remember(context) { BackupManager(context) }
@@ -195,7 +202,7 @@ internal fun DataBackupSettingsContent(
         }
     }
 
-    SettingsCard {
+    if (panel == BackupPanel.CREATE) SettingsCard {
         Text("Create encrypted backup", fontWeight = FontWeight.Medium)
         Text(
             "Choose exactly what to include. Every selected item is encrypted before Android saves the file.",
@@ -232,7 +239,7 @@ internal fun DataBackupSettingsContent(
         }
     }
 
-    SettingsCard {
+    if (panel == BackupPanel.AUTOMATIC) SettingsCard {
         Text("Automatic encrypted backups", fontWeight = FontWeight.Medium)
         Text(
             "Android writes to one folder you choose. If Google Drive, OneDrive or Dropbox appears in the folder picker, selecting its folder lets that app sync the files without sharing your cloud password with FP Grid Monitor.",
@@ -355,7 +362,7 @@ internal fun DataBackupSettingsContent(
         }
     }
 
-    SettingsCard {
+    if (panel == BackupPanel.RESTORE) SettingsCard {
         Text("Restore encrypted backup", fontWeight = FontWeight.Medium)
         Text(
             "Unlock and validate a backup first. Nothing changes until you review it and tap Restore selected data.",
@@ -381,7 +388,7 @@ internal fun DataBackupSettingsContent(
         }
     }
 
-    pendingRestore?.let { document ->
+    if (panel == BackupPanel.RESTORE) pendingRestore?.let { document ->
         SettingsCard {
             Text("Backup ready", fontWeight = FontWeight.Medium)
             SettingText("Created", formatBackupDate(document.createdAtEpochMs))
