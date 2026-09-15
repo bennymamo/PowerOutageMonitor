@@ -14,6 +14,7 @@ internal class OperationalHistoryStore(context: Context) {
     } else context.applicationContext
     private val file = AtomicFile(File(storageContext.filesDir, "operational_history.json"))
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
+    private val processExitInspector = ProcessExitInspector(context.applicationContext)
 
     data class Record(
         val kind: String,
@@ -36,20 +37,30 @@ internal class OperationalHistoryStore(context: Context) {
             val expectedCause = runCatching {
                 RestartCause.valueOf(preferences.getString(KEY_EXPECTED_APP_RESTART, null) ?: "")
             }.getOrNull()
+            val exitInsight = if (previousSessionUnclosed && expectedCause == null) {
+                processExitInspector.recentExit(
+                    nowEpochMs,
+                    preferences.getLong(KEY_APP_LAST_OPENED_AT, 0L)
+                )
+            } else null
+            val cause = expectedCause ?: exitInsight?.takeIf { it.appUpdated }
+                ?.let { RestartCause.APP_UPDATE }
             appendLocked(
                 Record(
-                    kind = appStartKind(previousSessionUnclosed, expectedCause),
+                    kind = appStartKind(previousSessionUnclosed, cause),
                     timestampEpochMs = nowEpochMs,
                     detail = when {
                         !previousSessionUnclosed -> "Dashboard opened"
-                        expectedCause == RestartCause.APP_UPDATE -> "Dashboard reopened after an app update"
-                        expectedCause == RestartCause.DEVICE_REBOOT -> "Dashboard opened after a device reboot"
+                        cause == RestartCause.APP_UPDATE -> "Dashboard reopened after an app update"
+                        cause == RestartCause.DEVICE_REBOOT -> "Dashboard opened after a device reboot"
+                        exitInsight != null -> "The dashboard reopened without a recorded close. ${exitInsight.explanation}"
                         else -> "The app opened after no close was recorded. The previous UI process may have been killed or crashed."
                     }
                 ),
                 maxRecords
             )
             preferences.edit().putBoolean(KEY_APP_ACTIVE, true)
+                .putLong(KEY_APP_LAST_OPENED_AT, nowEpochMs)
                 .remove(KEY_EXPECTED_APP_RESTART).commit()
         }
     }
@@ -70,21 +81,34 @@ internal class OperationalHistoryStore(context: Context) {
     ) {
         synchronized(LOCK) {
             val previousSessionUnclosed = preferences.getBoolean(KEY_SERVICE_ACTIVE, false)
+            val exitInsight = if (previousSessionUnclosed && restartCause == null) {
+                processExitInspector.recentExit(
+                    nowEpochMs,
+                    preferences.getLong(KEY_SERVICE_LAST_STARTED_AT, 0L)
+                )
+            } else null
+            val cause = restartCause ?: exitInsight?.takeIf { it.appUpdated }
+                ?.let { RestartCause.APP_UPDATE }
             appendLocked(
                 Record(
-                    kind = startKind(previousSessionUnclosed, restartCause),
+                    kind = startKind(previousSessionUnclosed, cause),
                     timestampEpochMs = nowEpochMs,
-                    detail = when (restartCause) {
+                    detail = when (cause) {
                         RestartCause.APP_UPDATE -> "Background monitoring resumed after an app update"
                         RestartCause.DEVICE_REBOOT -> "Background monitoring resumed after a device reboot"
                         null -> if (previousSessionUnclosed) {
-                            "Monitoring started after no stop was recorded. Android, a crash, or device power management may have ended the previous process."
+                            if (exitInsight != null) {
+                                "Monitoring restarted without a recorded stop. ${exitInsight.explanation}"
+                            } else {
+                                "Monitoring started after no stop was recorded. Android, a crash, or device power management may have ended the previous process."
+                            }
                         } else "Background grid monitoring started"
                     }
                 ),
                 maxRecords
             )
-            preferences.edit().putBoolean(KEY_SERVICE_ACTIVE, true).commit()
+            preferences.edit().putBoolean(KEY_SERVICE_ACTIVE, true)
+                .putLong(KEY_SERVICE_LAST_STARTED_AT, nowEpochMs).commit()
         }
     }
 
@@ -188,7 +212,9 @@ internal class OperationalHistoryStore(context: Context) {
         const val KIND_BACKUP_RESTORED = "backup_restored"
         private const val FILE_NAME = "operational_history_state"
         private const val KEY_SERVICE_ACTIVE = "service_active"
+        private const val KEY_SERVICE_LAST_STARTED_AT = "service_last_started_at"
         private const val KEY_APP_ACTIVE = "app_active"
+        private const val KEY_APP_LAST_OPENED_AT = "app_last_opened_at"
         private const val KEY_EXPECTED_APP_RESTART = "expected_app_restart"
         private val LOCK = Any()
 

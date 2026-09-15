@@ -12,7 +12,7 @@ The current minimum is **Android 6.0 (API 23)**. A spare older phone can therefo
 
 An old Android version does not guarantee that a particular phone will keep the app running: manufacturer battery rules, a worn battery, unreliable Wi-Fi, or a charger on the wrong circuit can still cause missed alerts. Before using a spare phone as a monitor, check its battery condition and test an unplug/reconnect cycle, screen-off operation, reboot recovery, and each enabled alert destination on that actual device.
 
-> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. Longer unattended and old-device physical testing are still required. There is not yet a signed public release APK.
+> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Its foreground service also stayed active without a new History interruption during a more-than-12-hour check with no APK installs. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. Longer unattended and old-device physical testing are still required. There is not yet a signed public release APK.
 
 ## What it can do
 
@@ -242,7 +242,7 @@ Before relying on it:
 - Unplug and reconnect the real charger once while watching the configured delays.
 - Verify operation with the screen off, after removing the app from Recents, and after a reboot.
 - Check it again after Android system updates.
-- Review History for repeated app starts without matching stops, which can indicate process killing or crashes.
+- Review History for repeated app or monitoring starts without matching stops. On Android 11 and newer, the phone may explain a recent interruption as a crash, low memory, or app update; older phones mark the cause as unknown. Repeated unexplained starts need a closer look.
 
 ## Support and development status
 
