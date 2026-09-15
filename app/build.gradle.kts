@@ -3,6 +3,16 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Keep the long-lived release key and all passwords outside source control.
+// Debug builds and Android Studio sync work without these variables.
+val releaseStoreFile = providers.environmentVariable("FP_GRID_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("FP_GRID_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("FP_GRID_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("FP_GRID_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningReady = listOf(
+    releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.flossypickle.poweroutagemonitor"
     compileSdk {
@@ -19,8 +29,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                 enable = false
             }

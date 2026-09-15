@@ -296,7 +296,7 @@ internal fun ResendEmailSetupScreen(
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
             Text(
-                "The API key is supplied by you, encrypted with Android Keystore, excluded from backup and never shown again. Use a sending-only key restricted to the verified domain.",
+                "The API key is supplied by you, encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted FP Grid Monitor recovery archive includes it only when you select Alert channels and keys. Use a sending-only key restricted to the verified domain.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

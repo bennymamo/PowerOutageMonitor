@@ -21,6 +21,13 @@ local.properties
 # Local project journal maintained during development; not part of the public repository.
 /DEVELOPMENT_NOTES.local.md
 
+# Signing keys, local release configuration, and secrets must never reach GitHub.
+/keystore.properties
+/*.jks
+/*.keystore
+/app/*.jks
+/app/*.keystore
+
 # Temporary UI captures used during local verification.
 /.codex-*.xml
 /.codex-*.png

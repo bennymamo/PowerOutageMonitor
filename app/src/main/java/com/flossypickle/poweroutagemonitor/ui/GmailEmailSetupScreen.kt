@@ -276,7 +276,7 @@ internal fun GmailEmailSetupScreen(
         SectionTitle("Security")
         GmailCard {
             Text(
-                "The App Password is encrypted with Android Keystore, excluded from backup and never shown again. It can be revoked at any time from the Google account. A dedicated sending account limits exposure.",
+                "The App Password is encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted FP Grid Monitor recovery archive includes it only when you select Alert channels and keys. It can be revoked at any time from the Google account.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

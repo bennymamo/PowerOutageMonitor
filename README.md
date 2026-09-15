@@ -60,7 +60,7 @@ EcoFlow does not publicly document this local register interface. Support for st
 
 ### EcoFlow Cloud preview
 
-**Settings → Power sources → EcoFlow Cloud** provides a separate, optional setup page for homes where local Modbus is unavailable. It uses EcoFlow's documented Developer API and the user's own API credentials; it never asks for the normal EcoFlow account password. Credentials are encrypted with Android Keystore and excluded from Android backup and device transfer.
+**Settings → Power sources → EcoFlow Cloud** provides a separate, optional setup page for homes where local Modbus is unavailable. It uses EcoFlow's documented Developer API and the user's own API credentials; it never asks for the normal EcoFlow account password. Credentials are encrypted with Android Keystore and excluded from Android's automatic device backup. A user-created, password-encrypted recovery archive can include them when **Power sources** is selected.
 
 The guided page opens the [EcoFlow Developer Platform](https://developer-eu.ecoflow.com/), explains its developer review (EcoFlow says this can take up to five working days), then explains how to create an application. Once approved, it securely saves the application's Access Key and Secret Key, finds owned EcoFlow devices, and inspects documented PowerOcean phase voltage, grid flow, home load, solar power, and battery readings. It sends read-only `GET` requests and contains no cloud command that changes inverter settings.
 
@@ -220,6 +220,10 @@ FP Grid Monitor does not request contacts, location, camera, microphone, or broa
 
 Using an alert provider is also subject to that provider's privacy policy and network handling.
 
+## License
+
+Copyright © 2026 Flossy Pickle. FP Grid Monitor is free software under the [GNU General Public License, version 3](LICENSE). You may use and modify it; if you distribute a modified version, you must also make its corresponding source available under GPLv3. The license allows people to charge for copies or services. The **Flossy Pickle** name and FP Grid Monitor branding identify this project and are not permission to imply an unofficial fork is endorsed.
+
 ## Reliability notes
 
 Android and phone manufacturers ultimately control background execution. FP Grid Monitor uses a foreground service, event-driven Android power signals, persisted deadlines, reboot recovery, and a durable alert queue, but no Android app can promise uninterrupted operation on every device.
@@ -241,3 +245,5 @@ Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for 
 Planned work before the first public release includes longer unattended device testing, release signing, update documentation, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
 
 The optional EcoFlow source also requires validation against the actual inverter during one controlled grid outage before it should be treated as production-ready.
+
+<!-- Five quiet cycles, one field inspection, seven night sparks. Hold the first note only after the others. -->

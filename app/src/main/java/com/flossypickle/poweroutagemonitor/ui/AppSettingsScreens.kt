@@ -1,7 +1,9 @@
 package com.flossypickle.poweroutagemonitor.ui
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -251,6 +254,14 @@ internal fun AboutSettingsContent() {
         SettingText("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         SettingText("Device", "${Build.MANUFACTURER} ${Build.MODEL}")
         SettingText("Package", context.packageName)
+        SettingText("License", "GNU GPL version 3")
+        TextButton(onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
+                "https://github.com/bennymamo/PowerOutageMonitor/blob/main/LICENSE"
+            )))
+        }) {
+            Text("Read license and source code")
+        }
         if (starsVisible) StarField()
         if (foundGrid) {
             GridWaveform(

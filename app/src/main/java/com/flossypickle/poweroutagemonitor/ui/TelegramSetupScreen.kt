@@ -314,7 +314,7 @@ internal fun TelegramSetupScreen(
         Text("Security", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
-            Text("The bot token is encrypted with Android Keystore, excluded from backup and never shown again. Chat IDs and the token remain in credential-protected app storage.",
+            Text("The bot token is encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted FP Grid Monitor recovery archive includes it only when you select Alert channels and keys.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             if (!confirmRemove) {
                 TextButton(onClick = { confirmRemove = true }, enabled = !loading) {

@@ -289,7 +289,7 @@ internal fun SmsSetupScreen(
         SmsSectionTitle("Privacy & distribution")
         SmsCard {
             Text(
-                "Phone numbers stay on this device and are excluded from backup. Android reports when each SMS part is accepted by the phone's radio; carrier delivery receipts are not guaranteed.",
+                "Phone numbers stay on this device. Android's automatic device backup excludes them; a password-encrypted FP Grid Monitor recovery archive includes them only when you select Alert channels and keys. Android reports when each SMS part is accepted by the phone's radio; carrier delivery receipts are not guaranteed.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
