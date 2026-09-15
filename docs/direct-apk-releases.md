@@ -4,16 +4,34 @@ The selected first distribution route is a signed APK attached to a GitHub pre-r
 
 ## Release prerequisites
 
-1. Choose the source-code license and the permanent release-key storage/backup location.
-2. Create one long-lived Android release signing key locally. Store the keystore and both passwords outside the repository and back them up separately.
-3. Provide the four `FP_GRID_RELEASE_*` environment variables shown below. The build script contains no key or password.
-4. Give the first public build an explicit version name/code, then build and verify its signed APK and SHA-256 checksum.
+1. Use the selected GPLv3 source-code license and the permanent key in the current Windows user's private LocalAppData folder.
+2. Save both release passwords in a private Bitwarden Note and attach the `.jks` file to that item. Verify the attachment can be downloaded. Bitwarden attachments are not included in password-protected JSON vault exports, so keep an additional encrypted vault/file backup if you rely on exports.
+3. Use `tools/local-release-key.ps1` to load the Windows-protected local passwords only for the signed build. The build script contains no key or password.
+4. Use the assigned first preview version `1.0.0-preview.1` (build code `2`), then build and verify its signed APK and SHA-256 checksum. Later updates must increase the build code.
 5. On a fresh real device, install that signed APK and a higher-version update signed by the same key. Check that settings, History, monitoring and alerts survive the upgrade.
 6. For the current debug-signed Samsung install, first create a password-encrypted `.fpgrid` recovery archive. A release-signed APK cannot replace a debug-signed APK with the same package name; reinstall and restore are required for that one-time migration.
 7. Run an unattended physical monitoring window, check History for unexplained starts, and re-test alarm dismissal, charger transitions and provider delivery on the release build.
 8. Create a GitHub **pre-release** with a version tag, concise user notes, the signed APK and its SHA-256 checksum. Only then change the README's installation section from “not available yet” to a versioned download link.
 
-The signing key is part of the app's update identity: every later APK installed over the original must use the same key. For that reason, the project does not publish the current debug-signed APK as a public release and does not generate the permanent key without an explicit storage and backup decision.
+The signing key is part of the app's update identity: every later APK installed over the original must use the same key. The permanent key was created after the owner chose Bitwarden Premium for an encrypted file attachment and password storage. A permanent-key signed candidate has been built and verified, but the GitHub APK must wait until the Bitwarden attachment and physical update checks are complete. The current debug-signed APK is never a public release.
+
+## Current Windows signing setup
+
+The working file is `fp-grid-monitor-release.jks` under `%LOCALAPPDATA%\FlossyPickle\FPGridMonitor\signing`. Two 64-character random passwords are stored in separate Windows DPAPI-protected files in that same private folder. This local protection is bound to the current Windows account and is **not** a portable backup; Bitwarden must contain the passwords and a copy of the `.jks` file before publishing. The certificate SHA-256 is saved in `certificate-sha256.txt` there and can be printed safely.
+
+From the repository root, the owner can copy the details for a Bitwarden **Note** without printing the passwords in terminal output:
+
+```powershell
+.\tools\local-release-key.ps1 -Action CopyBitwardenNote
+```
+
+Paste into a private Bitwarden Note, attach the `.jks` file from the path printed by the command, and clear the clipboard afterward. Do not put that note or file into GitHub Issues or repository files. After confirming a downloadable Bitwarden attachment, future signed builds use:
+
+```powershell
+.\tools\local-release-key.ps1 -Action Build
+```
+
+The script loads passwords only into its process environment, clears them afterward, and invokes `tools/verify-release.ps1` with the permanent certificate fingerprint. Its `Create` action refuses to overwrite an existing key. **Never rerun key creation to replace the first public signing key.**
 
 ## Build configuration already prepared
 
@@ -42,3 +60,5 @@ Google's Android developer verification begins for participating stores in four 
 The first release should follow successful physical-device checks for boot recovery, screen-off monitoring, OEM battery restrictions, real charger events, alarm volume, Android sound playback and live alert delivery.
 
 Official references: [Android release signing](https://developer.android.com/studio/publish/app-signing), [command-line APK verification](https://developer.android.com/build/building-cmdline), [GitHub releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases), and [Android developer verification](https://developer.android.com/developer-verification).
+
+Bitwarden references: [encrypted file attachments](https://bitwarden.com/help/attachments/) and [vault exports](https://bitwarden.com/help/export-your-data/).
