@@ -11,6 +11,13 @@ import javax.net.ssl.HttpsURLConnection
 internal class PowerOceanAccountClient(
     private val openConnection: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }
 ) {
+    private class UnsupportedResponse(message: String) : Exception(message)
+    private fun requireResponse(condition: Boolean, message: String) {
+        if (!condition) throw UnsupportedResponse(message)
+    }
+    private fun <T> responseStep(message: String, action: () -> T): T = try { action() }
+        catch (known: UnsupportedResponse) { throw known }
+        catch (_: Exception) { throw UnsupportedResponse(message) }
     data class Connection(val email: String, val password: String, val serial: String,
         val model: String = "86", val region: String = "eu", val refreshSeconds: Int = 30) {
         val isValid get() = email.length in 3..254 && email.contains('@') && email.none(Char::isWhitespace) &&
@@ -53,27 +60,35 @@ internal class PowerOceanAccountClient(
     fun pushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> = request(
         URL("https://${session.loginHost}/iot-auth/enterprise-development/user/certification"), session.connection, session = session
     ) { root ->
-        require(session.userId.isNotEmpty())
-        val encoded = root.getString("data")
-        require(encoded.length <= 16_384)
+        requireResponse(session.userId.isNotEmpty(), "Live-feed setup failed: account login did not include the user ID required for MQTT.")
+        val encoded = root.opt("data")
+        requireResponse(encoded is String && encoded.length in 1..16_384, "Live-feed setup failed: EcoFlow did not return encrypted connection details in the expected format.")
         val key = java.security.MessageDigest.getInstance("SHA-256").digest(session.token.toByteArray(Charsets.UTF_8))
-        val cipher = javax.crypto.Cipher.getInstance("AES/CFB/NoPadding")
-        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"),
-            javax.crypto.spec.IvParameterSpec("ojsajkqjwk1w2dfg".toByteArray(Charsets.UTF_8)))
-        val plaintext = cipher.doFinal(Base64.decode(encoded, Base64.DEFAULT))
+        val plaintext = responseStep("Live-feed setup failed: this device could not decrypt EcoFlow's connection details.") {
+            try {
+                val cipher = javax.crypto.Cipher.getInstance("AES/CFB128/NoPadding")
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"),
+                    javax.crypto.spec.IvParameterSpec("ojsajkqjwk1w2dfg".toByteArray(Charsets.UTF_8)))
+                cipher.doFinal(Base64.decode(encoded as String, Base64.DEFAULT))
+            } finally { key.fill(0) }
+        }
         try {
             val padding = plaintext.lastOrNull()?.toInt()?.and(255) ?: 0
             val length = if (padding in 1..16 && plaintext.size >= padding && plaintext.takeLast(padding).all { it.toInt().and(255) == padding }) plaintext.size - padding else plaintext.size
-            val data = JSONObject(String(plaintext, 0, length, Charsets.UTF_8))
+            val data = responseStep("Live-feed setup failed: decrypted connection details were not valid JSON.") {
+                JSONObject(String(plaintext, 0, length, Charsets.UTF_8))
+            }
             val host = data.optString("url").lowercase(java.util.Locale.ROOT)
-            require(host.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ecoflow\\.com")))
+            requireResponse(host.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ecoflow\\.com")), "Live-feed setup failed: the reported broker address was missing or unsupported.")
             val wss = data.optString("protocol").lowercase() in setOf("wss", "websockets")
             val port = if (wss) data.optString("port").toIntOrNull() ?: 8084 else 8084
             val path = data.optString("path").ifEmpty { "/mqtt" }
-            require(port in 1..65535 && path.matches(Regex("/[A-Za-z0-9/_-]{1,100}")))
-            val account = data.getString("certificateAccount")
-            val password = data.getString("certificatePassword")
-            require(account.matches(Regex("[A-Za-z0-9_-]{1,200}")) && password.length in 8..300)
+            requireResponse(port in 1..65535 && path.matches(Regex("/[A-Za-z0-9/_-]{1,100}")), "Live-feed setup failed: the reported secure port or path was unsupported.")
+            val account = data.optString("certificateAccount")
+            val password = data.optString("certificatePassword")
+            requireResponse(account.isNotEmpty(), "Live-feed setup failed: EcoFlow's connection details did not include a broker account.")
+            requireResponse(account.length <= 512 && account.none(Char::isISOControl), "Live-feed setup failed: the broker account exceeded the supported length or contained control characters.")
+            requireResponse(password.length in 1..4096, "Live-feed setup failed: the broker password was missing or had an unsupported length.")
             PushCredentials(host, port, path, account, password)
         } finally { plaintext.fill(0); key.fill(0) }
     }
@@ -123,6 +138,8 @@ internal class PowerOceanAccountClient(
                 EcoFlowCloudClient.Result.Failure(message + if (status == 401 || status == 403) " Reconnect your account." else "",
                     status == 429 || status >= 500)
             }
+        } catch (known: UnsupportedResponse) {
+            EcoFlowCloudClient.Result.Failure(known.message ?: "Unsupported live-feed connection response.", false)
         } catch (_: IOException) {
             EcoFlowCloudClient.Result.Failure("PowerOcean cloud could not be reached. Check the phone and inverter internet connection.", true)
         } catch (_: Exception) {

@@ -14,6 +14,33 @@ import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class PowerOceanAccountClientTest {
+    @Test fun encryptedPortalConnectionDetailsDecodeOnOldAndroid() {
+        // Independent Python cryptography AES-CFB128 vector, containing fake credentials only.
+        val encoded = "lxfRB9M5TgxfgQVIgG0lcO2ZAGLZxzTcPb7zKw1mSpvmcNt07eSEMNjwMB8ry8ztoF5Qop6FkYStsFyxaLcyN3ECHE8qhOFH5ohvAudQaSFs4tbCtTpem4Rq181HnUfDzpu1YY/vim3h98L7ypgLuAm777pAfnNe746bl0SuIHpE5Odu94/wZVznnwQX7bNK"
+        val response = JSONObject().put("code", "0").put("data", encoded).toString()
+        val client = PowerOceanAccountClient { url -> Fixture(url, response) }
+        val account = PowerOceanAccountClient.Connection("owner@example.com", "private-password", "EXAMPLE-SERIAL")
+        val session = PowerOceanAccountClient.Session("example-private-token", account, "12345", "api-e.ecoflow.com")
+        val result = client.pushCredentials(session)
+        assertTrue("Expected decoded fake credentials, got $result", result is EcoFlowCloudClient.Result.Success)
+        val connection = (result as EcoFlowCloudClient.Result.Success).value
+        assertEquals("mqtt-e.ecoflow.com", connection.host)
+        assertEquals(8084, connection.port)
+        assertEquals("/mqtt", connection.path)
+        assertEquals("owner.account@example.com", connection.account)
+        assertEquals("secret-xyz", connection.password)
+        assertFalse(connection.toString().contains("secret-xyz"))
+    }
+
+    @Test fun unsupportedConnectionResponseGetsSpecificSafeFeedback() {
+        val client = PowerOceanAccountClient { url -> Fixture(url, """{"code":"0","data":{"privateValue":"never-display"}}""") }
+        val account = PowerOceanAccountClient.Connection("owner@example.com", "private-password", "EXAMPLE-SERIAL")
+        val result = client.pushCredentials(PowerOceanAccountClient.Session("example-private-token", account, "12345", "api-e.ecoflow.com"))
+        val failure = result as EcoFlowCloudClient.Result.Failure
+        assertTrue(failure.message.contains("expected format"))
+        assertFalse(failure.message.contains("never-display"))
+    }
+
     @Test fun regionalLoginAndDeviceReadUsePrivateTokenWithoutInverterCommands() {
         val responses = listOf("""{"code":"0","data":{"token":"example-private-token","user":{"userId":"12345"}}}""",
             """{"code":"0","data":{"sysGridPwr":100,"quota":{"JTS1_BP_STA_REPORT":{"private-battery-id":"{\"bpSoc\":60,\"bpSn\":\"private-battery-id\"}"},"JTS1_EMS_HEARTBEAT":{"meterAVoltage":230}}}}""")
@@ -42,6 +69,9 @@ class PowerOceanAccountClientTest {
     }
     private class Fixture(url: URL, private val response: String) : HttpsURLConnection(url) {
         val sent = ByteArrayOutputStream()
+        private val headers = mutableMapOf<String, String>()
+        override fun setRequestProperty(key: String, value: String) { headers[key.lowercase(java.util.Locale.ROOT)] = value }
+        override fun getRequestProperty(key: String): String? = headers[key.lowercase(java.util.Locale.ROOT)]
         override fun getOutputStream() = sent
         override fun getInputStream() = ByteArrayInputStream(response.toByteArray(Charsets.UTF_8))
         override fun getResponseCode() = 200

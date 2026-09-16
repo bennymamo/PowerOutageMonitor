@@ -31,6 +31,7 @@ internal class PowerOceanPushProbe {
         val disconnected = java.util.concurrent.atomic.AtomicBoolean(false)
         val reports = linkedMapOf<Int, Packet>()
         var latestJson: Packet? = null
+        var stage = "connecting to the secure broker"
         client.setCallback(object : MqttCallback {
             override fun connectionLost(cause: Throwable?) { disconnected.set(true) }
             override fun deliveryComplete(token: IMqttDeliveryToken?) = Unit
@@ -55,12 +56,17 @@ internal class PowerOceanPushProbe {
                 sslHostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
             }
             client.connect(options)
+            stage = "subscribing to device readings"
             client.subscribe("/app/device/property/${session.connection.serial}", 0)
             client.subscribe("/app/${session.userId}/${session.connection.serial}/thing/property/get_reply", 1)
-            client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1)
+            // A broker login is not necessarily safe as one MQTT topic segment.
+            if (credentials.account.none { it in "/+#" }) {
+                client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1)
+            }
             val deadline = SystemClock.elapsedRealtime() + 45_000
             var nextRequest = 0L
             var nextLiveRequest = 0L
+            stage = "requesting and receiving readings"
             while (SystemClock.elapsedRealtime() < deadline && !disconnected.get()) {
                 if (requestLiveReporting && SystemClock.elapsedRealtime() >= nextLiveRequest) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
@@ -117,6 +123,7 @@ internal class PowerOceanPushProbe {
                 reports.isEmpty() && latestJson == null -> "Push connection opened, but no supported PowerOcean readings arrived. Packets: $packets; unsupported: $unsupported. EcoFlow may require live-report activation or a different report decoder."
                 else -> null }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (failure: MqttException) { "Live feed failed while $stage (MQTT code ${failure.reasonCode}). No outage was inferred." }
         catch (_: Exception) { "PowerOcean push inspection could not connect or read data. Check account access and internet connectivity." }
         finally {
             runCatching { if (client.isConnected) client.disconnectForcibly(0, 1000, true) }

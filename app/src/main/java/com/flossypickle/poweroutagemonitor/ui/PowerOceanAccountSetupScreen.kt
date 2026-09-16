@@ -55,6 +55,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var probeRunning by remember { mutableStateOf(false) }
     var pushStatus by remember { mutableStateOf<String?>(null) }
     var requestLiveReporting by remember { mutableStateOf(false) }
+    var pushError by remember { mutableStateOf<String?>(null) }
+    var pushFeedback by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
@@ -216,17 +218,19 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             }
             Text("Enable if readings only update when EcoFlow's app is open. Sends the portal's temporary live-report request every 20 seconds during inspection. Stops requesting when inspection ends. No charging, reserve or output controls are sent. This unofficial protocol still needs checking on your model.", style = MaterialTheme.typography.bodySmall)
             Text("Stops when you leave the dashboard or put the app in the background. If no readings arrive, the result explains what remains to investigate.", style = MaterialTheme.typography.bodySmall)
+            pushFeedback?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+            pushError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Button(onClick = {
                 val current = session ?: return@Button
                 val requestedGeneration = generation
-                autoRefresh = false; probeRunning = true; loading = true; error = null
-                feedback = "Requesting secure push access…"
+                autoRefresh = false; probeRunning = true; loading = true; error = null; feedback = null
+                pushError = null; pushFeedback = "Requesting secure push access…"
                 probeJob = scope.launch {
                     try {
                         when (val result = withContext(Dispatchers.IO) { client.pushCredentials(current) }) {
-                            is EcoFlowCloudClient.Result.Failure -> if (requestedGeneration == generation) { error = result.message; feedback = null }
+                            is EcoFlowCloudClient.Result.Failure -> if (requestedGeneration == generation) { pushError = result.message; pushFeedback = null }
                             is EcoFlowCloudClient.Result.Success -> {
-                                feedback = "Inspecting push feed…"
+                                pushFeedback = "Inspecting push feed…"
                                 if (requestedGeneration != generation) return@launch
                                 val inspectionError = PowerOceanPushProbe().inspect(current, result.value, requestLiveReporting) { update ->
                                     if (requestedGeneration == generation) {
@@ -236,20 +240,24 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                                 }
                                 if (requestedGeneration == generation) {
                                     error = inspectionError
-                                    feedback = if (error == null) "Push inspection finished. Displaying its last readings." else null
+                                    pushError = inspectionError
+                                    pushFeedback = if (error == null) "Push inspection finished. Displaying its last readings." else null
                                     pushStatus = pushStatus?.plus(" · inspection finished")
                                 }
                             }
                         }
                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         if (requestedGeneration == generation) {
-                            feedback = "Push inspection stopped. Displaying its last readings."
+                            pushFeedback = "Push inspection stopped. Displaying its last readings."
                             pushStatus = pushStatus?.plus(" · inspection stopped")
                         }
                         throw cancelled
                     } finally { probeRunning = false; loading = false }
                 }
-            }, enabled = session != null && !unsaved && !loading, modifier = Modifier.fillMaxWidth()) { Text("Inspect live push feed") }
+            }, enabled = session != null && !unsaved && !loading, modifier = Modifier.fillMaxWidth()) {
+                if (probeRunning) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp)
+                Text(if (probeRunning) "Opening and inspecting live feed…" else "Inspect live push feed")
+            }
         }
         if (saved != null) {
             OutlinedButton({ confirmClear = true }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Remove saved account") }
