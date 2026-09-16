@@ -19,8 +19,19 @@ if (-not (Test-Path -LiteralPath $apksigner)) {
     throw "Android apksigner is missing from $($latestBuildTools.FullName)."
 }
 
-$verification = & $apksigner verify --min-sdk-version 23 --verbose --print-certs $releaseApk 2>&1
-if ($LASTEXITCODE -ne 0) {
+# Windows PowerShell 5.1 treats redirected native stderr as PowerShell errors.
+# Java can write warnings there even when verification succeeds. Capture them
+# without aborting, then require apksigner's exit code and expected certificate.
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $verification = & $apksigner verify --min-sdk-version 23 --verbose --print-certs $releaseApk 2>&1
+    $verificationExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+$verification = @($verification | ForEach-Object { $_.ToString() })
+if ($verificationExitCode -ne 0) {
     throw "Android rejected the APK signature: $($verification -join ' ')"
 }
 
