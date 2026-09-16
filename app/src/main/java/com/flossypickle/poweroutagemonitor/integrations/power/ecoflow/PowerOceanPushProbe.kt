@@ -15,14 +15,22 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import javax.net.ssl.HttpsURLConnection
 
 /** Short, user-started inspection; optional temporary reporting request, never power controls. */
-internal class PowerOceanPushProbe {
-    data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int)
-    private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean, val json: JSONObject? = null)
+internal class PowerOceanPushProbe(private val context: android.content.Context? = null) {
+    data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int,
+        val gridInspection: PowerOceanGridInspection.Snapshot)
+    private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean, val json: JSONObject? = null, val receivedUtcMillis: Long = System.currentTimeMillis())
 
     suspend fun inspect(session: PowerOceanAccountClient.Session, credentials: PowerOceanAccountClient.PushCredentials,
         requestLiveReporting: Boolean = false, inspectionSeconds: Int = 45,
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
-        require(inspectionSeconds in setOf(45, 300))
+        require(inspectionSeconds in setOf(45, 300, 900))
+        val gridInspection = PowerOceanGridInspection()
+        // Private, bounded development capture for comparing utility loss and restoration.
+        // Record only predefined decoded numeric/boolean fields; never raw payloads or account data.
+        val validationTrace = context?.takeIf {
+            it.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        }?.let { java.io.File(it.cacheDir, "powerocean-grid-validation.jsonl") }
+        runCatching { validationTrace?.writeText(JSONObject().put("inspectionStartedUtcMillis", System.currentTimeMillis()).toString() + "\n") }
         val queue = ConcurrentLinkedQueue<Packet>()
         val client = runCatching {
             require(credentials.transport in setOf("ssl", "wss"))
@@ -96,7 +104,20 @@ internal class PowerOceanPushProbe {
                     packets++; if (receivedPacket.retained) retained++
                     if (receivedPacket.reports.isEmpty() && receivedPacket.json == null) unsupported++
                     if (receivedPacket.json != null) { latestJson = receivedPacket; changed = true }
-                    receivedPacket.reports.forEach { reports[it.command] = receivedPacket; changed = true }
+                    receivedPacket.reports.forEach {
+                        reports[it.command] = receivedPacket; changed = true
+                        gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained)
+                    }
+                    runCatching {
+                        validationTrace?.takeIf { it.length() < 2_000_000 }?.let { trace ->
+                            receivedPacket.reports.forEach { report ->
+                                val safeValues = report.values.filterValues { it is Number || it is Boolean }
+                                trace.appendText(JSONObject().put("receivedUtcMillis", receivedPacket.receivedUtcMillis)
+                                    .put("command", report.command).put("retained", receivedPacket.retained)
+                                    .put("values", JSONObject(safeValues)).toString() + "\n")
+                            }
+                        }
+                    }
                     packet = queue.poll()
                 }
                 if (changed) {
@@ -122,7 +143,9 @@ internal class PowerOceanPushProbe {
                             (if (requestLiveReporting) "Temporary live reporting is requested every 20 seconds using portal command 96/97. " else "Live-report activation is off; reading requests only. ") +
                             "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. No grid state enters outage monitoring."
                     )
-                    if (snapshot.sections.isNotEmpty()) withContext(Dispatchers.Main) { onUpdate(Update(snapshot, packets, unsupported, retained)) }
+                    if (snapshot.sections.isNotEmpty()) withContext(Dispatchers.Main) {
+                        onUpdate(Update(snapshot, packets, unsupported, retained, gridInspection.snapshot()))
+                    }
                 }
                 delay(250)
             }

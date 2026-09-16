@@ -58,6 +58,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var pushError by remember { mutableStateOf<String?>(null) }
     var pushFeedback by remember { mutableStateOf<String?>(null) }
     var inspectionSeconds by remember { mutableStateOf(45) }
+    var gridInspection by remember { mutableStateOf<com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanGridInspection.Snapshot?>(null) }
+
+    fun receivedTime(epochMs: Long) = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(epochMs))
+    val inspectionDuration = if (inspectionSeconds >= 60) "${inspectionSeconds / 60} minutes" else "$inspectionSeconds seconds"
 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
@@ -140,10 +144,23 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     Text("Changing fields prove activity, not that every field is fresh.", style = MaterialTheme.typography.bodySmall)
                     } else {
                         Text("Live feed inspection", fontWeight = FontWeight.Medium)
-                        Text("Manual inspection · ${if (inspectionSeconds == 300) "5 minutes" else "45 seconds"}. The display keeps the final snapshot when inspection ends. Use the button below to set up another inspection.", style = MaterialTheme.typography.bodySmall)
+                        Text("Manual inspection · $inspectionDuration. The display keeps the final snapshot when inspection ends. Use the button below to set up another inspection.", style = MaterialTheme.typography.bodySmall)
                     }
                     pushStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     if (probeRunning) OutlinedButton({ probeJob?.cancel() }) { Text("Stop push inspection") }
+                }
+                if (pushStatus != null) SettingsCard {
+                    Text("Grid comparison", fontWeight = FontWeight.Medium)
+                    val evidence = gridInspection
+                    Text(evidence?.lastCode?.let { "Last reported grid code: $it" } ?: "Waiting for an explicit grid-code report.")
+                    evidence?.lastReceivedUtcMillis?.let {
+                        Text("Last code received: ${receivedTime(it)} (phone time)", style = MaterialTheme.typography.bodySmall)
+                    }
+                    evidence?.changes?.forEach {
+                        Text("${receivedTime(it.receivedUtcMillis)} · code ${it.code}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Compare codes before a grid cut, during backup operation and after restoration. Codes can differ by model; they do not yet trigger outage alerts. Receipt time is not a verified measurement time. Retained values are excluded from this comparison.", style = MaterialTheme.typography.bodySmall)
+                    Text("Backup can keep AC voltage present during an outage. Grid reconnection can also be reported several minutes after the supply returns. Allow time for recovery.", style = MaterialTheme.typography.bodySmall)
                 }
             })
         return
@@ -226,7 +243,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 FilterChip(inspectionSeconds == 45, { inspectionSeconds = 45 }, label = { Text("45 seconds") }, enabled = !loading)
                 FilterChip(inspectionSeconds == 300, { inspectionSeconds = 300 }, label = { Text("5 minutes") }, enabled = !loading)
             }
-            Text("Use 45 seconds to check access, or 5 minutes to compare grid-loss and recovery readings. These are manual inspections, not background outage monitoring.", style = MaterialTheme.typography.bodySmall)
+            FilterChip(inspectionSeconds == 900, { inspectionSeconds = 900 }, label = { Text("15 minutes · grid test") }, enabled = !loading)
+            Text("Use 45 seconds to check access, 5 minutes for a short comparison, or 15 minutes for a grid test with time to walk to the switch and wait for reconnection. These are manual inspections, not background outage monitoring.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Request live reporting", modifier = Modifier.weight(1f))
                 Switch(requestLiveReporting, { requestLiveReporting = it }, enabled = !loading)
@@ -239,7 +257,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 val current = session ?: return@Button
                 val requestedGeneration = generation
                 autoRefresh = false; probeRunning = true; loading = true; error = null; feedback = null
-                pushError = null; pushFeedback = "Requesting secure push access…"
+                pushError = null; pushFeedback = "Requesting secure push access…"; gridInspection = null
                 probeJob = scope.launch {
                     try {
                         when (val result = withContext(Dispatchers.IO) { client.pushCredentials(current) }) {
@@ -247,10 +265,11 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             is EcoFlowCloudClient.Result.Success -> {
                                 pushFeedback = "Inspecting push feed…"
                                 if (requestedGeneration != generation) return@launch
-                                val inspectionError = PowerOceanPushProbe().inspect(current, result.value, requestLiveReporting, inspectionSeconds) { update ->
+                                val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, requestLiveReporting, inspectionSeconds) { update ->
                                     if (requestedGeneration == generation) {
                                         snapshot = update.snapshot; dashboardOpen = true
                                         pushStatus = "Push packets: ${update.packets} · unsupported: ${update.unsupported} · retained: ${update.retained}"
+                                        gridInspection = update.gridInspection
                                     }
                                 }
                                 if (requestedGeneration == generation) {
