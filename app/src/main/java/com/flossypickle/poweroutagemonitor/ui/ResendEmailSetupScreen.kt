@@ -24,6 +24,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +72,10 @@ internal fun ResendEmailSetupScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val setupSteps = listOf("Prepare Resend", "Sender and recipients", "Save and test")
+    var setupStep by rememberSaveable { mutableStateOf(if (config.hasApiKey) setupSteps.lastIndex else 0) }
+    val setupScroll = rememberScrollState()
+    LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
     fun apiKeyForOperation() = apiKeyInput.trim().takeIf(String::isNotEmpty) ?: store.apiKey()
     fun runAsync(operation: suspend () -> Unit) {
@@ -86,7 +92,7 @@ internal fun ResendEmailSetupScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll)
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -102,6 +108,8 @@ internal fun ResendEmailSetupScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Prepare Resend") {
         Text("Setup", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
@@ -130,7 +138,9 @@ internal fun ResendEmailSetupScreen(
                 )
             }
         }
+        }
 
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Sender and recipients") {
         Text("Credentials", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
@@ -183,7 +193,9 @@ internal fun ResendEmailSetupScreen(
                 fontSize = 12.sp
             )
         }
+        }
 
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Save and test") {
         Text("Activation", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
@@ -291,7 +303,10 @@ internal fun ResendEmailSetupScreen(
                 Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
+        }
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasApiKey)
 
+        ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         Text("Security", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
@@ -326,6 +341,7 @@ internal fun ResendEmailSetupScreen(
                     TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
                 }
             }
+        }
         }
     }
 }

@@ -24,6 +24,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +74,10 @@ internal fun TelegramSetupScreen(
     var feedbackArea by remember { mutableStateOf<TelegramFeedbackArea?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val setupSteps = listOf("Create your bot", "Connect your bot", "Choose recipients", "Save and test")
+    var setupStep by rememberSaveable { mutableStateOf(if (config.hasToken) setupSteps.lastIndex else 0) }
+    val setupScroll = rememberScrollState()
+    LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
     fun tokenForOperation(): String? = tokenInput.trim().takeIf(String::isNotEmpty) ?: store.botToken()
     fun runAsync(area: TelegramFeedbackArea, operation: suspend () -> Unit) {
@@ -89,7 +95,7 @@ internal fun TelegramSetupScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll)
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -100,6 +106,8 @@ internal fun TelegramSetupScreen(
         Text("Use your own Telegram bot to send alerts directly from this device.",
             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
+        SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Create your bot") {
         Text("Setup", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
@@ -130,7 +138,9 @@ internal fun TelegramSetupScreen(
                 feedback = feedback
             )
         }
+        }
 
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Connect your bot") {
         Text("Bot credentials", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
@@ -174,7 +184,9 @@ internal fun TelegramSetupScreen(
                 feedback = feedback
             )
         }
+        }
 
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Choose recipients") {
         Text("Recipients", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
@@ -233,7 +245,9 @@ internal fun TelegramSetupScreen(
                 }
             }
         }
+        }
 
+        SetupFlowSection(3, setupStep, helpLevel.isGuided, "Save and test") {
         Text("Activation", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
@@ -310,7 +324,10 @@ internal fun TelegramSetupScreen(
                 feedback = feedback
             )
         }
+        }
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasToken)
 
+        ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         Text("Security", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
@@ -346,6 +363,7 @@ internal fun TelegramSetupScreen(
                 loading = loading,
                 feedback = feedback
             )
+        }
         }
     }
 }

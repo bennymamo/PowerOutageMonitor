@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +75,10 @@ internal fun SmsSetupScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val setupSteps = listOf("Check your phone", "Choose recipients", "Save and test")
+    var setupStep by rememberSaveable { mutableStateOf(if (config.recipients.isNotEmpty()) setupSteps.lastIndex else 0) }
+    val setupScroll = rememberScrollState()
+    LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
     val requestSmsPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -104,7 +110,7 @@ internal fun SmsSetupScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll)
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -117,6 +123,8 @@ internal fun SmsSetupScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Check your phone") {
         SmsSectionTitle("Availability")
         SmsCard {
             SmsStatusRow("SMS hardware", if (capability.supported) "Available" else "Not available")
@@ -168,7 +176,9 @@ internal fun SmsSetupScreen(
                 ) { Text("Check again") }
             }
         }
+        }
 
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Choose recipients") {
         SmsSectionTitle("Recipients")
         SmsCard {
             OutlinedTextField(
@@ -186,7 +196,9 @@ internal fun SmsSetupScreen(
                 fontSize = 12.sp
             )
         }
+        }
 
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Save and test") {
         SmsSectionTitle("Activation")
         SmsCard {
             Row(
@@ -285,7 +297,10 @@ internal fun SmsSetupScreen(
                 Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
+        }
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.recipients.isNotEmpty())
 
+        ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         SmsSectionTitle("Privacy & distribution")
         SmsCard {
             Text(
@@ -318,6 +333,7 @@ internal fun SmsSetupScreen(
                     TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
                 }
             }
+        }
         }
     }
 }

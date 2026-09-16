@@ -39,6 +39,10 @@ import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
 
 private enum class SettingsSection(val title: String) {
     HOME("Settings"),
+    MONITORING("Monitoring"),
+    MESSAGES("Alerts & sound"),
+    PERSONAL("Appearance & device"),
+    SUPPORT("Help & app"),
     SETUP("Setup & testing"),
     ALERTS("Alert channels"),
     AUDIBLE("Audible alarm"),
@@ -109,16 +113,41 @@ internal fun SettingsScreen(
     ) {
         when (section) {
             SettingsSection.HOME -> {
+                SettingsCategoryCard("Power sources", "Charger, optional integrations and confirmation") { onOpenPowerSources() }
+                SettingsCategoryCard("Monitoring", "Outage timing, restoration and keeping the app running") { section = SettingsSection.MONITORING }
+                SettingsCategoryCard("Alerts & sound", "Messages, delivery order and the local alarm") { section = SettingsSection.MESSAGES }
+                SettingsCategoryCard("Data & recovery", "History, encrypted backups and restore") { section = SettingsSection.DATA_BACKUP }
+                SettingsCategoryCard("Appearance & device", "Theme, device name and setup guidance") { section = SettingsSection.PERSONAL }
+                SettingsCategoryCard("Help & app", "Setup checklist, testing, safety and About") { section = SettingsSection.SUPPORT }
+            }
+            SettingsSection.MONITORING -> {
                 SettingsCategoryCard(
-                    "Setup & testing",
-                    "Diagnostics, power checks and safe alert simulations"
-                ) { section = SettingsSection.SETUP }
+                    "Outage timing",
+                    "Confirm after ${formatCustomDelay(settings.outageDelayMs)}"
+                ) { section = SettingsSection.OUTAGE }
                 SettingsCategoryCard(
-                    "Power sources",
-                    if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
-                        "EcoFlow PowerOcean is active"
-                    } else "Android charger is active"
-                ) { onOpenPowerSources() }
+                    "Restoration",
+                    "Confirm after ${formatCustomDelay(settings.restoreDelayMs)}"
+                ) { section = SettingsSection.RESTORATION }
+                SettingsCategoryCard(
+                    "Battery alerts",
+                    if (settings.batteryLowAlertEnabled) {
+                        "Warn once per outage at ${settings.batteryLowAlertThreshold}%"
+                    } else "Off"
+                ) { section = SettingsSection.BATTERY_ALERTS }
+                SettingsCategoryCard(
+                    "Scheduled updates",
+                    buildList {
+                        if (scheduledAlertSettings.sourceUnavailableEnabled) add("source health")
+                        if (scheduledAlertSettings.heartbeatEnabled) add("heartbeat")
+                        if (scheduledAlertSettings.outageUpdatesEnabled) add("outage updates")
+                    }.joinToString(" · ").ifEmpty { "Off" }
+                ) { section = SettingsSection.SCHEDULED_UPDATES }
+                SettingsCategoryCard("Reliability", "Boot startup and background guidance") {
+                    section = SettingsSection.RELIABILITY
+                }
+            }
+            SettingsSection.MESSAGES -> {
                 SettingsCategoryCard(
                     "Alert channels",
                     when {
@@ -138,31 +167,11 @@ internal fun SettingsScreen(
                         "On · repeats every ${formatCustomDelay(audibleSettings.repeatIntervalMs)}"
                     } else "Off"
                 ) { section = SettingsSection.AUDIBLE }
-                SettingsCategoryCard(
-                    "Battery alerts",
-                    if (settings.batteryLowAlertEnabled) {
-                        "Warn once per outage at ${settings.batteryLowAlertThreshold}%"
-                    } else "Off"
-                ) { section = SettingsSection.BATTERY_ALERTS }
-                SettingsCategoryCard(
-                    "Scheduled updates",
-                    buildList {
-                        if (scheduledAlertSettings.sourceUnavailableEnabled) add("source health")
-                        if (scheduledAlertSettings.heartbeatEnabled) add("heartbeat")
-                        if (scheduledAlertSettings.outageUpdatesEnabled) add("outage updates")
-                    }.joinToString(" · ").ifEmpty { "Off" }
-                ) { section = SettingsSection.SCHEDULED_UPDATES }
+            }
+            SettingsSection.PERSONAL -> {
                 SettingsCategoryCard("Device", "Name used in alerts") {
                     section = SettingsSection.DEVICE
                 }
-                SettingsCategoryCard(
-                    "Outage timing",
-                    "Confirm after ${formatCustomDelay(settings.outageDelayMs)}"
-                ) { section = SettingsSection.OUTAGE }
-                SettingsCategoryCard(
-                    "Restoration",
-                    "Confirm after ${formatCustomDelay(settings.restoreDelayMs)}"
-                ) { section = SettingsSection.RESTORATION }
                 SettingsCategoryCard(
                     "Appearance",
                     settings.themeMode.name.lowercase().replaceFirstChar(Char::titlecase)
@@ -173,16 +182,12 @@ internal fun SettingsScreen(
                         "Guided setup instructions"
                     } else "Concise setup instructions"
                 ) { section = SettingsSection.HELP }
-                SettingsCategoryCard("Reliability", "Boot startup and background guidance") {
-                    section = SettingsSection.RELIABILITY
-                }
-                SettingsCategoryCard("History", "Retention and local data controls") {
-                    section = SettingsSection.HISTORY
-                }
+            }
+            SettingsSection.SUPPORT -> {
                 SettingsCategoryCard(
-                    "Data & backup",
-                    "Encrypted backup, restore and automatic recovery copies"
-                ) { section = SettingsSection.DATA_BACKUP }
+                    "Setup & testing",
+                    "Diagnostics, power checks and safe alert simulations"
+                ) { section = SettingsSection.SETUP }
                 SettingsCategoryCard("Safety & privacy", "Battery care and data use") {
                     section = SettingsSection.SAFETY
                 }
@@ -254,6 +259,7 @@ internal fun SettingsScreen(
             )
 
             SettingsSection.DATA_BACKUP -> {
+                SettingsCategoryCard("History", "Retention and local data controls") { section = SettingsSection.HISTORY }
                 SettingsCategoryCard(
                     "Create encrypted backup",
                     "Choose data and save a password-protected recovery file"
@@ -291,9 +297,13 @@ internal fun SettingsScreen(
 }
 
 private fun parentSection(section: SettingsSection): SettingsSection = when (section) {
-    SettingsSection.BACKUP_CREATE,
-    SettingsSection.BACKUP_AUTOMATIC,
-    SettingsSection.BACKUP_RESTORE -> SettingsSection.DATA_BACKUP
+    SettingsSection.BACKUP_CREATE, SettingsSection.BACKUP_AUTOMATIC, SettingsSection.BACKUP_RESTORE,
+    SettingsSection.HISTORY -> SettingsSection.DATA_BACKUP
+    SettingsSection.OUTAGE, SettingsSection.RESTORATION, SettingsSection.BATTERY_ALERTS,
+    SettingsSection.SCHEDULED_UPDATES, SettingsSection.RELIABILITY -> SettingsSection.MONITORING
+    SettingsSection.ALERTS, SettingsSection.AUDIBLE -> SettingsSection.MESSAGES
+    SettingsSection.DEVICE, SettingsSection.APPEARANCE, SettingsSection.HELP -> SettingsSection.PERSONAL
+    SettingsSection.SETUP, SettingsSection.SAFETY, SettingsSection.ABOUT -> SettingsSection.SUPPORT
     else -> SettingsSection.HOME
 }
 

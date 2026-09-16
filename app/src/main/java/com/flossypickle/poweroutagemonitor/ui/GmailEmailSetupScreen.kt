@@ -24,6 +24,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +73,10 @@ internal fun GmailEmailSetupScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val setupSteps = listOf("Prepare Google account", "Sender account", "Choose recipients", "Save and test")
+    var setupStep by rememberSaveable { mutableStateOf(if (config.hasAppPassword) setupSteps.lastIndex else 0) }
+    val setupScroll = rememberScrollState()
+    LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
     fun passwordForOperation() = appPasswordInput.takeIf(String::isNotBlank) ?: store.appPassword()
     fun runAsync(operation: suspend () -> Unit) {
@@ -83,7 +89,7 @@ internal fun GmailEmailSetupScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll)
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -96,6 +102,8 @@ internal fun GmailEmailSetupScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Prepare Google account") {
         SectionTitle("Setup")
         GmailCard {
             if (helpLevel.isGuided) {
@@ -123,7 +131,9 @@ internal fun GmailEmailSetupScreen(
                 )
             }
         }
+        }
 
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Sender account") {
         SectionTitle("Credentials")
         GmailCard {
             OutlinedTextField(
@@ -156,7 +166,9 @@ internal fun GmailEmailSetupScreen(
                 )
             }
         }
+        }
 
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Choose recipients") {
         SectionTitle("Recipients")
         GmailCard {
             OutlinedTextField(
@@ -174,7 +186,9 @@ internal fun GmailEmailSetupScreen(
                 fontSize = 12.sp
             )
         }
+        }
 
+        SetupFlowSection(3, setupStep, helpLevel.isGuided, "Save and test") {
         SectionTitle("Activation")
         GmailCard {
             Row(
@@ -272,7 +286,10 @@ internal fun GmailEmailSetupScreen(
                 Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
+        }
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasAppPassword)
 
+        ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         SectionTitle("Security")
         GmailCard {
             Text(
@@ -304,6 +321,7 @@ internal fun GmailEmailSetupScreen(
                     TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
                 }
             }
+        }
         }
     }
 }
