@@ -90,7 +90,8 @@ class BackupDocumentCodecTest {
             cloudSerialNumber = "SN123",
             cloudDeviceName = "PowerOcean",
             powerOceanAccount = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection(
-                "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20)
+                "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20),
+            powerOceanRequireChargerConfirmation = true
         ),
         history = BackupDocument.HistoryData(
             powerEvents = listOf(EventHistoryStore.Record("outage", 100, 200, 300, 90, 89)),

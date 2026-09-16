@@ -31,6 +31,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val store = remember(context) { PowerOceanAccountStore(context) }
+    val sourceStore = remember(context) { com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore(context) }
+    var requireChargerConfirmation by remember { mutableStateOf(sourceStore.powerOceanRequiresChargerConfirmation()) }
+    var chargerPowered by remember { mutableStateOf<Boolean?>(null) }
+    var lossConfirmation by remember { mutableStateOf<PowerOceanLossConfirmation.Result?>(null) }
     val client = remember { PowerOceanAccountClient() }
     val scope = rememberCoroutineScope()
     var saved by remember { mutableStateOf(store.connection()) }
@@ -58,6 +62,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var pushError by remember { mutableStateOf<String?>(null) }
     var pushFeedback by remember { mutableStateOf<String?>(null) }
     var inspectionSeconds by remember { mutableStateOf(45) }
+    var useTestedGridCorrelation by remember(saved) { mutableStateOf(false) }
+    var confirmGridCorrelation by remember { mutableStateOf(false) }
     var gridInspection by remember { mutableStateOf<com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanGridInspection.Snapshot?>(null) }
 
     fun receivedTime(epochMs: Long) = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(epochMs))
@@ -159,6 +165,25 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     evidence?.changes?.forEach {
                         Text("${receivedTime(it.receivedUtcMillis)} · code ${it.code}", style = MaterialTheme.typography.bodySmall)
                     }
+                    evidence?.correlation?.let { comparison ->
+                        val label = when (comparison.state) {
+                            PowerOceanGridCorrelation.State.UNKNOWN -> "Not enough current grid evidence"
+                            PowerOceanGridCorrelation.State.INVERTER_CONNECTED -> "EcoFlow reports a grid connection"
+                            PowerOceanGridCorrelation.State.INVERTER_OFF_GRID -> if (comparison.currentMeterValue == 0.0) "EcoFlow off-grid · meter reports zero flow" else "EcoFlow off-grid · waiting for meter evidence"
+                            PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY -> "Grid appears back · waiting for EcoFlow to reconnect"
+                        }
+                        Text(label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        Text("Installation-specific inspection comparison. Requires a live device feed, an explicit pushed grid code, then zero flow followed by two changing non-zero meter readings. Old pre-zero meter values and retained messages cannot establish return. Receipt times do not prove measurement freshness. This does not send alerts or change monitoring.", style = MaterialTheme.typography.bodySmall)
+                        if (requireChargerConfirmation) {
+                            Text("Charger: ${when (chargerPowered) { true -> "connected"; false -> "disconnected"; null -> "unknown" }}", style = MaterialTheme.typography.bodySmall)
+                            Text(when (lossConfirmation?.reason) {
+                                PowerOceanLossConfirmation.Reason.CHARGER_CORROBORATED -> "Outage evidence agrees: EcoFlow off-grid, zero meter flow and charger disconnected."
+                                PowerOceanLossConfirmation.Reason.WAITING_FOR_CHARGER -> "Waiting for charger-loss confirmation."
+                                PowerOceanLossConfirmation.Reason.RETURN_PENDING -> "Recovery follows the grid evidence; charger reconnection is not required."
+                                else -> "Charger confirmation applies to outage detection only."
+                            }, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     Text("Compare codes before a grid cut, during backup operation and after restoration. Codes can differ by model; they do not yet trigger outage alerts. Receipt time is not a verified measurement time. Retained values are excluded from this comparison.", style = MaterialTheme.typography.bodySmall)
                     Text("Backup can keep AC voltage present during an outage. Grid reconnection can also be reported several minutes after the supply returns. Allow time for recovery.", style = MaterialTheme.typography.bodySmall)
                 }
@@ -172,8 +197,19 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         Text("PowerOcean account", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         SetupGuidanceCaption(helpLevel)
         SettingsCard {
+            Text("Additional confirmation", fontWeight = FontWeight.Medium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Require charger confirmation for outages", modifier = Modifier.weight(1f))
+                Switch(requireChargerConfirmation, {
+                    sourceStore.setPowerOceanChargerConfirmation(it)
+                    requireChargerConfirmation = it
+                }, enabled = !loading)
+            }
+            Text("Off by default. When enabled, the phone must also lose charger power before EcoFlow and meter evidence can confirm an outage. Grid recovery does not wait for the charger to reconnect. This setting is included in Power sources backups.", style = MaterialTheme.typography.bodySmall)
+        }
+        SettingsCard {
             Text("Optional · experimental", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-            Text("Uses your normal EcoFlow login to read PowerOcean's cloud service. No developer keys, Modbus or installer are needed. EcoFlow may change this unofficial interface.")
+            Text("Uses your normal EcoFlow login to read PowerOcean's cloud service. No developer keys, Modbus or installer are needed. EcoFlow may change this unofficial interface. EcoFlow has not confirmed permission or request limits for this connection; account restrictions are possible. Ask EcoFlow for approved PowerOcean API access before relying on it for continuous monitoring.")
             Text("This reads your inverter and batteries while your home remains powered by backup. It does not change inverter settings. Outage monitoring will be enabled only after we verify a trustworthy grid signal.", style = MaterialTheme.typography.bodySmall)
         }
         NetworkBackupGuidance()
@@ -251,13 +287,20 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             }
             Text("Enable if readings only update when EcoFlow's app is open. Sends the portal's temporary live-report request every 20 seconds during inspection. Stops requesting when inspection ends. No charging, reserve or output controls are sent. This unofficial protocol still needs checking on your model.", style = MaterialTheme.typography.bodySmall)
             Text("Stops when you leave the dashboard or put the app in the background. If no readings arrive, the result explains what remains to investigate.", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Use my tested grid/meter comparison", modifier = Modifier.weight(1f))
+                Switch(useTestedGridCorrelation, {
+                    if (it) confirmGridCorrelation = true else useTestedGridCorrelation = false
+                }, enabled = !loading && !unsaved && saved?.model == "86")
+            }
+            Text("Optional Single Phase inspection profile: code 0 means connected, code 1 means off-grid, and AC meter 1 loses power with the utility grid. Enable only after physically checking these facts on your installation. This choice applies to the current inspection session; automatic monitoring is unchanged.", style = MaterialTheme.typography.bodySmall)
             pushFeedback?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
             pushError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Button(onClick = {
                 val current = session ?: return@Button
                 val requestedGeneration = generation
                 autoRefresh = false; probeRunning = true; loading = true; error = null; feedback = null
-                pushError = null; pushFeedback = "Requesting secure push access…"; gridInspection = null
+                pushError = null; pushFeedback = "Requesting secure push access…"; gridInspection = null; lossConfirmation = null
                 probeJob = scope.launch {
                     try {
                         when (val result = withContext(Dispatchers.IO) { client.pushCredentials(current) }) {
@@ -265,11 +308,15 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             is EcoFlowCloudClient.Result.Success -> {
                                 pushFeedback = "Inspecting push feed…"
                                 if (requestedGeneration != generation) return@launch
-                                val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, requestLiveReporting, inspectionSeconds) { update ->
+                                val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, requestLiveReporting, inspectionSeconds,
+                                    correlationProfile = if (useTestedGridCorrelation) PowerOceanGridCorrelation.Profile() else null,
+                                    requireChargerConfirmation = requireChargerConfirmation) { update ->
                                     if (requestedGeneration == generation) {
                                         snapshot = update.snapshot; dashboardOpen = true
                                         pushStatus = "Push packets: ${update.packets} · unsupported: ${update.unsupported} · retained: ${update.retained}"
                                         gridInspection = update.gridInspection
+                                        chargerPowered = update.chargerExternallyPowered
+                                        lossConfirmation = update.confirmation
                                     }
                                 }
                                 if (requestedGeneration == generation) {
@@ -297,6 +344,11 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             OutlinedButton({ confirmClear = true }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Remove saved account") }
         }
     }
+    if (confirmGridCorrelation) AlertDialog(onDismissRequest = { confirmGridCorrelation = false },
+        title = { Text("Have you tested this installation?") },
+        text = { Text("Use this comparison only if a controlled grid cut showed code 0 before the cut, code 1 while off-grid, code 0 after reconnection, and AC meter 1 losing power with the grid. A UPS-powered meter or different codes need a different profile. Zero meter flow alone cannot confirm an outage.") },
+        confirmButton = { TextButton({ useTestedGridCorrelation = true; confirmGridCorrelation = false }) { Text("I verified this") } },
+        dismissButton = { TextButton({ confirmGridCorrelation = false }) { Text("Cancel") } })
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("Remove PowerOcean account?") },
         text = { Text("Removes the saved connection from this phone. Existing encrypted backups may still contain it.") },
         confirmButton = { TextButton({ store.clear(); generation++; saved = null; session = null; snapshot = null; email = ""; password = ""; serial = ""; feedback = null; error = null; confirmClear = false }) { Text("Remove") } },

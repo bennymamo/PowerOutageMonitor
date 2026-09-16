@@ -223,7 +223,8 @@ internal class BackupManager(context: Context) {
             cloudCredentials = cloud.credentials(),
             cloudSerialNumber = cloudConfig.selectedSerialNumber,
             cloudDeviceName = cloudConfig.selectedDeviceName,
-            powerOceanAccount = PowerOceanAccountStore(appContext).connection()
+            powerOceanAccount = PowerOceanAccountStore(appContext).connection(),
+            powerOceanRequireChargerConfirmation = local.powerOceanRequiresChargerConfirmation()
         )
     }
 
@@ -232,6 +233,7 @@ internal class BackupManager(context: Context) {
         val account = data.powerOceanAccount?.also { require(it.isValid) { "Invalid PowerOcean account connection in backup." } }
         PowerOceanAccountStore(appContext).apply { clear(); account?.let(::save) }
         PowerSourceStore(appContext).restoreEcoFlowConfig(data.modbus)
+        PowerSourceStore(appContext).setPowerOceanChargerConfirmation(data.powerOceanRequireChargerConfirmation)
         EcoFlowCloudConfigStore(appContext).apply {
             clear()
             data.cloudCredentials?.let(::saveCredentials)

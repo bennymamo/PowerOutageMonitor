@@ -17,14 +17,18 @@ import javax.net.ssl.HttpsURLConnection
 /** Short, user-started inspection; optional temporary reporting request, never power controls. */
 internal class PowerOceanPushProbe(private val context: android.content.Context? = null) {
     data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int,
-        val gridInspection: PowerOceanGridInspection.Snapshot)
-    private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean, val json: JSONObject? = null, val receivedUtcMillis: Long = System.currentTimeMillis())
+        val gridInspection: PowerOceanGridInspection.Snapshot, val chargerExternallyPowered: Boolean? = null,
+        val confirmation: PowerOceanLossConfirmation.Result? = null)
+    private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean,
+        val json: JSONObject? = null, val receivedUtcMillis: Long = System.currentTimeMillis(), val fromDevicePush: Boolean = false)
 
     suspend fun inspect(session: PowerOceanAccountClient.Session, credentials: PowerOceanAccountClient.PushCredentials,
         requestLiveReporting: Boolean = false, inspectionSeconds: Int = 45,
+        correlationProfile: PowerOceanGridCorrelation.Profile? = null,
+        requireChargerConfirmation: Boolean = false,
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
         require(inspectionSeconds in setOf(45, 300, 900))
-        val gridInspection = PowerOceanGridInspection()
+        val gridInspection = PowerOceanGridInspection(correlationProfile)
         // Private, bounded development capture for comparing utility loss and restoration.
         // Record only predefined decoded numeric/boolean fields; never raw payloads or account data.
         val validationTrace = context?.takeIf {
@@ -45,6 +49,9 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         val disconnected = java.util.concurrent.atomic.AtomicBoolean(false)
         val reports = linkedMapOf<Int, Packet>()
         var latestJson: Packet? = null
+        var lastSnapshot: SourceTelemetrySnapshot? = null
+        var nextUiUpdate = 0L
+        var chargerPowered: Boolean? = null
         var stage = "connecting to the secure broker"
         client.setCallback(object : MqttCallback {
             override fun connectionLost(cause: Throwable?) { disconnected.set(true) }
@@ -56,7 +63,8 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     root.optJSONObject("params") ?: root.optJSONObject("data") ?: root.takeIf { it.has("quota") }
                 }.getOrNull() else null
                 val decoded = if (json == null) PowerOceanPushDecoder.decode(message.payload) else emptyList()
-                queue.add(Packet(decoded, SystemClock.elapsedRealtime(), message.isRetained, json))
+                queue.add(Packet(decoded, SystemClock.elapsedRealtime(), message.isRetained, json,
+                    fromDevicePush = topic == "/app/device/property/${session.connection.serial}"))
             }
         })
         try {
@@ -95,7 +103,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     val getTopic = "/app/${session.userId}/${session.connection.serial}/thing/property/get"
                     client.publish(getTopic, request.toString().toByteArray(Charsets.UTF_8), 1, false)
                     client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    nextRequest = SystemClock.elapsedRealtime() + 10_000
+                    nextRequest = SystemClock.elapsedRealtime() + 60_000
                 }
                 var packet = queue.poll()
                 var changed = false
@@ -106,7 +114,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     if (receivedPacket.json != null) { latestJson = receivedPacket; changed = true }
                     receivedPacket.reports.forEach {
                         reports[it.command] = receivedPacket; changed = true
-                        gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained)
+                        gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
                     }
                     runCatching {
                         validationTrace?.takeIf { it.length() < 2_000_000 }?.let { trace ->
@@ -114,6 +122,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                                 val safeValues = report.values.filterValues { it is Number || it is Boolean }
                                 trace.appendText(JSONObject().put("receivedUtcMillis", receivedPacket.receivedUtcMillis)
                                     .put("command", report.command).put("retained", receivedPacket.retained)
+                                    .put("fromDevicePush", receivedPacket.fromDevicePush)
                                     .put("values", JSONObject(safeValues)).toString() + "\n")
                             }
                         }
@@ -143,9 +152,24 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                             (if (requestLiveReporting) "Temporary live reporting is requested every 20 seconds using portal command 96/97. " else "Live-report activation is off; reading requests only. ") +
                             "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. No grid state enters outage monitoring."
                     )
-                    if (snapshot.sections.isNotEmpty()) withContext(Dispatchers.Main) {
-                        onUpdate(Update(snapshot, packets, unsupported, retained, gridInspection.snapshot()))
+                    if (snapshot.sections.isNotEmpty()) lastSnapshot = snapshot
+                }
+                // Keep source health and auxiliary charger state current even during quiet periods.
+                if (SystemClock.elapsedRealtime() >= nextUiUpdate) {
+                    chargerPowered = runCatching {
+                        com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot.from(context?.registerReceiver(
+                            null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)))?.externallyPowered
+                    }.getOrNull()
+                    lastSnapshot?.let { currentSnapshot ->
+                        val comparison = gridInspection.snapshot()
+                        val confirmation = comparison.correlation?.let {
+                            PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation)
+                        }
+                        withContext(Dispatchers.Main) {
+                            onUpdate(Update(currentSnapshot, packets, unsupported, retained, comparison, chargerPowered, confirmation))
+                        }
                     }
+                    nextUiUpdate = SystemClock.elapsedRealtime() + 1000
                 }
                 delay(250)
             }

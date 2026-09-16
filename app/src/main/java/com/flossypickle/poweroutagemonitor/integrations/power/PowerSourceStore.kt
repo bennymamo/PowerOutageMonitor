@@ -35,6 +35,14 @@ internal class PowerSourceStore(context: Context) {
         Source.valueOf(preferences.getString(KEY_SELECTED_SOURCE, null) ?: "")
     }.getOrDefault(Source.ANDROID_CHARGER)
 
+    fun powerOceanRequiresChargerConfirmation(): Boolean = preferences.getBoolean(KEY_POWEROCEAN_CHARGER_CONFIRMATION, false)
+
+    fun setPowerOceanChargerConfirmation(required: Boolean) {
+        check(preferences.edit().putBoolean(KEY_POWEROCEAN_CHARGER_CONFIRMATION, required).commit()) {
+            "Unable to save charger confirmation setting"
+        }
+    }
+
     fun ecoFlowConfig() = EcoFlowConfig(
         host = preferences.getString(KEY_ECOFLOW_HOST, "").orEmpty(),
         port = preferences.getInt(KEY_ECOFLOW_PORT, EcoFlowModbusProtocol.DEFAULT_PORT),
@@ -143,6 +151,7 @@ internal class PowerSourceStore(context: Context) {
 
     companion object {
         const val ECOFLOW_PROVIDER_ID = "ecoflow_modbus"
+        private const val KEY_POWEROCEAN_CHARGER_CONFIRMATION = "powerocean_charger_confirmation"
         private const val FILE_NAME = "power_sources"
         private const val KEY_SELECTED_SOURCE = "selected_source"
         private const val KEY_ECOFLOW_HOST = "ecoflow_host"

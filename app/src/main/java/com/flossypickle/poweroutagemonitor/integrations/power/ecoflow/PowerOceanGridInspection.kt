@@ -1,15 +1,18 @@
 package com.flossypickle.poweroutagemonitor.integrations.power.ecoflow
 
 /** Per-inspection observations, kept separate from the outage state machine. */
-internal class PowerOceanGridInspection {
+internal class PowerOceanGridInspection(profile: PowerOceanGridCorrelation.Profile? = null) {
     data class Change(val code: Long, val receivedUtcMillis: Long)
-    data class Snapshot(val lastCode: Long?, val lastReceivedUtcMillis: Long?, val changes: List<Change>)
+    data class Snapshot(val lastCode: Long?, val lastReceivedUtcMillis: Long?, val changes: List<Change>,
+        val correlation: PowerOceanGridCorrelation.Snapshot? = null)
+    private val correlation = profile?.let { PowerOceanGridCorrelation(it) }
 
     private var lastCode: Long? = null
     private var lastReceivedUtcMillis: Long? = null
     private val changes = ArrayDeque<Change>()
 
-    fun observe(report: PowerOceanPushDecoder.Report, receivedUtcMillis: Long, retained: Boolean) {
+    fun observe(report: PowerOceanPushDecoder.Report, receivedUtcMillis: Long, retained: Boolean, fromDevicePush: Boolean = true) {
+        correlation?.observe(report, receivedUtcMillis, retained, fromDevicePush)
         // Neither a retained cloud value nor an omitted protobuf field is a new grid observation.
         if (report.command != 8 || retained || receivedUtcMillis <= 0) return
         val code = report.values["sysGridSta"] as? Long ?: return
@@ -22,5 +25,6 @@ internal class PowerOceanGridInspection {
         lastReceivedUtcMillis = receivedUtcMillis
     }
 
-    fun snapshot() = Snapshot(lastCode, lastReceivedUtcMillis, changes.toList())
+    fun snapshot(nowUtcMillis: Long = System.currentTimeMillis()) = Snapshot(lastCode, lastReceivedUtcMillis,
+        changes.toList(), correlation?.snapshot(nowUtcMillis))
 }
