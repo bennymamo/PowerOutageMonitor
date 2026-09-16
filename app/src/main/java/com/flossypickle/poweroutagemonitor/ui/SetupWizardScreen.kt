@@ -116,7 +116,8 @@ internal fun SetupWizardScreen(
                         sawDisconnected = sawDisconnected,
                         sawReconnected = sawReconnected
                     )
-                    else -> ReadyStep(deviceName, outageDelay, restoreDelay, powerTestComplete)
+                    else -> ReadyStep(helpLevel, deviceName, outageDelay, restoreDelay,
+                        powerTestComplete)
                 }
             }
             if (step == 0) {
@@ -307,6 +308,7 @@ private fun SafetyStep(helpLevel: MonitorStore.HelpLevel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
+    NetworkBackupGuidance()
 }
 
 @Composable
@@ -360,6 +362,7 @@ private fun DeviceStep(
 
 @Composable
 private fun ReadyStep(
+    helpLevel: MonitorStore.HelpLevel,
     deviceName: String,
     outageDelay: Long,
     restoreDelay: Long,
@@ -376,7 +379,11 @@ private fun ReadyStep(
     }
     WizardCard {
         Text("After setup", fontWeight = FontWeight.SemiBold)
-        Text("Connect the permanent charger and confirm Status shows external power. Configure Telegram, Gmail or device SMS under Settings › Alert channels, then send a test message.",
+        Text(if (helpLevel.isGuided) {
+            "The setup checklist opens next. Connect the permanent charger, choose an alert destination, send a test message, and check Android's background settings. Monitoring can detect power now, but it cannot send an alert until a destination is working."
+        } else {
+            "Connect the permanent charger and confirm Status shows external power. Configure Telegram, Gmail or device SMS under Settings › Alert channels, then send a test message."
+        },
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Every option can be changed later in Settings.",
             color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)

@@ -91,16 +91,24 @@ internal fun PowerMonitorApp(
     onSendTestAlert: (AlertMessage) -> Boolean,
     onAlertConfigurationChanged: () -> Unit
 ) {
+    var checklistAfterGuidedSetup by rememberSaveable { mutableStateOf(false) }
     if (!settings.setupCompleted) {
         SetupWizardScreen(
             settings = settings,
             snapshot = snapshot,
-            onComplete = onCompleteSetup,
+            onComplete = { deviceName, outageDelay, restoreDelay, helpLevel ->
+                checklistAfterGuidedSetup = helpLevel.isGuided
+                onCompleteSetup(deviceName, outageDelay, restoreDelay, helpLevel)
+            },
             onRestore = onBackupRestore
         )
         return
     }
-    var screen by rememberSaveable { mutableStateOf(AppScreen.STATUS) }
+    var screen by rememberSaveable {
+        mutableStateOf(
+            if (checklistAfterGuidedSetup) AppScreen.SETUP_CHECKLIST else AppScreen.STATUS
+        )
+    }
     var returnToChecklist by rememberSaveable { mutableStateOf(false) }
     val returnFromChecklistChild: () -> Unit = {
         if (returnToChecklist) {
@@ -114,7 +122,8 @@ internal fun PowerMonitorApp(
         when (screen) {
             AppScreen.SETUP_CHECKLIST -> {
                 returnToChecklist = false
-                screen = AppScreen.SETTINGS
+                screen = if (checklistAfterGuidedSetup) AppScreen.STATUS else AppScreen.SETTINGS
+                checklistAfterGuidedSetup = false
             }
             AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
             AppScreen.SMS, AppScreen.EMAIL -> returnFromChecklistChild()
@@ -148,6 +157,7 @@ internal fun PowerMonitorApp(
                         TextButton(
                             onClick = {
                                 returnToChecklist = false
+                                checklistAfterGuidedSetup = false
                                 screen = item
                             },
                             modifier = Modifier.weight(1f)
@@ -199,6 +209,7 @@ internal fun PowerMonitorApp(
                 },
                 onOpenSetupChecklist = {
                     returnToChecklist = false
+                    checklistAfterGuidedSetup = false
                     screen = AppScreen.SETUP_CHECKLIST
                 },
                 onOpenDiagnostics = {
@@ -246,8 +257,10 @@ internal fun PowerMonitorApp(
                 hasEnabledAlertChannel = hasEnabledAlertChannel,
                 hasSentTestAlert = hasSentTestAlert,
                 padding = padding,
+                backLabel = if (checklistAfterGuidedSetup) "Status" else "Settings",
                 onOpenStatus = {
                     returnToChecklist = false
+                    checklistAfterGuidedSetup = false
                     screen = AppScreen.STATUS
                 },
                 onOpenDiagnostics = {
@@ -272,7 +285,8 @@ internal fun PowerMonitorApp(
                 },
                 onBack = {
                     returnToChecklist = false
-                    screen = AppScreen.SETTINGS
+                    screen = if (checklistAfterGuidedSetup) AppScreen.STATUS else AppScreen.SETTINGS
+                    checklistAfterGuidedSetup = false
                 }
             )
             AppScreen.DIAGNOSTICS -> DiagnosticsScreen(

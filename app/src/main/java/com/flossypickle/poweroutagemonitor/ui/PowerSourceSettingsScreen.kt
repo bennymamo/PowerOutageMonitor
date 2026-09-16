@@ -253,6 +253,8 @@ private fun EcoFlowLocalSettingsContent(
         }
     }
 
+    NetworkBackupGuidance()
+
     PowerSourceSectionTitle("EcoFlow PowerOcean")
     SettingsCard {
         SourceHeading(
@@ -269,7 +271,7 @@ private fun EcoFlowLocalSettingsContent(
             Text("1. Ask EcoFlow support, your installer, or another certified EcoFlow partner to enable Modbus control on the inverter.")
             Text("2. In your router, expand likely embedded-device entries such as ESP, lwIP, wlan or Unknown and note each private IPv4 address.")
             Text("3. Reserve that address in the router so it does not change.")
-            Text("4. Keep the router and local network equipment on backup power.")
+            Text("4. Keep the router, Wi-Fi access points and any HomePlug/powerline adapters on a UPS or battery backup.")
             Text("5. Save the address, run the read-only test, then activate EcoFlow.")
             Text(
                 "A network scanner finding no open TCP port 502 usually means Modbus is disabled. It can also mean the inverter is on another subnet or Wi-Fi client isolation is enabled.",

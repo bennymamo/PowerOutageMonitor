@@ -116,6 +116,8 @@ internal fun EcoFlowCloudSetupScreen(
             )
         }
 
+        NetworkBackupGuidance()
+
         PowerSourceSectionTitle("Developer access")
         SettingsCard {
             if (helpLevel.isGuided) {

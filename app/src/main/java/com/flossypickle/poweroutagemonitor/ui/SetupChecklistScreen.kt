@@ -44,7 +44,8 @@ internal fun SetupChecklistScreen(
     onOpenEmail: () -> Unit,
     onOpenTelegram: () -> Unit,
     onOpenSms: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    backLabel: String = "Settings"
 ) {
     val powerBaselineKnown = monitorState.phase != OutageEngine.Phase.WAITING
     val coreChecks = listOf(
@@ -63,7 +64,7 @@ internal fun SetupChecklistScreen(
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        TextButton(onClick = onBack) { Text("‹ Settings") }
+        TextButton(onClick = onBack) { Text("‹ $backLabel") }
         SetupGuidanceCaption(settings.helpLevel)
         Text(
             "Setup checklist",
@@ -175,6 +176,8 @@ internal fun SetupChecklistScreen(
             actionLabel = "Open test mode",
             onAction = onOpenTestMode
         )
+
+        NetworkBackupGuidance()
 
         Card(
             shape = RoundedCornerShape(20.dp),

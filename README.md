@@ -45,6 +45,14 @@ FP Grid Monitor treats the charger's connection as evidence of grid power:
 
 The app checks whether Android considers an external power source connected. It does not use the battery's *charging/not charging* label as proof of an outage, because many devices stop charging when their battery is full.
 
+### Keep the network powered during an outage
+
+**We strongly recommend a UPS or similar battery backup for the modem/router, every Wi-Fi access point the monitoring phone uses, and any HomePlug/powerline adapters or network switches along the connection.** Otherwise grid loss can cut the network at the same moment the app needs to send an alert or read the inverter.
+
+Telegram and email need internet access; working mobile data on the phone can provide an alternative. Local EcoFlow readings need a working home network. EcoFlow Cloud also depends on the inverter retaining internet access, so mobile data on the phone alone is not enough. Backup power does not guarantee that your internet provider or EcoFlow's cloud stays available. Offline internet alerts are queued and retried when connectivity returns. Device SMS instead needs a working SIM and mobile network; charger detection, local history and the audible alarm work offline.
+
+**Keep the monitored charger outside the backup supply when using Android charger detection.** It must lose power with the socket or circuit you want to monitor. If whole-house backup keeps that charger powered, use a compatible source that reads actual grid state, such as the optional EcoFlow local module.
+
 ### EcoFlow PowerOcean detection
 
 Homes with whole-house battery backup need a different source because the phone charger can remain powered during a grid outage. FP Grid Monitor includes an optional, read-only local PowerOcean connection under **Settings → Power sources**.
@@ -56,7 +64,7 @@ Requirements:
 1. An EcoFlow installer or partner must enable Modbus TCP on the inverter; it is normally disabled.
 2. The inverter needs a stable private IPv4 address, preferably reserved in the router.
 3. The usual connection is TCP port `502`, unit `1`.
-4. The phone, router, Wi-Fi, and necessary network equipment must stay powered during an outage.
+4. The phone and network equipment must stay powered during an outage. Back up the router, Wi-Fi access points, and any HomePlug/powerline adapters or switches with a UPS or battery supply.
 5. On Android 17 and newer, allow Local network access when the EcoFlow setup page asks for it.
 6. Run the app's read-only connection test, activate EcoFlow as the grid source, then perform a controlled real grid-loss and restoration test before relying on alerts.
 
