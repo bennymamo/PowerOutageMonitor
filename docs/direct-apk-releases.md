@@ -13,7 +13,7 @@ The selected first distribution route is a signed APK attached to a GitHub pre-r
 7. Run an unattended physical monitoring window, check History for unexplained starts, and re-test alarm dismissal, charger transitions and provider delivery on the release build.
 8. Create a GitHub **pre-release** with a version tag, concise user notes, the signed APK and its SHA-256 checksum. Only then change the README's installation section from “not available yet” to a versioned download link.
 
-The signing key is part of the app's update identity: every later APK installed over the original must use the same key. The permanent key was created after the owner chose Bitwarden Premium for an encrypted file attachment and password storage. The owner has saved the Note and attached the keystore; a download/recovery check is still needed. A permanent-key signed candidate has been built and verified, but the GitHub APK must wait until that recovery check and physical update checks are complete. The current debug-signed APK is never a public release.
+The signing key is part of the app's update identity: every later APK installed over the original must use the same key. The permanent key was created after the owner chose Bitwarden Premium for an encrypted file attachment and password storage. The owner has saved the Note and attached the keystore. Its downloaded attachment was checksum-verified against the permanent signing file; independently entering the saved Bitwarden passwords remains untested. A permanent-key signed candidate has been built and verified, but the GitHub APK must wait until password-recovery and physical update checks are complete. The current debug-signed APK is never a public release.
 
 ## Current Windows signing setup
 
