@@ -26,6 +26,24 @@ internal class EcoFlowCloudClient(
 
     data class Device(val serialNumber: String, val name: String, val online: Boolean)
 
+    data class MqttConnectionInfo(val host: String, val port: Int, val account: String, val password: String) {
+        override fun toString(): String = "EcoFlow secure MQTT connection (credentials redacted)"
+    }
+
+    fun readMqttConnectionInfo(credentials: Credentials): Result<MqttConnectionInfo> = request(
+        path = "/iot-open/sign/certification", parameters = emptyMap(), credentials = credentials
+    ) { root ->
+        val data = root.getJSONObject("data")
+        val host = data.getString("url").lowercase(java.util.Locale.ROOT)
+        val port = data.getString("port").toInt()
+        require(data.getString("protocol").equals("mqtts", true)) { "Secure MQTT is required" }
+        require(host.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ecoflow\\.com")) && port in 1..65535)
+        val account = data.getString("certificateAccount")
+        val password = data.getString("certificatePassword")
+        require(account.matches(Regex("[A-Za-z0-9_-]{1,200}")) && password.length in 8..300)
+        MqttConnectionInfo(host, port, account, password)
+    }
+
     sealed interface Result<out T> {
         data class Success<T>(val value: T) : Result<T>
         data class Failure(val message: String, val retryable: Boolean) : Result<Nothing>
@@ -131,7 +149,7 @@ internal class EcoFlowCloudClient(
             val root = runCatching { JSONObject(body) }.getOrNull()
             if (status in 200..299 && root?.optString("code") == "0") {
                 runCatching { Result.Success(transform(root)) }
-                    .getOrElse { Result.Failure("EcoFlow returned incomplete PowerOcean data", false) }
+                    .getOrElse { Result.Failure("EcoFlow returned incomplete or unsupported developer API data", false) }
             } else {
                 val safeMessage = EcoFlowCloudError.describe(root?.optString("code"), root?.optString("message"), status,
                     listOf(credentials.accessKey, credentials.secretKey, parameters["sn"].orEmpty()))

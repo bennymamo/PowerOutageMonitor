@@ -74,8 +74,8 @@ internal object SourceTelemetryFlattener {
     private fun sensitivePath(path: String): Boolean = path.split('.', '[', ']')
         .map { it.lowercase().replace("_", "").replace("-", "") }
         .any { part ->
-            part in setOf("sn", "serial", "serialnumber", "mac", "macaddress", "ip", "ipaddress",
-                "ssid", "email", "latitude", "longitude", "tid", "eagleeyetraceid") ||
+            part in setOf("sn", "devsn", "bpsn", "evsn", "hrsn", "modulesn", "serial", "serialnumber", "mac", "macaddr", "macaddress", "ip", "ipaddress",
+                "ssid", "email", "username", "userid", "location", "address", "systemname", "latitude", "longitude", "tid", "eagleeyetraceid") ||
                 listOf("password", "secret", "token", "accesskey", "authorization", "credential")
                     .any(part::contains)
         }

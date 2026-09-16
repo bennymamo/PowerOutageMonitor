@@ -12,6 +12,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.Telegram
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudClient
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountStore
 import com.flossypickle.poweroutagemonitor.storage.AlertQueueStore
 import com.flossypickle.poweroutagemonitor.storage.EventHistoryStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
@@ -221,11 +222,15 @@ internal class BackupManager(context: Context) {
             modbus = local.ecoFlowConfig(),
             cloudCredentials = cloud.credentials(),
             cloudSerialNumber = cloudConfig.selectedSerialNumber,
-            cloudDeviceName = cloudConfig.selectedDeviceName
+            cloudDeviceName = cloudConfig.selectedDeviceName,
+            powerOceanAccount = PowerOceanAccountStore(appContext).connection()
         )
     }
 
     private fun restorePowerSources(data: BackupDocument.PowerSourcesData) {
+        // Validate the portable account before mutating any power-source settings.
+        val account = data.powerOceanAccount?.also { require(it.isValid) { "Invalid PowerOcean account connection in backup." } }
+        PowerOceanAccountStore(appContext).apply { clear(); account?.let(::save) }
         PowerSourceStore(appContext).restoreEcoFlowConfig(data.modbus)
         EcoFlowCloudConfigStore(appContext).apply {
             clear()

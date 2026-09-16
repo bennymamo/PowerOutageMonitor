@@ -46,7 +46,8 @@ private enum class AppScreen(val label: String) {
     GMAIL_EMAIL("Gmail"),
     RESEND_EMAIL("Resend"),
     ECOFLOW_LOCAL("EcoFlow local"),
-    ECOFLOW_CLOUD("EcoFlow Cloud")
+    ECOFLOW_CLOUD("EcoFlow Cloud"),
+    POWEROCEAN_ACCOUNT("PowerOcean account")
 }
 
 private val primaryScreens = listOf(AppScreen.STATUS, AppScreen.HISTORY, AppScreen.SETTINGS)
@@ -128,7 +129,7 @@ internal fun PowerMonitorApp(
             AppScreen.DIAGNOSTICS, AppScreen.TEST_MODE, AppScreen.TELEGRAM,
             AppScreen.SMS, AppScreen.EMAIL -> returnFromChecklistChild()
             AppScreen.GMAIL_EMAIL, AppScreen.RESEND_EMAIL -> screen = AppScreen.EMAIL
-            AppScreen.ECOFLOW_LOCAL, AppScreen.ECOFLOW_CLOUD -> screen = AppScreen.POWER_SOURCES
+            AppScreen.ECOFLOW_LOCAL, AppScreen.ECOFLOW_CLOUD, AppScreen.POWEROCEAN_ACCOUNT -> screen = AppScreen.POWER_SOURCES
             AppScreen.POWER_SOURCES -> screen = AppScreen.SETTINGS
             AppScreen.HISTORY, AppScreen.SETTINGS -> screen = AppScreen.STATUS
             AppScreen.STATUS -> Unit
@@ -152,7 +153,8 @@ internal fun PowerMonitorApp(
                                         AppScreen.RESEND_EMAIL,
                                         AppScreen.POWER_SOURCES,
                                         AppScreen.ECOFLOW_LOCAL,
-                                        AppScreen.ECOFLOW_CLOUD
+                                        AppScreen.ECOFLOW_CLOUD,
+                                        AppScreen.POWEROCEAN_ACCOUNT
                             )
                         TextButton(
                             onClick = {
@@ -245,6 +247,10 @@ internal fun PowerMonitorApp(
                 onOpenEcoFlowCloud = {
                     returnToChecklist = false
                     screen = AppScreen.ECOFLOW_CLOUD
+                },
+                onOpenPowerOceanAccount = {
+                    returnToChecklist = false
+                    screen = AppScreen.POWEROCEAN_ACCOUNT
                 },
                 onPowerSourceChanged = onPowerSourceChanged,
                 onBack = { screen = AppScreen.SETTINGS }
@@ -350,6 +356,11 @@ internal fun PowerMonitorApp(
                 onBack = { screen = AppScreen.POWER_SOURCES }
             )
             AppScreen.ECOFLOW_CLOUD -> EcoFlowCloudSetupScreen(
+                helpLevel = settings.helpLevel,
+                padding = padding,
+                onBack = { screen = AppScreen.POWER_SOURCES }
+            )
+            AppScreen.POWEROCEAN_ACCOUNT -> PowerOceanAccountSetupScreen(
                 helpLevel = settings.helpLevel,
                 padding = padding,
                 onBack = { screen = AppScreen.POWER_SOURCES }

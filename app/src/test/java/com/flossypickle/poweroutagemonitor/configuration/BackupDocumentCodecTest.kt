@@ -88,7 +88,9 @@ class BackupDocumentCodecTest {
             modbus = PowerSourceStore.EcoFlowConfig("192.168.1.50", 502, 1),
             cloudCredentials = EcoFlowCloudClient.Credentials("access-key", "secret-key"),
             cloudSerialNumber = "SN123",
-            cloudDeviceName = "PowerOcean"
+            cloudDeviceName = "PowerOcean",
+            powerOceanAccount = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection(
+                "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20)
         ),
         history = BackupDocument.HistoryData(
             powerEvents = listOf(EventHistoryStore.Record("outage", 100, 200, 300, 90, 89)),

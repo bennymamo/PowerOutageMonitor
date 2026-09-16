@@ -63,7 +63,8 @@ internal data class BackupDocument(
         val modbus: PowerSourceStore.EcoFlowConfig,
         val cloudCredentials: EcoFlowCloudClient.Credentials?,
         val cloudSerialNumber: String?,
-        val cloudDeviceName: String?
+        val cloudDeviceName: String?,
+        val powerOceanAccount: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection? = null
     )
 
     data class HistoryData(
@@ -312,6 +313,15 @@ internal object BackupDocumentCodec {
         p.putOptional("power.cloud.secret", data.cloudCredentials?.secretKey)
         p.putOptional("power.cloud.serial", data.cloudSerialNumber)
         p.putOptional("power.cloud.name", data.cloudDeviceName)
+        p["power.account.present"] = (data.powerOceanAccount != null).toString()
+        data.powerOceanAccount?.let {
+            p["power.account.email"] = it.email
+            p["power.account.password"] = it.password
+            p["power.account.serial"] = it.serial
+            p["power.account.model"] = it.model
+            p["power.account.region"] = it.region
+            p["power.account.refresh"] = it.refreshSeconds.toString()
+        }
     }
 
     private fun readPowerSources(p: Properties): BackupDocument.PowerSourcesData {
@@ -334,7 +344,13 @@ internal object BackupDocumentCodec {
             modbus = modbus,
             cloudCredentials = credentials,
             cloudSerialNumber = p.optional("power.cloud.serial"),
-            cloudDeviceName = p.optional("power.cloud.name")
+            cloudDeviceName = p.optional("power.cloud.name"),
+            powerOceanAccount = if (p.containsKey("power.account.present") && p.boolean("power.account.present")) {
+                com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection(
+                    p.required("power.account.email"), p.required("power.account.password"), p.required("power.account.serial"),
+                    p.required("power.account.model"), p.required("power.account.region"), p.int("power.account.refresh")
+                ).also { require(it.isValid) { "Invalid PowerOcean account data in backup." } }
+            } else null
         )
     }
 

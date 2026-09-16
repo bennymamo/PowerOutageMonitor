@@ -45,7 +45,8 @@ internal fun SourceDetailsScreen(
     refreshing: Boolean,
     refreshError: String?,
     onRefresh: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    dashboardControls: (@Composable () -> Unit)? = null
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable(snapshot.deviceName) {
@@ -87,6 +88,7 @@ internal fun SourceDetailsScreen(
                 }
             }
         }
+        if (dashboardControls != null) item { dashboardControls() }
         if (refreshError != null) {
             item {
                 Text("Refresh failed: $refreshError. Showing the previous snapshot.",

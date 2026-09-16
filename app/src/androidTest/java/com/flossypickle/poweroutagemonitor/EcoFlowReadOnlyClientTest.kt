@@ -56,6 +56,21 @@ class EcoFlowReadOnlyClientTest {
         assertEquals(0, connection.sent.size())
     }
 
+    @Test fun mqttConnectionDetailsRequireTlsAndRemainRedacted() {
+        val connection = FixtureConnection("""{"code":"0","data":{"url":"mqtt.ecoflow.com","port":"8883","protocol":"mqtts","certificateAccount":"example-account","certificatePassword":"example-password"}}""")
+        val result = EcoFlowCloudClient(openConnection = {
+            assertEquals("/iot-open/sign/certification", it.path)
+            connection
+        }).readMqttConnectionInfo(credentials)
+        val info = (result as EcoFlowCloudClient.Result.Success).value
+        assertEquals("mqtt.ecoflow.com", info.host)
+        assertEquals(8883, info.port)
+        assertFalse(info.toString().contains("example-password"))
+        assertFalse(info.toString().contains("example-account"))
+        val unsafe = FixtureConnection("""{"code":"0","data":{"url":"mqtt.ecoflow.com","port":"1883","protocol":"mqtt","certificateAccount":"example-account","certificatePassword":"example-password"}}""")
+        assertTrue(EcoFlowCloudClient(openConnection = { unsafe }).readMqttConnectionInfo(credentials) is EcoFlowCloudClient.Result.Failure)
+    }
+
     private class FixtureConnection(private val response: String) : HttpsURLConnection(URL("https://api.ecoflow.com")) {
         val sent = ByteArrayOutputStream()
         override fun getOutputStream() = sent

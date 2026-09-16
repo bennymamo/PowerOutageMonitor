@@ -54,6 +54,7 @@ internal fun PowerSourceSettingsScreen(
     padding: PaddingValues,
     onOpenEcoFlowLocal: () -> Unit,
     onOpenEcoFlowCloud: () -> Unit,
+    onOpenPowerOceanAccount: () -> Unit,
     onPowerSourceChanged: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -74,6 +75,7 @@ internal fun PowerSourceSettingsScreen(
             helpLevel = helpLevel,
             onOpenEcoFlowLocal = onOpenEcoFlowLocal,
             onOpenEcoFlowCloud = onOpenEcoFlowCloud,
+            onOpenPowerOceanAccount = onOpenPowerOceanAccount,
             onPowerSourceChanged = onPowerSourceChanged
         )
     }
@@ -86,6 +88,7 @@ internal fun PowerSourceSettingsContent(
     helpLevel: MonitorStore.HelpLevel,
     onOpenEcoFlowLocal: () -> Unit,
     onOpenEcoFlowCloud: () -> Unit,
+    onOpenPowerOceanAccount: () -> Unit,
     onPowerSourceChanged: () -> Unit
 ) {
     val context = LocalContext.current
@@ -120,6 +123,12 @@ internal fun PowerSourceSettingsContent(
     }
 
     PowerSourceSectionTitle("EcoFlow modules")
+    SettingsCard {
+        SourceHeading(title = "PowerOcean account", status = "EXPERIMENTAL")
+        Text("For homes powered through PowerOcean battery backup. Reads EcoFlow's account service with your normal login, without developer keys or installer access.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        OutlinedButton(onClick = onOpenPowerOceanAccount, modifier = Modifier.fillMaxWidth()) { Text("Set up PowerOcean account") }
+    }
     SettingsCard {
         SourceHeading(
             title = "Local PowerOcean connection",

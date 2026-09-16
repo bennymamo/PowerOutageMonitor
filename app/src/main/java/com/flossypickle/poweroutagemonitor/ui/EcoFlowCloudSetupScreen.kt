@@ -63,6 +63,7 @@ internal fun EcoFlowCloudSetupScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var liveBrokerSummary by remember { mutableStateOf<String?>(null) }
 
     fun enteredCredentials(): EcoFlowCloudClient.Credentials? {
         // Device selection must belong to the saved key pair, including after restart.
@@ -230,6 +231,7 @@ internal fun EcoFlowCloudSetupScreen(
                         selectedQuota = null
                         dashboard = null
                         dashboardError = null
+                        liveBrokerSummary = null
                         feedback = "EcoFlow credentials saved securely."
                     }
                 },
@@ -329,6 +331,34 @@ internal fun EcoFlowCloudSetupScreen(
 
         PowerSourceSectionTitle("If something does not work")
         SettingsCard {
+            Text("Live-data access", fontWeight = FontWeight.Medium)
+            Text("EcoFlow also documents MQTT, a connection that can push readings to an app. This read-only check asks EcoFlow for secure connection details; it does not connect to the live feed or change equipment settings. Connection passwords are kept out of the screen and are not saved.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            liveBrokerSummary?.let { SettingText("Secure endpoint available", it) }
+            OutlinedButton(onClick = {
+                val credentials = enteredCredentials()
+                if (credentials == null) {
+                    feedback = "Save valid EcoFlow credentials first."
+                    return@OutlinedButton
+                }
+                runOperation {
+                    when (val result = withContext(Dispatchers.IO) { client.readMqttConnectionInfo(credentials) }) {
+                        is EcoFlowCloudClient.Result.Success -> {
+                            liveBrokerSummary = "${result.value.host}:${result.value.port}"
+                            feedback = "EcoFlow issued secure live-data connection details. No live feed connection or measurement was made by this check."
+                        }
+                        is EcoFlowCloudClient.Result.Failure -> {
+                            liveBrokerSummary = null
+                            feedback = result.message
+                            dashboardError = result.message
+                        }
+                    }
+                }
+            }, enabled = !loading && config.hasCredentials, modifier = Modifier.fillMaxWidth()) {
+                Text("Check live-data access")
+            }
+        }
+        SettingsCard {
             Text("Device listed, but readings denied", fontWeight = FontWeight.Medium)
             Text("This is an EcoFlow developer API restriction, not an Android permission. Try Request PowerOcean readings. If both requests are denied, contact EcoFlow through Support in the developer console. Ask for read-only PowerOcean quota/API access for your account and equipment; include the error code and device model. Share serial details only through EcoFlow's private support process, never API keys.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -371,6 +401,7 @@ internal fun EcoFlowCloudSetupScreen(
                             selectedQuota = null
                             dashboard = null
                             dashboardError = null
+                            liveBrokerSummary = null
                             confirmClear = false
                             feedback = "EcoFlow Cloud credentials removed."
                         },
