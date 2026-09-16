@@ -53,11 +53,24 @@ internal class PowerOceanAccountClient(
         return request(url, connection, session = session) { root -> root.getJSONObject("data") }
     }
 
-    data class PushCredentials(val host: String, val port: Int, val path: String, val account: String, val password: String) {
+    data class PushCredentials(val host: String, val port: Int, val path: String, val account: String, val password: String, val transport: String = "wss") {
         override fun toString() = "PowerOcean push credentials (redacted)"
     }
 
-    fun pushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> = request(
+    fun pushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> {
+        val appResult = request(URL("https://${session.loginHost}/iot-auth/app/certification"), session.connection, session = session) { root ->
+            requireResponse(session.userId.isNotEmpty(), "Live-feed setup failed: account login did not include the user ID required for MQTT.")
+            val details = responseStep("Mobile-app live access did not return connection details in the expected format.") { root.getJSONObject("data") }
+            parsePushDetails(details, appTransport = true)
+        }
+        if (appResult is EcoFlowCloudClient.Result.Success || (appResult is EcoFlowCloudClient.Result.Failure && appResult.retryable)) return appResult
+        val portalResult = portalPushCredentials(session)
+        return if (portalResult is EcoFlowCloudClient.Result.Failure) EcoFlowCloudClient.Result.Failure(
+            "Mobile-app route: ${(appResult as EcoFlowCloudClient.Result.Failure).message} Portal route: ${portalResult.message}", portalResult.retryable
+        ) else portalResult
+    }
+
+    private fun portalPushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> = request(
         URL("https://${session.loginHost}/iot-auth/enterprise-development/user/certification"), session.connection, session = session
     ) { root ->
         requireResponse(session.userId.isNotEmpty(), "Live-feed setup failed: account login did not include the user ID required for MQTT.")
@@ -78,19 +91,26 @@ internal class PowerOceanAccountClient(
             val data = responseStep("Live-feed setup failed: decrypted connection details were not valid JSON.") {
                 JSONObject(String(plaintext, 0, length, Charsets.UTF_8))
             }
+            parsePushDetails(data, appTransport = false)
+        } finally { plaintext.fill(0); key.fill(0) }
+    }
+
+    private fun parsePushDetails(data: JSONObject, appTransport: Boolean): PushCredentials {
             val host = data.optString("url").lowercase(java.util.Locale.ROOT)
             requireResponse(host.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ecoflow\\.com")), "Live-feed setup failed: the reported broker address was missing or unsupported.")
-            val wss = data.optString("protocol").lowercase() in setOf("wss", "websockets")
-            val port = if (wss) data.optString("port").toIntOrNull() ?: 8084 else 8084
-            val path = data.optString("path").ifEmpty { "/mqtt" }
-            requireResponse(port in 1..65535 && path.matches(Regex("/[A-Za-z0-9/_-]{1,100}")), "Live-feed setup failed: the reported secure port or path was unsupported.")
+            val protocol = data.optString("protocol").lowercase(java.util.Locale.ROOT)
+            val tls = appTransport && protocol == "mqtts"
+            requireResponse(!appTransport || protocol in setOf("mqtts", "wss", "websockets"), "Mobile-app live access did not provide a supported secure transport.")
+            val wss = protocol in setOf("wss", "websockets")
+            val port = if (tls || wss) data.optString("port").toIntOrNull() ?: if (tls) 8883 else 8084 else 8084
+            val path = if (tls) "" else data.optString("path").ifEmpty { "/mqtt" }
+            requireResponse(port in 1..65535 && (tls || path.matches(Regex("/[A-Za-z0-9/_-]{1,100}"))), "Live-feed setup failed: the reported secure port or path was unsupported.")
             val account = data.optString("certificateAccount")
             val password = data.optString("certificatePassword")
             requireResponse(account.isNotEmpty(), "Live-feed setup failed: EcoFlow's connection details did not include a broker account.")
             requireResponse(account.length <= 512 && account.none(Char::isISOControl), "Live-feed setup failed: the broker account exceeded the supported length or contained control characters.")
             requireResponse(password.length in 1..4096, "Live-feed setup failed: the broker password was missing or had an unsupported length.")
-            PushCredentials(host, port, path, account, password)
-        } finally { plaintext.fill(0); key.fill(0) }
+            return PushCredentials(host, port, path, account, password, if (tls) "ssl" else "wss")
     }
 
     private fun <T> request(url: URL, account: Connection, body: String? = null, session: Session? = null,

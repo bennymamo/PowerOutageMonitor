@@ -20,9 +20,15 @@ internal class PowerOceanPushProbe {
     private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean, val json: JSONObject? = null)
 
     suspend fun inspect(session: PowerOceanAccountClient.Session, credentials: PowerOceanAccountClient.PushCredentials,
-        requestLiveReporting: Boolean = false, onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
+        requestLiveReporting: Boolean = false, inspectionSeconds: Int = 45,
+        onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
+        require(inspectionSeconds in setOf(45, 300))
         val queue = ConcurrentLinkedQueue<Packet>()
-        val client = runCatching { MqttClient("wss://${credentials.host}:${credentials.port}${credentials.path}", clientId(session.userId), MemoryPersistence()) }
+        val client = runCatching {
+            require(credentials.transport in setOf("ssl", "wss"))
+            val id = if (credentials.transport == "ssl") "ANDROID_${UUID.randomUUID().toString().replace("-", "").uppercase(java.util.Locale.ROOT)}_${session.userId}" else clientId(session.userId)
+            MqttClient("${credentials.transport}://${credentials.host}:${credentials.port}${credentials.path}", id, MemoryPersistence())
+        }
             .getOrElse { return@withContext "The secure push client could not initialise." }
         client.timeToWait = 15_000
         var packets = 0
@@ -61,9 +67,10 @@ internal class PowerOceanPushProbe {
             client.subscribe("/app/${session.userId}/${session.connection.serial}/thing/property/get_reply", 1)
             // A broker login is not necessarily safe as one MQTT topic segment.
             if (credentials.account.none { it in "/+#" }) {
-                client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1)
+                try { client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1) }
+                catch (failure: MqttException) { if (failure.reasonCode != 128) throw failure }
             }
-            val deadline = SystemClock.elapsedRealtime() + 45_000
+            val deadline = SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
             var nextRequest = 0L
             var nextLiveRequest = 0L
             stage = "requesting and receiving readings"
@@ -111,7 +118,7 @@ internal class PowerOceanPushProbe {
                     data.put("quota", quota)
                     val snapshot = PowerOceanAccountTelemetry.snapshot(data, System.currentTimeMillis()).copy(
                         sourceName = "PowerOcean push feed · experimental",
-                        acquisitionNote = "45-second account push inspection. " +
+                        acquisitionNote = "$inspectionSeconds-second account push inspection. " +
                             (if (requestLiveReporting) "Temporary live reporting is requested every 20 seconds using portal command 96/97. " else "Live-report activation is off; reading requests only. ") +
                             "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. No grid state enters outage monitoring."
                     )

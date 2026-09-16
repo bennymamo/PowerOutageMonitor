@@ -36,6 +36,11 @@ internal object PowerOceanAccountTelemetry {
             "meterACurrent" to ("Meter phase A current" to "A"), "meterBCurrent" to ("Meter phase B current" to "A"),
             "meterCCurrent" to ("Meter phase C current" to "A"), "pcsMeterPower" to ("Meter power" to "W"),
             "pcsAcFreq" to ("Inverter AC frequency" to "Hz"), "sysGridSta" to ("Reported grid state · unverified code" to ""),
+            "pcsAverageVoltage" to ("Inverter average voltage · grid relevance unverified" to "V"),
+            "emsActiveOffGridCmd" to ("Reported off-grid command · raw code" to ""),
+            "pcsRelayStateShow" to ("Inverter relay state · raw code" to ""),
+            "pcsGridSafetyFuncRecord" to ("Grid safety function · raw code" to ""),
+            "pcsGridSafetyStateRecord" to ("Grid safety state · raw code" to ""),
             "gridIsEnergized" to ("Reported grid energized · unverified" to ""),
             "emsSystemState" to ("Energy management state · raw code" to ""),
             "workingMode" to ("Working mode · raw code" to ""), "sysWorkSta" to ("System state · raw code" to ""),
@@ -61,7 +66,10 @@ internal object PowerOceanAccountTelemetry {
                 leaf.contains("err", true) || leaf.contains("state", true) || leaf.contains("sta", true) -> "system"
                 else -> "technical"
             }
-            val label = if (section == "batteries") {
+            val meterEntry = Regex("meterHeartBeat\\[([0-9]+)]\\.meterData\\[([0-9]+)]").find(key)
+            val label = if (meterEntry != null) {
+                "AC meter ${meterEntry.groupValues[1].toInt() + 1} · reported value ${meterEntry.groupValues[2].toInt() + 1} · unverified units"
+            } else if (section == "batteries") {
                 val index = Regex("BP_STA_REPORT\\[([0-9]+)]").find(key)?.groupValues?.get(1)?.toIntOrNull()
                 "Battery ${(index ?: 0) + 1} · ${friendly?.first ?: leaf}"
             } else friendly?.first ?: leaf
@@ -69,7 +77,7 @@ internal object PowerOceanAccountTelemetry {
         }
         val overview = grouped["overview"].orEmpty()
         return SourceTelemetrySnapshot("PowerOcean account · experimental", "PowerOcean device readings", receivedAt,
-            summary = overview.filter { it.key in setOf("sysGridPwr", "sysLoadPwr", "mpptPwr", "bpPwr", "bpSoc") },
+            summary = listOf("sysGridPwr", "sysLoadPwr", "mpptPwr", "bpPwr", "bpSoc").mapNotNull { key -> overview.firstOrNull { it.key == key } },
             sections = sections.mapNotNull { (id, title) -> grouped[id]?.let { SourceTelemetrySection(id, title, it, id == "grid") } },
             omittedValues = flat.omittedValues,
             acquisitionNote = "Owner-account cloud request. Some overview values may be cached. Report timestamps are shown as supplied; timezone and per-field freshness need verification. Raw state codes are not interpreted as outages. Individual batteries are numbered for this snapshot; numbering may change if batteries change."

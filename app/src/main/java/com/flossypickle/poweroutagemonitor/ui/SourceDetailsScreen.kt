@@ -46,7 +46,8 @@ internal fun SourceDetailsScreen(
     refreshError: String?,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
-    dashboardControls: (@Composable () -> Unit)? = null
+    dashboardControls: (@Composable () -> Unit)? = null,
+    refreshLabel: String = "Refresh device readings"
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable(snapshot.deviceName) {
@@ -99,7 +100,7 @@ internal fun SourceDetailsScreen(
             Button(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.fillMaxWidth()) {
                 if (refreshing) CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary,
                     strokeWidth = 2.dp, modifier = Modifier.padding(end = 12.dp).size(20.dp))
-                Text(if (refreshing) "Reading device…" else "Refresh device readings")
+                Text(if (refreshing) "Reading device…" else refreshLabel)
             }
         }
         if (snapshot.summary.isNotEmpty()) {

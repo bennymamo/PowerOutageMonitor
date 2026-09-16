@@ -5,8 +5,19 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOcean
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class PowerOceanPushDecoderTest {
+    @Test fun packedMeterValuesPreservePositionsAndExplicitZeroWithoutInventingMeasurements() {
+        val packed = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).putFloat(230.5f).putFloat(0f).putFloat(Float.NaN).array()
+        val report = PowerOceanPushDecoder.decode(frame(1, bytes(30, scalar(1, 2) + bytes(3, packed)))).single()
+        assertEquals(230.5f, report.values["meterHeartBeat[0].meterData[0]"])
+        assertEquals(0f, report.values["meterHeartBeat[0].meterData[1]"])
+        assertFalse(report.values.containsKey("meterHeartBeat[0].meterData[2]"))
+        assertEquals(2L, report.values["meterHeartBeat[0].meterType"])
+        assertFalse(report.values.containsKey("gridIsEnergized"))
+    }
     @Test fun explicitFalseIsPreservedButAbsentGridFlagIsNotInvented() {
         val falseReport = PowerOceanPushDecoder.decode(frame(8, scalar(752, 0))).single()
         assertEquals(false, falseReport.values["gridIsEnergized"])

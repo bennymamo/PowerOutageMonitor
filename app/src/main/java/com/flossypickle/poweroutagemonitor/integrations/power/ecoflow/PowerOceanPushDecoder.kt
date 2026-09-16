@@ -41,6 +41,29 @@ internal object PowerOceanPushDecoder {
                     scalar(10, "pcsActPwr", true); scalar(11, "pcsAcFreq", true)
                     scalar(45, "pcsMeterPower", true); scalar(59, "emsBpPower", true)
                     scalar(57, "emsActiveOffGridCmd"); scalar(58, "emsBpAliveNum")
+                    scalar(38, "pcsRelayStateShow"); scalar(39, "pcsGridSafetyFuncRecord")
+                    scalar(40, "pcsGridSafetyStateRecord"); scalar(46, "pcsCommInterfaceState")
+                    scalar(47, "pcsAverageVoltage", true)
+                    body.filter { it.number == 30 && it.wire == 2 }.take(16).forEachIndexed { meter, item ->
+                        var valueIndex = 0
+                        fields(item.bytes!!).forEach { field ->
+                            when {
+                                field.number in 1..2 && field.wire == 0 -> result["meterHeartBeat[$meter].${if (field.number == 1) "meterType" else "meterAddress"}"] = field.scalar!!
+                                field.number == 3 && field.wire == 5 -> {
+                                    val index = valueIndex++
+                                    Float.fromBits(field.scalar!!.toInt()).takeIf(Float::isFinite)?.let { result["meterHeartBeat[$meter].meterData[$index]"] = it }
+                                }
+                                field.number == 3 && field.wire == 2 -> {
+                                    val packed = ByteBuffer.wrap(field.bytes!!).order(ByteOrder.LITTLE_ENDIAN)
+                                    require(packed.remaining() % 4 == 0 && packed.remaining() <= 2048)
+                                    while (packed.hasRemaining()) {
+                                        val index = valueIndex++
+                                        packed.float.takeIf(Float::isFinite)?.let { result["meterHeartBeat[$meter].meterData[$index]"] = it }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     listOf(12 to "pcsAPhase", 13 to "pcsBPhase", 14 to "pcsCPhase").forEach { (number, name) ->
                         body.firstOrNull { it.number == number && it.wire == 2 }?.bytes?.let { nested ->
                             fields(nested).forEach { field ->

@@ -57,6 +57,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var requestLiveReporting by remember { mutableStateOf(false) }
     var pushError by remember { mutableStateOf<String?>(null) }
     var pushFeedback by remember { mutableStateOf<String?>(null) }
+    var inspectionSeconds by remember { mutableStateOf(45) }
 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
@@ -122,10 +123,14 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     val currentSnapshot = snapshot
     if (dashboardOpen && currentSnapshot != null) {
         SourceDetailsScreen(currentSnapshot, padding, loading, error,
-            onRefresh = { if (!probeRunning) session?.let { current -> scope.launch { read(current, false) } } },
+            onRefresh = { if (!probeRunning) {
+                if (pushStatus != null) closeDashboard() else session?.let { current -> scope.launch { read(current, false) } }
+            } },
             onBack = { closeDashboard() },
+            refreshLabel = if (pushStatus == null) "Refresh device readings" else "Set up another live inspection",
             dashboardControls = {
                 SettingsCard {
+                    if (pushStatus == null) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Auto-refresh while viewing")
                         Switch(checked = autoRefresh, onCheckedChange = { autoRefresh = it }, enabled = !probeRunning && pushStatus == null)
@@ -133,6 +138,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     Text("Requests every ${session?.connection?.refreshSeconds ?: 30} seconds. Pauses when this screen is closed or the app is in the background.", style = MaterialTheme.typography.bodySmall)
                     Text("Successful reads: $successfulReads · fields changed since previous read: $changedFields", style = MaterialTheme.typography.bodySmall)
                     Text("Changing fields prove activity, not that every field is fresh.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text("Live feed inspection", fontWeight = FontWeight.Medium)
+                        Text("Manual inspection · ${if (inspectionSeconds == 300) "5 minutes" else "45 seconds"}. The display keeps the final snapshot when inspection ends. Use the button below to set up another inspection.", style = MaterialTheme.typography.bodySmall)
+                    }
                     pushStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     if (probeRunning) OutlinedButton({ probeJob?.cancel() }) { Text("Stop push inspection") }
                 }
@@ -211,7 +220,13 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         PowerSourceSectionTitle("Live push inspection")
         SettingsCard {
             Text("Try the faster account feed", fontWeight = FontWeight.Medium)
-            Text("Connect your saved account first, then run a 45-second secure MQTT inspection.", style = MaterialTheme.typography.bodySmall)
+            Text("Connect your saved account first, then run a secure MQTT inspection.", style = MaterialTheme.typography.bodySmall)
+            Text("Inspection time", fontWeight = FontWeight.Medium)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilterChip(inspectionSeconds == 45, { inspectionSeconds = 45 }, label = { Text("45 seconds") }, enabled = !loading)
+                FilterChip(inspectionSeconds == 300, { inspectionSeconds = 300 }, label = { Text("5 minutes") }, enabled = !loading)
+            }
+            Text("Use 45 seconds to check access, or 5 minutes to compare grid-loss and recovery readings. These are manual inspections, not background outage monitoring.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Request live reporting", modifier = Modifier.weight(1f))
                 Switch(requestLiveReporting, { requestLiveReporting = it }, enabled = !loading)
@@ -232,7 +247,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             is EcoFlowCloudClient.Result.Success -> {
                                 pushFeedback = "Inspecting push feed…"
                                 if (requestedGeneration != generation) return@launch
-                                val inspectionError = PowerOceanPushProbe().inspect(current, result.value, requestLiveReporting) { update ->
+                                val inspectionError = PowerOceanPushProbe().inspect(current, result.value, requestLiveReporting, inspectionSeconds) { update ->
                                     if (requestedGeneration == generation) {
                                         snapshot = update.snapshot; dashboardOpen = true
                                         pushStatus = "Push packets: ${update.packets} · unsupported: ${update.unsupported} · retained: ${update.retained}"
