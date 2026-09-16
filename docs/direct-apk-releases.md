@@ -7,7 +7,7 @@ The selected first distribution route is a signed APK attached to a GitHub pre-r
 1. Use the selected GPLv3 source-code license and the permanent key in the current Windows user's private LocalAppData folder.
 2. Save both release passwords in a private Bitwarden Note and attach the `.jks` file to that item. Verify the attachment can be downloaded. Bitwarden attachments are not included in password-protected JSON vault exports, so keep an additional encrypted vault/file backup if you rely on exports.
 3. Use `tools/local-release-key.ps1` to load the Windows-protected local passwords only for the signed build. The build script contains no key or password.
-4. Use the assigned first preview version `1.0.0-preview.1` (build code `3`), then build and verify its signed APK and SHA-256 checksum. Later updates must increase the build code.
+4. Use the assigned first preview version `1.0.0-preview.1` (build code `4`), then build and verify its signed APK and SHA-256 checksum. Later updates must increase the build code.
 5. On a fresh real device, install that signed APK and a higher-version update signed by the same key. Check that settings, History, monitoring and alerts survive the upgrade.
 6. For a debug-signed installation, first create a password-encrypted `.fpgrid` recovery archive. A release-signed APK cannot replace a debug-signed APK with the same package name; reinstall and restore are required for that one-time migration.
 7. Run an unattended physical monitoring window, check History for unexplained starts, and re-test alarm dismissal, charger transitions and provider delivery on the release build.

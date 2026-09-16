@@ -68,6 +68,11 @@ internal fun AudibleAlarmSettingsContent(
             modifier = Modifier.fillMaxWidth()
         ) { Text("Play 5-second test") }
         Text("Sound", fontWeight = FontWeight.Medium)
+        Text(
+            "An active outage alarm shows a speaker notification from FP Grid Monitor. Expand it and tap Stop sound to silence this outage; monitoring and message alerts continue.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp
+        )
         SettingText(
             "Selected",
             audibleSettings.soundUri?.let { ringtoneTitle(context, it) } ?: "Built-in beep"

@@ -22,8 +22,7 @@ import com.flossypickle.poweroutagemonitor.MainActivity
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.R
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
-import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmReceiver
-import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmScheduler
+import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmNotification
 import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSignal
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSignalPolicy
@@ -394,17 +393,11 @@ internal class MonitoringService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
         if (audibleAlarm.isActive(state, snapshot)) {
-            val dismiss = PendingIntent.getBroadcast(
-                this,
-                4103,
-                Intent(this, AudibleAlarmReceiver::class.java)
-                    .setAction(AudibleAlarmScheduler.ACTION_DISMISS),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            val dismiss = AudibleAlarmNotification.stopSoundIntent(this)
             builder.addAction(
                 Notification.Action.Builder(
-                    Icon.createWithResource(this, R.drawable.ic_monitoring_notification),
-                    "Dismiss alarm",
+                    Icon.createWithResource(this, R.drawable.ic_stop_sound),
+                    "Stop sound",
                     dismiss
                 ).build()
             )

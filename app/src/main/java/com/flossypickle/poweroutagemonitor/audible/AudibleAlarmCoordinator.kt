@@ -9,6 +9,7 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 internal class AudibleAlarmCoordinator(private val context: Context) {
     private val alarmStore = AudibleAlarmStore(context)
     private val scheduler = AudibleAlarmScheduler(context)
+    private val notification = AudibleAlarmNotification(context)
 
     fun reconcile(
         state: OutageEngine.State,
@@ -34,6 +35,11 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
         alarmStore.saveRuntime(decision.runtime)
         decision.nextAlarmAtEpochMs?.let { scheduler.schedule(it, settings.scheduleMode) }
             ?: scheduler.cancel()
+        if (decision.nextAlarmAtEpochMs != null) {
+            decision.runtime.activeOutageId?.let(notification::show)
+        } else {
+            notification.cancel()
+        }
         if (decision.playNow) {
             AudibleAlarmPlayer(context).play(settings.useMaximumVolume, settings.soundUri)
         } else if (decision.nextAlarmAtEpochMs == null) {
@@ -51,6 +57,7 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
             )
         )
         scheduler.cancel()
+        notification.cancel()
         AudibleAlarmPlayer(context).stop()
         broadcastChange()
     }
@@ -58,6 +65,7 @@ internal class AudibleAlarmCoordinator(private val context: Context) {
     fun stop() {
         alarmStore.saveRuntime(AudibleAlarmEngine.Runtime())
         scheduler.cancel()
+        notification.cancel()
         AudibleAlarmPlayer(context).stop()
         broadcastChange()
     }

@@ -24,7 +24,7 @@ An old Android version does not guarantee that a particular phone will keep the 
 - Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, expected update/reboot resumes, and possible unclean shutdowns.
 - Send alerts through Telegram, Gmail, Resend, or the device's own SMS service.
 - Queue internet alerts while offline and retry them in the correct order when connectivity returns.
-- Sound an optional repeating local alarm using a built-in beep or an Android alarm sound.
+- Sound an optional repeating local alarm using a built-in beep or an Android alarm sound, with a speaker notification and **Stop sound** action for the current outage.
 - Warn once when the monitoring device's battery becomes low during an outage.
 - Warn when the selected power source stops giving trustworthy readings, with a configurable delay.
 - Send configurable monitor heartbeats and repeated updates during long outages.
