@@ -20,6 +20,8 @@ local.properties
 
 # Local project journal maintained during development; not part of the public repository.
 /DEVELOPMENT_NOTES.local.md
+/PROJECT_BRIEF.local.md
+/ORIGINAL_BRIEF.local.txt
 
 # Signing keys, local release configuration, and secrets must never reach GitHub.
 /keystore.properties
