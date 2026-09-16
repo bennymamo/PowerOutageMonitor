@@ -36,6 +36,7 @@ internal object PowerOceanAccountTelemetry {
             "meterACurrent" to ("Meter phase A current" to "A"), "meterBCurrent" to ("Meter phase B current" to "A"),
             "meterCCurrent" to ("Meter phase C current" to "A"), "pcsMeterPower" to ("Meter power" to "W"),
             "pcsAcFreq" to ("Inverter AC frequency" to "Hz"), "sysGridSta" to ("Reported grid state · unverified code" to ""),
+            "meterConnectStat" to ("Reported meter connection · unverified code" to ""),
             "pcsAverageVoltage" to ("Inverter average voltage · grid relevance unverified" to "V"),
             "emsActiveOffGridCmd" to ("Reported off-grid command · raw code" to ""),
             "pcsRelayStateShow" to ("Inverter relay state · raw code" to ""),

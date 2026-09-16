@@ -85,6 +85,8 @@ internal object PowerOceanPushDecoder {
                     scalar(752, "gridIsEnergized", bool = true); scalar(2, "sysGridSta")
                     scalar(1, "sysWorkSta"); scalar(3, "emsWorkMode"); scalar(7, "bpSoc")
                     scalar(9, "bpOnlineSum"); scalar(21, "pcsRunSta")
+                    // Raw connection/configuration code: never equate this with online status yet.
+                    scalar(30, "meterConnectStat")
                 }
                 17 -> { scalar(21, "pcsRunSta"); scalar(22, "pcsAcErrCode"); scalar(23, "pcsDcErrCode") }
                 50 -> {

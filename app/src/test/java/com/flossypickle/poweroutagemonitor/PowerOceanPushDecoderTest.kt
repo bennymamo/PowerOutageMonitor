@@ -9,6 +9,11 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class PowerOceanPushDecoderTest {
+    @Test fun meterConnectionCodeKeepsExplicitZeroAndBelongsOnlyToConfigurationReport() {
+        assertEquals(0L, PowerOceanPushDecoder.decode(frame(8, scalar(30, 0))).single().values["meterConnectStat"])
+        assertFalse(PowerOceanPushDecoder.decode(frame(8, scalar(7, 50))).single().values.containsKey("meterConnectStat"))
+        assertFalse(PowerOceanPushDecoder.decode(frame(17, scalar(21, 1) + scalar(30, 1))).single().values.containsKey("meterConnectStat"))
+    }
     @Test fun packedMeterValuesPreservePositionsAndExplicitZeroWithoutInventingMeasurements() {
         val packed = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN).putFloat(230.5f).putFloat(0f).putFloat(Float.NaN).array()
         val report = PowerOceanPushDecoder.decode(frame(1, bytes(30, scalar(1, 2) + bytes(3, packed)))).single()
