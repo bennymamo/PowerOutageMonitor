@@ -42,8 +42,36 @@ internal data class EcoFlowCloudQuota(
     val loadPowerWatts: Double?,
     val solarPowerWatts: Double?,
     val batteryPowerWatts: Double?,
-    val batteryPercent: Double?
+    val batteryPercent: Double?,
+    val reportedValues: Map<String, String> = emptyMap(),
+    val omittedValues: Int = 0,
+    val requestedFields: Boolean = false
 )
+
+/** Matches the array expansion in EcoFlow's official Java signing example. */
+internal object EcoFlowPowerOceanRequest {
+    val fields = listOf("pcsAPhase", "pcsBPhase", "pcsCPhase", "mpptHeartBeat", "mpptPwr",
+        "bpSoc", "bpPwr", "sysLoadPwr", "sysGridPwr")
+
+    fun signingParameters(serial: String): Map<String, String> = buildMap {
+        put("sn", serial)
+        fields.forEachIndexed { index, field -> put("params.quotas[$index]", field) }
+    }
+}
+
+internal object EcoFlowCloudError {
+    fun describe(code: String?, message: String?, status: Int, privateValues: List<String>): String {
+        var safe = message.orEmpty()
+        privateValues.filter(String::isNotEmpty).sortedByDescending(String::length).forEach {
+            safe = safe.replace(it, "[redacted]", ignoreCase = true)
+        }
+        safe = safe.replace(Regex("(?i)(bearer\\s+|(?:access[_-]?key|secret[_-]?key|password)\\s*[=:]\\s*)[^\\s,;]+"), "[redacted]")
+            .replace(Regex("[\\p{Cntrl}]"), " ").take(240)
+        val safeCode = code?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,32}")) && privateValues.none { private -> private.equals(it, true) } }
+        val prefix = if (safeCode == null) "EcoFlow HTTP $status" else "EcoFlow code $safeCode"
+        return if (safe.isBlank()) prefix else "$prefix: $safe"
+    }
+}
 
 /**
  * Conservative PowerOcean cloud mapping.

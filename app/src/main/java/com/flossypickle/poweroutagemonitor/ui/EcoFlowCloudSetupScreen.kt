@@ -1,12 +1,14 @@
 package com.flossypickle.poweroutagemonitor.ui
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,16 +32,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
+import com.flossypickle.poweroutagemonitor.integrations.power.SourceTelemetrySnapshot
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudClient
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudConfigStore
-import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudGridSignalMapper
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudQuota
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowTelemetryMapper
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 @Composable
 internal fun EcoFlowCloudSetupScreen(
@@ -56,31 +57,76 @@ internal fun EcoFlowCloudSetupScreen(
     var secretKey by remember { mutableStateOf("") }
     var devices by remember { mutableStateOf(emptyList<EcoFlowCloudClient.Device>()) }
     var selectedQuota by remember { mutableStateOf<EcoFlowCloudQuota?>(null) }
+    var dashboard by remember { mutableStateOf<SourceTelemetrySnapshot?>(null) }
+    var dashboardOpen by remember { mutableStateOf(false) }
+    var dashboardError by remember { mutableStateOf<String?>(null) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
 
     fun enteredCredentials(): EcoFlowCloudClient.Credentials? {
-        val enteredAccess = accessKey.trim()
-        val enteredSecret = secretKey.trim()
-        return if (enteredAccess.isEmpty() && enteredSecret.isEmpty()) {
-            store.credentials()
-        } else {
-            EcoFlowCloudClient.Credentials(enteredAccess, enteredSecret).takeIf { it.isValid }
-        }
+        // Device selection must belong to the saved key pair, including after restart.
+        return store.credentials().takeIf { accessKey.isBlank() && secretKey.isBlank() }
     }
 
     fun runOperation(block: suspend () -> Unit) {
         if (loading) return
+        loading = true
         scope.launch {
-            loading = true
             feedback = null
+            dashboardError = null
             try {
                 block()
             } finally {
                 loading = false
             }
         }
+    }
+
+    fun inspectDevice(device: EcoFlowCloudClient.Device, requestedFields: Boolean = false) {
+        val openingDashboard = !dashboardOpen
+        val credentials = enteredCredentials()
+        if (credentials == null) {
+            feedback = "Save valid EcoFlow credentials first."
+            return
+        }
+        runOperation {
+            dashboardError = null
+            when (val result = withContext(Dispatchers.IO) {
+                client.readPowerOceanQuota(credentials, device.serialNumber, requestedFields)
+            }) {
+                is EcoFlowCloudClient.Result.Success -> {
+                    selectedQuota = result.value
+                    dashboard = EcoFlowTelemetryMapper.snapshot(result.value, device.name, System.currentTimeMillis())
+                    store.selectDevice(device)
+                    config = store.config()
+                    dashboardOpen = dashboardOpen || openingDashboard
+                    feedback = "Device snapshot received. Device data age still needs verification."
+                }
+                is EcoFlowCloudClient.Result.Failure -> {
+                    feedback = result.message
+                    dashboardError = result.message
+                }
+            }
+        }
+    }
+
+    BackHandler(enabled = dashboardOpen) { dashboardOpen = false }
+    val snapshot = dashboard
+    if (dashboardOpen && snapshot != null) {
+        SourceDetailsScreen(
+            snapshot = snapshot,
+            padding = padding,
+            refreshing = loading,
+            refreshError = dashboardError,
+            onRefresh = {
+                config.selectedSerialNumber?.let { serial ->
+                    inspectDevice(EcoFlowCloudClient.Device(serial, config.selectedDeviceName ?: "EcoFlow device", online = false), selectedQuota?.requestedFields == true)
+                }
+            },
+            onBack = { dashboardOpen = false }
+        )
+        return
     }
 
     Column(
@@ -104,7 +150,7 @@ internal fun EcoFlowCloudSetupScreen(
         SettingsCard {
             Text("Read-only connection preview", fontWeight = FontWeight.Medium)
             Text(
-                "It can find devices on your EcoFlow account and inspect documented PowerOcean phase voltage, grid flow, home load, solar and battery readings.",
+                "Find your devices and open a dedicated dashboard for grid, solar, battery, home load and other readings your equipment reports. Expand sections or search to see additional fields.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
@@ -125,12 +171,12 @@ internal fun EcoFlowCloudSetupScreen(
                 Text("2. Tap the person icon at the top-right. Choose Log in if you already have an EcoFlow account, or Create EcoFlow Account if you do not.")
                 Text("3. Choose Become a Developer and complete the developer registration if EcoFlow asks for it.")
                 Text("4. EcoFlow may show Under review. This is normal: wait for its approval, which EcoFlow says can take up to 5 working days. You cannot create keys while the review is pending.")
-                Text("5. After approval, return to the developer console and create an application for your personal home-monitoring use.")
-                Text("6. Open that application's credentials and copy its Access Key and Secret Key.")
+                Text("5. After approval, open Security Information Management in the developer console and choose Create AccessKey.")
+                Text("6. Copy the AccessKey and SecretKey from the same key pair. Keep them private; do not send them in chat or issue reports.")
                 Text("7. Return here, paste both keys, and tap Save credentials.")
                 Text("8. Tap Find my EcoFlow devices. Then inspect the PowerOcean entry.")
             } else {
-                Text("Complete EcoFlow developer approval (up to 5 working days), create API credentials, then save and test them here.")
+                Text("After EcoFlow developer approval, use Security Information Management → Create AccessKey, then save and test the key pair here.")
             }
             OutlinedButton(
                 onClick = {
@@ -182,6 +228,8 @@ internal fun EcoFlowCloudSetupScreen(
                         secretKey = ""
                         devices = emptyList()
                         selectedQuota = null
+                        dashboard = null
+                        dashboardError = null
                         feedback = "EcoFlow credentials saved securely."
                     }
                 },
@@ -203,15 +251,36 @@ internal fun EcoFlowCloudSetupScreen(
                                     "Connected, but EcoFlow returned no owned devices. Shared devices are not included by this API."
                                 } else "Connected. Found ${devices.size} EcoFlow device${if (devices.size == 1) "" else "s"}."
                             }
-                            is EcoFlowCloudClient.Result.Failure -> feedback = result.message
+                            is EcoFlowCloudClient.Result.Failure -> {
+                                feedback = result.message
+                                dashboardError = result.message
+                            }
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !loading && (config.hasCredentials || accessKey.isNotBlank())
+                enabled = !loading && config.hasCredentials && accessKey.isBlank() && secretKey.isBlank()
             ) {
-                if (loading) CircularProgressIndicator(strokeWidth = 2.dp)
+                if (loading) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                 else Text("Find my EcoFlow devices")
+            }
+        }
+
+        config.selectedSerialNumber?.let { serial ->
+            SettingsCard {
+                Text(config.selectedDeviceName ?: "Selected EcoFlow device", fontWeight = FontWeight.Medium)
+                Text("Read its data without changing inverter settings or your outage detector.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Button(
+                    onClick = { inspectDevice(EcoFlowCloudClient.Device(serial, config.selectedDeviceName ?: "EcoFlow device", online = false)) },
+                    enabled = !loading && config.hasCredentials,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open device dashboard") }
+                OutlinedButton(onClick = { inspectDevice(EcoFlowCloudClient.Device(serial,
+                    config.selectedDeviceName ?: "EcoFlow device", online = false), requestedFields = true) },
+                    enabled = !loading && config.hasCredentials, modifier = Modifier.fillMaxWidth()) {
+                    Text("Request PowerOcean readings")
+                }
             }
         }
 
@@ -228,36 +297,17 @@ internal fun EcoFlowCloudSetupScreen(
                     )
                     Button(
                         onClick = {
-                            val credentials = enteredCredentials()
-                            if (credentials == null) {
-                                feedback = "Saved EcoFlow credentials could not be read."
-                                return@Button
-                            }
-                            runOperation {
-                                when (val result = withContext(Dispatchers.IO) {
-                                    client.readPowerOceanQuota(credentials, device.serialNumber)
-                                }) {
-                                    is EcoFlowCloudClient.Result.Success -> {
-                                        selectedQuota = result.value
-                                        store.selectDevice(device)
-                                        config = store.config()
-                                        val signal = EcoFlowCloudGridSignalMapper.toSignal(
-                                            result.value,
-                                            System.currentTimeMillis()
-                                        )
-                                        feedback = when (signal.availability) {
-                                            GridAvailability.AVAILABLE -> "Fresh request completed: phase voltage currently indicates grid available."
-                                            GridAvailability.UNAVAILABLE -> "Fresh request completed: all reported phase voltages are below 50 V."
-                                            GridAvailability.UNKNOWN -> "Connected, but this response has no usable phase voltage."
-                                        }
-                                    }
-                                    is EcoFlowCloudClient.Result.Failure -> feedback = result.message
-                                }
-                            }
+                            inspectDevice(device)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !loading
                     ) { Text("Inspect read-only data") }
+                    OutlinedButton(onClick = { inspectDevice(device, requestedFields = true) },
+                        modifier = Modifier.fillMaxWidth(), enabled = !loading) {
+                        Text("Request PowerOcean readings")
+                    }
+                    Text("Try this documented read-only request if the all-readings inspection is denied. It requests grid phases, solar, battery and home power; it does not change inverter settings.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -265,24 +315,23 @@ internal fun EcoFlowCloudSetupScreen(
         selectedQuota?.let { quota ->
             PowerSourceSectionTitle("Latest inspection")
             SettingsCard {
-                SettingText(
-                    "Phase voltage",
-                    quota.phaseVoltages.joinToString(" / ") { formatValue(it, "V") }.ifEmpty { "Not reported" }
-                )
-                SettingText("Grid flow", formatOptional(quota.gridPowerWatts, "W"))
-                SettingText("Home load", formatOptional(quota.loadPowerWatts, "W"))
-                SettingText("Solar", formatOptional(quota.solarPowerWatts, "W"))
-                SettingText("Battery power", formatOptional(quota.batteryPowerWatts, "W"))
-                SettingText("EcoFlow battery", formatOptional(quota.batteryPercent, "%"))
+                SettingText("Displayable readings", quota.reportedValues.size.toString())
+                OutlinedButton(onClick = { dashboardOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("View latest device snapshot")
+                }
             }
         }
 
         feedback?.let {
-            Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            Text(it, color = if (dashboardError == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Medium)
         }
 
         PowerSourceSectionTitle("If something does not work")
         SettingsCard {
+            Text("Device listed, but readings denied", fontWeight = FontWeight.Medium)
+            Text("This is an EcoFlow developer API restriction, not an Android permission. Try Request PowerOcean readings. If both requests are denied, contact EcoFlow through Support in the developer console. Ask for read-only PowerOcean quota/API access for your account and equipment; include the error code and device model. Share serial details only through EcoFlow's private support process, never API keys.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             Text("No devices found", fontWeight = FontWeight.Medium)
             Text(
                 "Check that the developer account is the owner of the PowerOcean. EcoFlow's documented device-list request does not return devices that were only shared with the account.",
@@ -291,7 +340,7 @@ internal fun EcoFlowCloudSetupScreen(
             )
             Text("Credentials rejected", fontWeight = FontWeight.Medium)
             Text(
-                "Copy the Access Key and Secret Key again from the same application. Do not add spaces before or after either key.",
+                "Copy the AccessKey and SecretKey again from the same key pair. Do not add spaces before or after either key.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
@@ -309,7 +358,8 @@ internal fun EcoFlowCloudSetupScreen(
                 if (!confirmClear) {
                     OutlinedButton(
                         onClick = { confirmClear = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !loading
                     ) { Text("Remove EcoFlow Cloud credentials") }
                 } else {
                     Text("This removes the encrypted keys and selected device from this phone.")
@@ -319,10 +369,13 @@ internal fun EcoFlowCloudSetupScreen(
                             config = store.config()
                             devices = emptyList()
                             selectedQuota = null
+                            dashboard = null
+                            dashboardError = null
                             confirmClear = false
                             feedback = "EcoFlow Cloud credentials removed."
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !loading
                     ) { Text("Remove credentials") }
                     OutlinedButton(
                         onClick = { confirmClear = false },
@@ -338,11 +391,5 @@ private fun maskSerial(serial: String): String = when {
     serial.length <= 6 -> "••••"
     else -> serial.take(4) + "••••" + serial.takeLast(2)
 }
-
-private fun formatOptional(value: Double?, unit: String): String =
-    value?.let { formatValue(it, unit) } ?: "Not reported"
-
-private fun formatValue(value: Double, unit: String): String =
-    String.format(Locale.ROOT, "%.1f %s", value, unit)
 
 private const val DEVELOPER_URL = "https://developer-eu.ecoflow.com/"

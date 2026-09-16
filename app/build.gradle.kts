@@ -23,8 +23,8 @@ android {
         applicationId = "com.flossypickle.poweroutagemonitor"
         minSdk = 23
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.0.0-preview.1"
+        versionCode = 5
+        versionName = "1.0.0-preview.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

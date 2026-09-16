@@ -4,10 +4,34 @@ import com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudGridSignalMapper
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudQuota
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudSigner
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowPowerOceanRequest
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudError
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class EcoFlowCloudProtocolTest {
+    @Test
+    fun `PowerOcean request signs quota array indices as documented`() {
+        val parameters = EcoFlowPowerOceanRequest.signingParameters("example-serial")
+        assertEquals("pcsAPhase", parameters["params.quotas[0]"])
+        assertEquals("sysGridPwr", parameters["params.quotas[8]"])
+        assertEquals(10, parameters.size)
+        assertEquals(
+            "params.quotas[0]=pcsAPhase&params.quotas[1]=pcsBPhase&params.quotas[2]=pcsCPhase&" +
+                "params.quotas[3]=mpptHeartBeat&params.quotas[4]=mpptPwr&params.quotas[5]=bpSoc&" +
+                "params.quotas[6]=bpPwr&params.quotas[7]=sysLoadPwr&params.quotas[8]=sysGridPwr&" +
+                "sn=example-serial&accessKey=example-key&nonce=123456&timestamp=1000",
+            EcoFlowCloudSigner.canonicalRequest(parameters, "example-key", "123456", 1000)
+        )
+    }
+
+    @Test
+    fun `provider errors preserve diagnostic code but redact private values before truncation`() {
+        assertEquals("EcoFlow code 1006: denied [redacted] [redacted] [redacted] [redacted]",
+            EcoFlowCloudError.describe("1006", "denied example-access example-secret example-serial Bearer other-token", 200,
+                listOf("example-access", "example-secret", "example-serial")))
+    }
+
     @Test
     fun `signer matches EcoFlow's published test vector`() {
         val sign = EcoFlowCloudSigner.sign(
