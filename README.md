@@ -19,7 +19,7 @@ For step-by-step help, see the [full user guide](#full-user-guide), including [T
 
 FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. **By default, it watches a normal wall charger's power connection.** If power disappears long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
 
-No inverter, solar installation or energy-provider account is needed for charger monitoring. Optional power-source integration modules are separate from alert destinations, so users can choose the hardware and messaging methods they need. EcoFlow is one experimental integration, not a requirement; future modules could support other systems such as Huawei.
+No inverter, solar installation or energy-provider account is needed for charger monitoring. Optional power-source integration modules are separate from alert destinations, so users can choose the hardware and messaging methods they need. EcoFlow is one experimental integration, not a requirement; future modules could read other inverters, UPS units, energy meters or home-automation sensors.
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
@@ -74,6 +74,15 @@ Telegram and email need internet access; working mobile data on the phone can pr
 **Skip this section if you use the normal wall-charger detector.** These modules are for users with compatible equipment who explicitly choose another source under **Settings → Power sources**. They are independent of Telegram, email, SMS and other alert destinations.
 
 The current experimental integration is EcoFlow PowerOcean. The modular design allows future integrations for Huawei or other manufacturers, but those are not currently available. Owning battery-backup equipment does not automatically make it compatible with this app.
+
+Possible future modules include:
+
+- **UPS monitoring:** read mains/on-battery status from compatible UPS units through [Network UPS Tools (NUT)](https://networkupstools.org/) or a supported SNMP interface.
+- **Energy meters and suitable smart devices:** read voltage or explicit mains state, for example from compatible [Shelly EM/3EM meters](https://shelly-api-docs.shelly.cloud/gen1/). Device support and whether the reading actually represents grid power must be validated.
+- **Home Assistant:** use an existing grid-state sensor or UPS integration, such as its [NUT integration](https://www.home-assistant.io/integrations/nut), as a bridge to the monitor.
+- **Other inverters or custom sensors:** add manufacturer modules such as Huawei or Tesla, or consume trustworthy readings through MQTT, an HTTP API or WebSocket.
+
+These are extension ideas, **not features in the current APK**. A module can also report that a monitored device is unavailable, but a failed ping, disconnected smart plug or timed-out API alone is not proof of a grid outage. Unavailable or stale evidence must remain **Unknown**.
 
 Network-based sources need their network equipment to remain powered. Local readings need the home network; cloud readings also depend on the inverter retaining internet access, so mobile data on the phone alone is not enough. Back up the relevant router, Wi-Fi access points and HomePlug/switches. The manufacturer's cloud can still become unavailable.
 
