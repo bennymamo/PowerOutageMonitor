@@ -390,7 +390,7 @@ internal fun DataBackupSettingsContent(
 
     if (panel == BackupPanel.RESTORE) pendingRestore?.let { document ->
         SettingsCard {
-            Text("Backup ready", fontWeight = FontWeight.Medium)
+            Text("Ready to restore", fontWeight = FontWeight.Medium)
             SettingText("Created", formatBackupDate(document.createdAtEpochMs))
             SettingText(
                 "Created by app version",
