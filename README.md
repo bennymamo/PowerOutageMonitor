@@ -1,5 +1,20 @@
 # FP Grid Monitor
 
+## Quick start
+
+Turn a spare Android phone into a power-outage monitor:
+
+1. **[Download and install the APK](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk)** on a device running **Android 6.0 or newer**. Allow installation from your browser or file manager if Android asks.
+2. Connect a healthy phone and reliable charger to the wall socket you want to monitor. **That charger must lose power during an outage**, so keep it outside a UPS or other backup supply.
+3. Open FP Grid Monitor and choose **Guided** setup. Follow the charger check and initially keep the recommended **1-minute outage** and **30-second restoration** delays. Already have a recovery archive? Choose **Restore an existing backup** instead.
+4. Open **Settings → Setup & testing**, complete the checklist, allow notifications and review the battery/background checks in Diagnostics.
+5. Open **Settings → Alert channels**, configure your chosen destinations and send a test. Telegram is a straightforward first option; Gmail is the default email option. Add a local sound under **Settings → Audible alarm** if wanted.
+6. Turn on the **Monitoring** master switch on the **Status dashboard**. Unplug the charger, wait for confirmation and check your alerts. Reconnect, wait for stable restoration and check the recovery message.
+
+**Keep your modem/router, Wi-Fi access points and HomePlug/network equipment on UPS or battery backup for internet alerts and EcoFlow readings.** Working mobile data can provide another route for internet alerts. Whole-house backup can hide an outage from the charger detector; [read the EcoFlow limitations](#ecoflow-powerocean-detection) before choosing that optional source.
+
+For step-by-step help, see the [full user guide](#full-user-guide), including [Telegram](#telegram), [Gmail](#gmail), [audible alarms](#set-up-the-audible-alarm), [backup and restore](#backup-and-restore), and [troubleshooting](#troubleshooting).
+
 ## Purpose
 
 FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. It can watch Android's external-power signal from a normal wall charger or, for supported battery-backup homes, use an optional EcoFlow PowerOcean module. If the selected source reports that grid power has disappeared long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
@@ -12,7 +27,7 @@ The current minimum is **Android 6.0 (API 23)**. A spare older phone can therefo
 
 An old Android version does not guarantee that a particular phone will keep the app running: manufacturer battery rules, a worn battery, unreliable Wi-Fi, or a charger on the wrong circuit can still cause missed alerts. Before using a spare phone as a monitor, check its battery condition and test an unplug/reconnect cycle, screen-off operation, reboot recovery, and each enabled alert destination on that actual device.
 
-> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Its foreground service also stayed active without a new History interruption during a more-than-12-hour check with no APK installs. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. Longer unattended and old-device physical testing are still required. There is not yet a signed public release APK.
+> **Development status:** FP Grid Monitor is under active development. Physical testing on a Samsung Galaxy S10 running Android 12 has passed screen-off, removal-from-Recents, reboot, Telegram outage/restoration, and built-in alarm checks. Its foreground service also stayed active without a new History interruption during a more-than-12-hour check with no APK installs. Android 6 emulator testing has passed setup, foreground monitoring, and power-transition checks. The first signed preview APK is available below. Longer unattended and old-device physical testing continue; test reliability on your actual device before depending on alerts.
 
 ## What it can do
 
@@ -101,11 +116,13 @@ Cloud monitoring remains a preview rather than a selectable outage source. Some 
 - An old or damaged lithium battery should not be left charging unattended. Inspect the device and battery before using it continuously.
 - This is not a certified safety, medical, or emergency alarm system.
 
-## Installation
+## Full user guide
 
-### Public release APK
+### Install the app
 
-A signed public APK is not available yet. When the first release is ready, it will appear on the repository's [Releases page](https://github.com/bennymamo/PowerOutageMonitor/releases). Installation will then be:
+#### Download and install
+
+**[Download FP Grid Monitor 1.0.0-preview.1](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk)** — Android 6.0 or newer. This is a preview release; read the [release notes](https://github.com/bennymamo/PowerOutageMonitor/releases/tag/1.0.0-preview.1) and [SHA-256 checksum](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk.sha256). Installation:
 
 1. Download the APK on the Android device.
 2. If Android asks, allow that browser or file manager to install unknown apps.
@@ -115,40 +132,15 @@ A signed public APK is not available yet. When the first release is ready, it wi
 
 Only install APKs published by this repository. Uninstalling the app removes its local settings, credentials, queue, and history.
 
-### Build the current development version
+The APK is the Android installation file. If your browser downloads it without opening it, find it in the phone's **Downloads** app or file manager and tap it. Android's wording varies by manufacturer; its [installation guidance](https://support.google.com/pixelphone/answer/7391672) explains allowing the selected browser/file manager to install an app.
 
-Developers can build a debug APK from source with Android Studio or PowerShell. The project currently uses Kotlin, Jetpack Compose, Android Gradle Plugin, and the Gradle wrapper included in this repository.
+If an update reports a signing conflict, you may have an earlier development/debug build. Create an all-category encrypted backup and save a copy away from the phone before uninstalling that build. Install the public APK and restore the archive. Public preview updates use the permanent signing key and normally install over the existing public app without uninstalling.
 
-Requirements:
+### First setup
 
-- Windows, macOS, or Linux
-- Android Studio with an Android SDK that supports API 37
-- JDK 25; Android Studio's bundled JDK is suitable
+The app starts with a setup wizard. Choose **Guided (recommended)** for explanations and links, or **Experienced** for shorter instructions. Change this later under **Settings → Help & guidance**. To bring an existing monitor onto a replacement device, use **Restore an existing backup** on the first setup screen and follow [restore instructions](#restore-on-this-phone-or-a-replacement).
 
-On Windows PowerShell, from the repository root:
-
-```powershell
-$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
-.\gradlew.bat assembleDebug
-```
-
-The debug APK is created at:
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-To run the automated checks:
-
-```powershell
-.\gradlew.bat testDebugUnitTest lintDebug
-```
-
-The minimum supported Android version is Android 6.0 (API 23). The project currently targets API 37.
-
-## First setup
-
-The app starts with a guided wizard. For a reliable installation:
+For a reliable new installation:
 
 1. Read the battery-safety note and name the monitoring device, such as `Home power monitor`.
 2. Leave the phone connected to the wall charger and complete the real connection/disconnection check.
@@ -158,54 +150,135 @@ The app starts with a guided wizard. For a reliable installation:
 6. Open **Alert channels**, configure at least one destination, and send a test.
 7. Use the master switch on the Status dashboard to start or stop all monitoring. Turning it off also removes the ongoing notification and stops local alarm activity.
 
-On phones with strict battery management, open **Settings → Reliability → Keep Power Monitor Running** and follow the device and Android checks. Prefer an **Unrestricted** or equivalent battery setting when the phone offers one.
+For the normal wall-charger detector, leave **Android charger** selected under **Settings → Power sources**. Keep the phone connected long enough to establish its first power baseline. A full battery that says *Not charging* can still have external power available; the detector uses the connection signal.
 
-## Alert options
+On phones with strict battery management, open **Settings → Reliability → Open reliability diagnostics** and follow the device and Android checks. Prefer an **Unrestricted** or equivalent battery setting when the phone offers one. Allow the quiet ongoing monitoring notification so you can see whether monitoring is active.
 
-### Telegram
+Change the outage delay under **Settings → Outage timing** and the restoration delay or restoration messages under **Settings → Restoration**. Longer delays reduce alerts from brief interruptions; they also mean waiting longer before a real outage or restoration is announced.
+
+### Choose alert destinations
+
+#### Telegram
 
 Telegram is the easiest internet-based option for most users and can alert one or more private chats or groups.
 
-1. In Telegram, create a bot with `@BotFather` and copy its bot token.
-2. Send `/start` to the new bot from every private chat that should receive alerts. Add it to a group and send a message there if needed.
-3. In FP Grid Monitor, open **Settings → Alert channels → Telegram**.
-4. Save the token, check it, find chats, select recipients, and send a test.
+1. Open **Settings → Alert channels → Configure Telegram** and tap **Open BotFather**. A Telegram bot is an account that this app uses to send your messages.
+2. Send `/newbot` to the verified `@BotFather` account and follow its prompts for the bot's name and username. Copy the token it returns into FP Grid Monitor's **Bot token** field.
+3. Tap **Check bot token** and read the result shown on the setup page.
+4. Open your newly created bot in Telegram and tap **Start** or send `/start`. Do this from every private account that should receive alerts. For a group, add the bot and send a message in that group.
+5. Return to FP Grid Monitor, tap **Find chats**, then **Add** beside each intended chat. If none appear, send a fresh message to your bot and try again. Advanced users can enter chat IDs directly, one per line.
+6. Tap **Save configuration**, then **Send test message**. Check that it arrives in each intended chat; saving alone does not send a message.
+7. Turn on **Enable Telegram alerts** and save the configuration. Return to the Status dashboard and confirm that monitoring is on.
 
 The bot token is a password. Do not share it or paste it into issue reports.
 
-### Gmail
+#### Gmail
 
 Gmail is the default email option and does not require a registered domain. Google normally requires two-step verification and a dedicated App Password; a normal Gmail password should not be entered. The app sends directly through Gmail's SMTP service.
 
-### SMS
+1. Open **Settings → Alert channels → Configure email** and choose **Gmail**.
+2. Sign in to the sending Google account in your browser and turn on **2-Step Verification** if needed.
+3. Tap **Open Google App Passwords** in the app. Create an App Password named `FP Grid Monitor`; this is a separate password for the monitor, not your regular Google password.
+4. Enter the full **Google account email**, the generated App Password and the recipient **Email addresses**, one per line.
+5. Tap **Save configuration**, then **Send test email**. Check the inbox and spam folder of every intended recipient.
+6. Turn on **Enable Gmail alerts** and save the configuration.
+
+Some Google accounts do not offer App Passwords. Follow [Google's App Password help](https://support.google.com/accounts/answer/185833) or choose another alert destination. If you change the main Google password, Google revokes existing App Passwords; create and save a replacement, then test again.
+
+#### SMS
 
 SMS can work when home internet fails, provided the Android device has telephony support, an active SIM, mobile signal, and permission to send SMS. Your mobile provider may charge for every message. Distribution through Google Play may impose additional SMS-policy restrictions; direct sideloading does not remove Android's runtime permission requirement.
 
-### Resend
+Open **Settings → Alert channels → Configure device SMS**, allow SMS sending when asked and enter recipients one per line with their country codes, such as `+356…`. Save the configuration, send a test and confirm receipt before enabling SMS alerts and saving again. A Wi-Fi-only tablet cannot send device SMS just because a messaging app is installed.
+
+#### Resend
 
 Resend is an advanced email option intended for users who already control a verified sending domain and have a Resend API key. Most home users should choose Gmail or Telegram.
 
-### Audible alarm
+Choose Resend from **Configure email** and follow its guided instructions to verify a domain, supply the API key and enter the sender and recipients. Save and send a test before enabling the provider. Each destination is configured separately; enable only the ones you want to use.
+
+### Set up the audible alarm
 
 The local alarm is off by default. It can use the built-in beep or a sound from Android's alarm picker, repeat at a selected interval, temporarily raise alarm volume, and stop at a chosen battery level. The active alarm can be dismissed from the dashboard or notification. Sound tests stop automatically after five seconds.
 
-### Scheduled updates
+1. Open **Settings → Audible alarm** and choose the built-in beep or tap **Choose Android alarm sound**. Available tones and custom-file choices depend on the phone's sound picker.
+2. Tap **Play 5-second test** and confirm that you hear it. Review the phone's alarm volume and Do Not Disturb settings if it is silent.
+3. Select the repeat interval, repeat timing, battery cutoff and optional maximum alarm volume. If you choose exact repeats, follow the **Allow exact alarms** instruction when shown; ordinary repeats can be delayed by Android.
+4. Turn on **Enable audible outage alarm** and test a real charger disconnection after the confirmation delay.
+5. To silence an active outage, expand the speaker notification titled **Outage alarm active** and tap **Stop sound**, or dismiss the alarm from the dashboard. This silences the current outage and its repeats. Monitoring and message alerts continue; a future outage can sound again.
+
+### Configure reminders and warnings
 
 Under **Settings → Scheduled updates**, source-unavailable alerts default to a five-minute delay, monitor heartbeats default to once per day, and long-outage updates default to every six hours. Each can be disabled or changed independently using minutes, hours, or days. These messages use every enabled alert channel, so normal SMS charges may apply. A source-unavailable message means the app cannot determine grid state; it is deliberately separate from a confirmed outage alert.
 
-## Backup and restore
+### Backup and restore
 
 Open **Settings → Data & backup** and choose **Create encrypted backup**, **Automatic backups**, or **Restore backup**. On a replacement phone, tap **Restore an existing backup** on the first setup screen instead of repeating the five-step setup. A `.fpgrid` archive can include app settings, alert channels and keys, power sources, history, and live state with pending deliveries. It also records the app version that created it.
 
 Every archive is encrypted in full with a password of at least ten characters. FP Grid Monitor uses a password-strengthening step followed by authenticated AES-256-GCM encryption, so the contents are unreadable and changes or corruption are detected. The file is not a ZIP and cannot be opened with an unzip tool. FP Grid Monitor cannot recover a forgotten password.
 
+#### Create a recovery copy
+
+1. Open **Settings → Data & backup → Create backup**.
+2. Choose the sections to include. For recovery after a dead phone, select everything: settings, alert channels/keys, power sources, History and live state/pending deliveries.
+3. Enter and confirm a strong password of at least ten characters. Save it in your password manager so it survives loss of the phone.
+4. Create the encrypted backup and use Android's file picker to save the `.fpgrid` file.
+5. Keep a copy away from the monitoring phone, such as on your computer or in your own cloud storage. A backup stored only on a dead phone will not help.
+
+#### Restore on this phone or a replacement
+
 For a replacement phone, enter the archive password, choose the file in Android's picker, review its version and available sections, then tap **Restore selected data**. Include **App settings** to recover completed setup. A successful restore adds a **Backup restored** marker to History, separating imported records from activity on the new device. Monitoring must be off during restore. Restored pending alerts stay paused unless **Resume monitoring after restore** is explicitly selected; this avoids duplicate alerts while the old device may still be active.
+
+1. On an existing installation, turn off the dashboard's Monitoring switch and open **Settings → Data & backup → Restore backup**. On a fresh installation, choose **Restore an existing backup** on the first setup screen.
+2. Enter the backup password and tap **Choose backup to unlock**. Select the `.fpgrid` file in Android's file picker.
+3. When **Ready to restore** appears, check the archive's creation time, app version and included sections. Select the sections you want; choose everything for a full replacement-device recovery.
+4. Decide whether to resume monitoring after restore. Keep it paused until the old device is stopped if both phones might otherwise send the same pending alerts.
+5. Tap **Restore selected data** and wait for confirmation. Review History, settings and alert destinations, reconnect Android permissions/folders/sound access, and send fresh provider tests.
+6. Connect the replacement phone to its monitored charger and turn on the dashboard switch when ready.
+
+#### Inspect or edit an archive
 
 The advanced backup editor can show the decrypted structured document, including credentials, after the user unlocks it. It creates a separate encrypted copy and validates every edited value before saving. Use it for controlled testing and keep the screen private while secrets are visible.
 
+#### Schedule automatic recovery copies
+
 Automatic backups use Android's folder picker. A user can choose a local folder or, when its Android app supports folder access, a Google Drive, OneDrive, or Dropbox folder. FP Grid Monitor receives access only to that selected folder and never receives the user's cloud login. Frequency, retained-copy count, password, and included sections are configurable. After restoring onto another device, Android requires the user to reconnect the destination folder before scheduling can resume.
 
+Open **Settings → Data & backup → Automatic backups**, choose a destination folder, select the frequency, retained-copy count and included sections, and enter/confirm the backup password. Enable automatic backups, tap **Save automatic backup plan**, then **Create an automatic backup now**. Check **Last successful copy** and verify the file actually reaches your chosen storage. If a cloud app does not offer folder selection, choose a local destination and arrange your own copy/sync; cloud-folder support varies by provider.
+
 Android permissions, manufacturer battery settings, cloud-account sessions, and access grants to folders or custom sound files cannot be transferred. Review Diagnostics and reconnect those items on a replacement device.
+
+### Daily use and a complete first test
+
+The Status dashboard focuses on grid state. A suspected outage is still waiting for its confirmation delay; a confirmed outage has met that delay. A restored/recovered message is shown briefly before returning to the normal power-available state. **Unknown** means the selected source cannot provide trustworthy evidence, rather than proof of an outage. Battery percentage describes how much reserve the monitoring phone has left.
+
+The dashboard master switch controls all monitoring. Use it to pause the monitor for maintenance or moving the charger. Change themes under **Settings → Appearance**, the friendly name under **Settings → Device**, and retention under **Settings → History**. Android Back returns from a settings subsection to Settings, then to Status before exiting.
+
+For the first complete test:
+
+1. With the real charger connected, enable monitoring and send a test through every enabled destination.
+2. Unplug, wait for your outage-confirmation delay and verify the confirmed status, History entry, messages and optional sound.
+3. If sound is enabled, tap the notification's **Stop sound** while it is playing and check that it stops and does not repeat for that outage.
+4. Reconnect and wait for the restoration delay. Check the restoration messages and completed outage in History.
+5. Repeat a real unplug/reconnect check with the screen off, after removing the app from Recents, and after a reboot. Keep the network powered and check the quiet ongoing notification.
+6. Review History later for unexplained monitoring restarts or missing intervals, and verify a backup can be unlocked before you depend on it.
+
+**Test mode** under **Setup & testing** is useful for learning the state sequence without touching a cable. Follow its explicit send controls if you want simulated messages to reach real destinations. Simulation does not replace physical screen-off, charger and reboot tests.
+
+### Troubleshooting
+
+| What you see | What to check |
+| --- | --- |
+| Waiting for a first connection | Connect the real charger once with Android charger selected, then confirm that external power is shown. |
+| No outage when house backup takes over | The watched charger is still powered. Use a socket that loses power with the grid or validate a compatible direct grid source. |
+| Telegram finds no chats | Open your bot, send a fresh `/start` or message, then return and tap **Find chats**. Check the token result and internet access. |
+| Email or Telegram messages do not arrive | Confirm that the channel is saved and enabled, send its test, check recipients/provider feedback and review Diagnostics. Offline internet messages wait for connectivity. |
+| Monitoring notification is hidden | Allow notifications for FP Grid Monitor in Android settings and review Diagnostics. The app's own sound notification also needs notification permission on newer Android versions. |
+| Monitoring stops or History shows unexplained restarts | Review Android battery optimization, manufacturer auto-start/background controls and the phone's memory/battery condition. Open the app again after a force stop. |
+| No local sound | Enable the alarm, play its test, review alarm volume/Do Not Disturb and reselect a custom tone if its file access was lost. |
+| Backup cannot unlock or restore | Check the password, use the original `.fpgrid` file, wait for **Ready to restore**, and turn monitoring off before applying it. A forgotten password cannot be recovered. |
+| Scheduled backup fails | Reconnect the destination folder, check storage/provider availability and inspect the last attempt shown in Automatic backups. |
+| EcoFlow readings are Unknown | Check the chosen source's connection test and backed-up network. Local Modbus needs enabled port 502 and compatible firmware; Cloud preview cannot drive outage detection. |
 
 ## Permissions
 
@@ -252,11 +325,42 @@ Before relying on it:
 - Check it again after Android system updates.
 - Review History for repeated app or monitoring starts without matching stops. On Android 11 and newer, the phone may explain a recent interruption as a crash, low memory, or app update; older phones mark the cause as unknown. Repeated unexplained starts need a closer look.
 
+## Build from source
+
+Developers can build a debug APK from source with Android Studio or PowerShell. The project currently uses Kotlin, Jetpack Compose, Android Gradle Plugin, and the Gradle wrapper included in this repository.
+
+Requirements:
+
+- Windows, macOS, or Linux
+- Android Studio with an Android SDK that supports API 37
+- JDK 25; Android Studio's bundled JDK is suitable
+
+On Windows PowerShell, from the repository root:
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+.\gradlew.bat assembleDebug
+```
+
+The debug APK is created at:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+To run the automated checks:
+
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug
+```
+
+The minimum supported Android version is Android 6.0 (API 23). The project currently targets API 37.
+
 ## Support and development status
 
 Use [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues) for reproducible bugs and feature requests. Remove email addresses, phone numbers, chat identifiers, bot tokens, passwords, and API keys from screenshots and diagnostic text before posting.
 
-Planned work before the first public release includes a verified backup of the permanent signing key, longer unattended device testing, a signed update test, and final physical checks of alarm dismissal, Do Not Disturb, and battery cutoff behavior.
+The first preview has passed encrypted recovery onto a fresh signed installation, signed updates preserving data, Telegram outage/restoration delivery, custom alarm playback and Stop sound on the physical test phone. Ongoing validation includes longer unattended monitoring, older physical devices, Do Not Disturb and battery cutoff behavior. EcoFlow integrations remain experimental.
 
 The optional EcoFlow source also requires validation against the actual inverter during one controlled grid outage before it should be treated as production-ready.
 
