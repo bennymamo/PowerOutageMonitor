@@ -4,20 +4,22 @@
 
 Turn a spare Android phone into a power-outage monitor:
 
-1. **[Download and install the APK](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk)** on a device running **Android 6.0 or newer**. Allow installation from your browser or file manager if Android asks.
+1. Open the **[Releases page](https://github.com/bennymamo/PowerOutageMonitor/releases)** and download the APK from the newest suitable release. Install it on a device running **Android 6.0 or newer**. Allow installation from your browser or file manager if Android asks.
 2. Connect a healthy phone and reliable charger to the wall socket you want to monitor. **That charger must lose power during an outage**, so keep it outside a UPS or other backup supply.
 3. Open FP Grid Monitor and choose **Guided** setup. Follow the charger check and initially keep the recommended **1-minute outage** and **30-second restoration** delays. Already have a recovery archive? Choose **Restore an existing backup** instead.
 4. Open **Settings → Setup & testing**, complete the checklist, allow notifications and review the battery/background checks in Diagnostics.
 5. Open **Settings → Alert channels**, configure your chosen destinations and send a test. Telegram is a straightforward first option; Gmail is the default email option. Add a local sound under **Settings → Audible alarm** if wanted.
 6. Turn on the **Monitoring** master switch on the **Status dashboard**. Unplug the charger, wait for confirmation and check your alerts. Reconnect, wait for stable restoration and check the recovery message.
 
-**Keep your modem/router, Wi-Fi access points and HomePlug/network equipment on UPS or battery backup for internet alerts and EcoFlow readings.** Working mobile data can provide another route for internet alerts. Whole-house backup can hide an outage from the charger detector; [read the EcoFlow limitations](#ecoflow-powerocean-detection) before choosing that optional source.
+**Keep your modem/router, Wi-Fi access points and HomePlug/network equipment on UPS or battery backup for internet alerts.** Working mobile data can provide another route. Whole-house backup can hide an outage from the charger detector; [read about optional power-source integrations](#optional-power-source-integrations) if that applies to your home.
 
 For step-by-step help, see the [full user guide](#full-user-guide), including [Telegram](#telegram), [Gmail](#gmail), [audible alarms](#set-up-the-audible-alarm), [backup and restore](#backup-and-restore), and [troubleshooting](#troubleshooting).
 
 ## Purpose
 
-FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. It can watch Android's external-power signal from a normal wall charger or, for supported battery-backup homes, use an optional EcoFlow PowerOcean module. If the selected source reports that grid power has disappeared long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
+FP Grid Monitor turns a spare Android phone or tablet into a simple grid-power monitor. **By default, it watches a normal wall charger's power connection.** If power disappears long enough to count as an outage, the app records the event and can alert you. When stable power returns, it can send a restoration message linked to the same outage.
+
+No inverter, solar installation or energy-provider account is needed for charger monitoring. Optional power-source integration modules are separate from alert destinations, so users can choose the hardware and messaging methods they need. EcoFlow is one experimental integration, not a requirement; future modules could support other systems such as Huawei.
 
 The app is being developed by [Flossy Pickle](https://flossypickle.com). It has no advertising, analytics, or required cloud account.
 
@@ -32,8 +34,6 @@ An old Android version does not guarantee that a particular phone will keep the 
 ## What it can do
 
 - Detect external power loss and stable restoration without constant polling.
-- Optionally read grid-connected/islanded state directly from a local EcoFlow PowerOcean inverter.
-- Preview a read-only EcoFlow Cloud connection without installer access or local port 502.
 - Ignore brief cable movement with configurable outage and restoration delays.
 - Continue monitoring with the screen off and resume after a reboot, as far as the device manufacturer allows.
 - Keep a local history of outages, brief interruptions, app starts, monitoring starts/stops, expected update/reboot resumes, and possible unclean shutdowns.
@@ -47,6 +47,7 @@ An old Android version does not guarantee that a particular phone will keep the 
 - Offer System, Dark, and Light themes and Guided or Experienced setup instructions.
 - Create and restore selective, password-encrypted recovery archives, including credentials and history when selected.
 - Schedule encrypted recovery copies to a user-chosen local folder or a folder exposed by a cloud-storage app.
+- Offer optional power-source integration modules for supported hardware. The current EcoFlow modules are experimental; Huawei and other future integrations are not implemented yet.
 
 ## How detection works
 
@@ -64,13 +65,21 @@ The app checks whether Android considers an external power source connected. It 
 
 **We strongly recommend a UPS or similar battery backup for the modem/router, every Wi-Fi access point the monitoring phone uses, and any HomePlug/powerline adapters or network switches along the connection.** Otherwise grid loss can cut the network at the same moment the app needs to send an alert or read the inverter.
 
-Telegram and email need internet access; working mobile data on the phone can provide an alternative. Local EcoFlow readings need a working home network. EcoFlow Cloud also depends on the inverter retaining internet access, so mobile data on the phone alone is not enough. Backup power does not guarantee that your internet provider or EcoFlow's cloud stays available. Offline internet alerts are queued and retried when connectivity returns. Device SMS instead needs a working SIM and mobile network; charger detection, local history and the audible alarm work offline.
+Telegram and email need internet access; working mobile data on the phone can provide an alternative. Backup power does not guarantee that your internet provider stays available. Offline internet alerts are queued and retried when connectivity returns. Device SMS instead needs a working SIM and mobile network; charger detection, local history and the audible alarm work offline.
 
-**Keep the monitored charger outside the backup supply when using Android charger detection.** It must lose power with the socket or circuit you want to monitor. If whole-house backup keeps that charger powered, use a compatible source that reads actual grid state, such as the optional EcoFlow local module.
+**Keep the monitored charger outside the backup supply when using Android charger detection.** It must lose power with the socket or circuit you want to monitor. If whole-house backup keeps that charger powered, charger detection cannot tell whether the grid failed. You need a suitable socket that loses power or a separately validated integration that reads actual grid state.
+
+## Optional power-source integrations
+
+**Skip this section if you use the normal wall-charger detector.** These modules are for users with compatible equipment who explicitly choose another source under **Settings → Power sources**. They are independent of Telegram, email, SMS and other alert destinations.
+
+The current experimental integration is EcoFlow PowerOcean. The modular design allows future integrations for Huawei or other manufacturers, but those are not currently available. Owning battery-backup equipment does not automatically make it compatible with this app.
+
+Network-based sources need their network equipment to remain powered. Local readings need the home network; cloud readings also depend on the inverter retaining internet access, so mobile data on the phone alone is not enough. Back up the relevant router, Wi-Fi access points and HomePlug/switches. The manufacturer's cloud can still become unavailable.
 
 ### EcoFlow PowerOcean detection
 
-Homes with whole-house battery backup need a different source because the phone charger can remain powered during a grid outage. FP Grid Monitor includes an optional, read-only local PowerOcean connection under **Settings → Power sources**.
+For users who own a compatible EcoFlow PowerOcean system, FP Grid Monitor includes an optional, read-only local connection under **Settings → Power sources**. It is experimental and must be physically validated before use; it is not enabled as the default detector.
 
 The connection reads the inverter's grid operating mode, grid-side voltage, and frequency over Modbus TCP on the home network. It checks them together: contradictory, malformed, timed-out, or stale values become **Unknown** and cannot confirm an outage. No EcoFlow cloud login is stored, and the app contains no Modbus command that changes inverter settings.
 
@@ -89,7 +98,7 @@ EcoFlow does not publicly document this local register interface. Support for st
 
 ### EcoFlow Cloud preview
 
-**Settings → Power sources → EcoFlow Cloud** provides a separate, optional setup page for homes where local Modbus is unavailable. It uses EcoFlow's documented Developer API and the user's own API credentials; it never asks for the normal EcoFlow account password. Credentials are encrypted with Android Keystore and excluded from Android's automatic device backup. A user-created, password-encrypted recovery archive can include them when **Power sources** is selected.
+For users with compatible EcoFlow equipment, **Settings → Power sources → EcoFlow Cloud** provides a separate, optional setup page when local Modbus is unavailable. It uses EcoFlow's documented Developer API and the user's own API credentials; it never asks for the normal EcoFlow account password. Credentials are encrypted with Android Keystore and excluded from Android's automatic device backup. A user-created, password-encrypted recovery archive can include them when **Power sources** is selected.
 
 The guided page opens the [EcoFlow Developer Platform](https://developer-eu.ecoflow.com/), explains its developer review (EcoFlow says this can take up to five working days), then explains how to create an application. Once approved, it securely saves the application's Access Key and Secret Key, finds owned EcoFlow devices, and inspects documented PowerOcean phase voltage, grid flow, home load, solar power, and battery readings. It sends read-only `GET` requests and contains no cloud command that changes inverter settings.
 
@@ -110,7 +119,7 @@ Cloud monitoring remains a preview rather than a selectable outage source. Some 
 
 - The default charger source detects loss of power to the phone, not the electricity grid directly.
 - A charger connected through a UPS, power station, backed-up socket, faulty cable, or switched USB port may give a misleading result.
-- EcoFlow monitoring depends on a community-discovered local interface, compatible inverter firmware, and working backed-up network equipment.
+- The optional local EcoFlow module depends on a community-discovered interface, compatible inverter firmware, and working backed-up network equipment.
 - Telegram and email cannot arrive until the monitoring device regains internet access. SMS needs a working SIM/mobile network and may cost money.
 - Some Android manufacturers aggressively stop background apps. Their battery settings can change between phone models and software versions.
 - An old or damaged lithium battery should not be left charging unattended. Inspect the device and battery before using it continuously.
@@ -122,7 +131,7 @@ Cloud monitoring remains a preview rather than a selectable outage source. Some 
 
 #### Download and install
 
-**[Download FP Grid Monitor 1.0.0-preview.1](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk)** — Android 6.0 or newer. This is a preview release; read the [release notes](https://github.com/bennymamo/PowerOutageMonitor/releases/tag/1.0.0-preview.1) and [SHA-256 checksum](https://github.com/bennymamo/PowerOutageMonitor/releases/download/1.0.0-preview.1/fp-grid-monitor-1.0.0-preview.1.apk.sha256). Installation:
+Open the **[Releases page](https://github.com/bennymamo/PowerOutageMonitor/releases)** for available versions, descriptions and downloads. Choose the newest suitable release, read its notes and expand **Assets** to find the APK and SHA-256 checksum. Current builds require Android 6.0 or newer; preview releases are labelled **Pre-release**. Installation:
 
 1. Download the APK on the Android device.
 2. If Android asks, allow that browser or file manager to install unknown apps.
@@ -278,7 +287,7 @@ For the first complete test:
 | No local sound | Enable the alarm, play its test, review alarm volume/Do Not Disturb and reselect a custom tone if its file access was lost. |
 | Backup cannot unlock or restore | Check the password, use the original `.fpgrid` file, wait for **Ready to restore**, and turn monitoring off before applying it. A forgotten password cannot be recovered. |
 | Scheduled backup fails | Reconnect the destination folder, check storage/provider availability and inspect the last attempt shown in Automatic backups. |
-| EcoFlow readings are Unknown | Check the chosen source's connection test and backed-up network. Local Modbus needs enabled port 502 and compatible firmware; Cloud preview cannot drive outage detection. |
+| Optional EcoFlow readings are Unknown | Check the chosen source's connection test and backed-up network. Local Modbus needs enabled port 502 and compatible firmware; Cloud preview cannot drive outage detection. |
 
 ## Permissions
 
