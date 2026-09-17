@@ -115,9 +115,7 @@ internal fun TelegramSetupScreen(
             if (helpLevel.isGuided) {
                 Text("1. Tap Open BotFather below. Telegram will open a verified bot that creates other bots.")
                 Text("2. Send /newbot and follow its prompts for a name and username.")
-                Text("3. Copy the token BotFather gives you into the secure field below.")
-                Text("4. Open your new bot, tap Start or send /start, then return here and tap Find chats.")
-                Text("5. Save, send a test, then enable Telegram alerts.")
+                Text("3. Copy the token BotFather gives you. Tap Next to enter it securely in this app.")
             } else {
                 Text("Create a bot with BotFather, paste its token, send /start to it, then discover chats.")
             }
