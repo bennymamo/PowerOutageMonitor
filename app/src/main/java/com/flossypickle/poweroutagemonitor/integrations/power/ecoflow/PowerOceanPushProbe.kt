@@ -99,17 +99,12 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 ensureActive()
                 val schedule = readSchedule?.invoke() ?: PowerOceanReadSchedule(readIntervalSeconds, false, 0, false)
                 val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
-                if (requestLiveReporting && !schedule.liveOnEachRead && SystemClock.elapsedRealtime() >= nextLiveRequest) {
+                if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest)) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
                         PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
+                    if (!schedule.liveOnEachRead) nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
                 }
                 if (readDue) {
-                    // Assisted mode couples temporary activation to the requested interval.
-                    if (requestLiveReporting && schedule.liveOnEachRead) {
-                        client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
-                            PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    }
                     // GET-only request used by the app to ask for current observations.
                     val getTopic = "/app/${session.userId}/${session.connection.serial}/thing/property/get"
                     client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
@@ -158,7 +153,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     val snapshot = PowerOceanAccountTelemetry.snapshot(data, System.currentTimeMillis()).copy(
                         sourceName = "PowerOcean push feed · experimental",
                         acquisitionNote = (if (continuous) "Experimental background account feed. " else "$inspectionSeconds-second account push inspection. ") +
-                            (if (requestLiveReporting) {
+                            (if (requestLiveReporting || readSchedule?.invoke()?.liveOnEachRead == true) {
                                 if (readSchedule?.invoke()?.liveOnEachRead == true) "Assisted mode requests temporary live reporting with each scheduled/manual check. "
                                 else "Temporary live reporting is requested every 20 seconds using portal command 96/97. "
                             } else "Live-report activation is off; reading requests only. ") +

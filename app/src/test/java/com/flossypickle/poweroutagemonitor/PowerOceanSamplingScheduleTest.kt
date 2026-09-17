@@ -26,6 +26,19 @@ class PowerOceanSamplingScheduleTest {
         val c = PowerOceanSamplingSchedule(); c.due(s(3600), 0)
         assertTrue(c.due(s(5), 5000)); assertFalse(c.due(s(5), 5001)); assertTrue(c.due(s(5), 10_000))
     }
+    @Test fun assistedChecksActivateLiveReportsEvenWithLegacyToggleOff() {
+        assertTrue(s(3600).needsLiveActivation(false, readDue = true, periodicDue = false))
+        assertTrue(s(null, manual = 1).needsLiveActivation(false, readDue = true, periodicDue = false))
+    }
+    @Test fun assistedIdleAndManualOnlyDoNotRunTheTwentySecondLoop() {
+        assertFalse(s(3600).needsLiveActivation(true, readDue = false, periodicDue = true))
+        assertFalse(s(null).needsLiveActivation(true, readDue = false, periodicDue = true))
+    }
+    @Test fun continuousModeRetainsItsExplicitLiveReportingChoice() {
+        val continuous = s(60).copy(liveOnEachRead = false)
+        assertFalse(continuous.needsLiveActivation(false, readDue = true, periodicDue = true))
+        assertTrue(continuous.needsLiveActivation(true, readDue = false, periodicDue = true))
+    }
     @Test fun supportedRangesIncludeManualAndHours() {
         assertTrue(PowerOceanAssistedSettings.valid(0)); assertTrue(PowerOceanAssistedSettings.valid(5)); assertTrue(PowerOceanAssistedSettings.valid(86_400))
         assertFalse(PowerOceanAssistedSettings.valid(1)); assertFalse(PowerOceanAssistedSettings.valid(-1)); assertFalse(PowerOceanAssistedSettings.valid(86_401))

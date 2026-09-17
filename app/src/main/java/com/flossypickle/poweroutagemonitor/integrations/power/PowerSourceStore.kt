@@ -66,9 +66,16 @@ internal class PowerSourceStore(context: Context) {
         if (powerOceanProfileVerified(connection)) preferences.edit().putLong(KEY_POWEROCEAN_TEST_TIME, System.currentTimeMillis()).apply()
     }
 
-    fun powerOceanReadyToActivate(): Boolean =
-        powerOceanProfileVerified(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountStore(appContext).connection()) &&
-            System.currentTimeMillis() - preferences.getLong(KEY_POWEROCEAN_TEST_TIME, 0) in 0..90_000
+    fun powerOceanActivationStage(
+        connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection?,
+        now: Long = System.currentTimeMillis()
+    ) = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanActivationPolicy.evaluate(
+        connection?.isValid == true, connection?.model == "86", powerOceanProfileVerified(connection),
+        preferences.getLong(KEY_POWEROCEAN_TEST_TIME, 0), now)
+
+    fun powerOceanReadyToActivate(): Boolean = powerOceanActivationStage(
+        com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountStore(appContext).connection()
+    ) == com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanActivationPolicy.Stage.READY
 
     private fun powerOceanKey(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection): String =
         java.security.MessageDigest.getInstance("SHA-256").digest("single-phase-v1|${connection.serial}|${connection.model}|${connection.region}".toByteArray(Charsets.UTF_8))

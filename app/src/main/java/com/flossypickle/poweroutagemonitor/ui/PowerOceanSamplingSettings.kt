@@ -26,7 +26,7 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
         }
         ExpandableSettingsSection("Traffic and live data", "One session; fewer requests; unofficial access") {
             Text("Sessions and broker credentials are reused; changing intervals does not log in again. Normal requests default to hourly and outage requests to once a minute. Manual-only stops scheduled reading requests for that phase; use Check EcoFlow now on Status. A secure connection can still receive device pushes and send keepalives.")
-            Text("If Request live reporting is enabled in Live-feed test, each assisted check sends one temporary live-report activation plus one reading request. It does not run a separate 20-second activation loop in this mode. Short intervals increase traffic; EcoFlow has not confirmed permitted quotas.")
+            Text("Every assisted check sends one temporary live-report activation plus one reading request. Live reporting is automatic in this mode; EcoFlow’s app does not need to stay open. It does not run a separate 20-second activation loop in this mode. Short intervals increase traffic; EcoFlow has not confirmed permitted quotas.")
             Text("The same device-push grid/meter comparison is used as in the live inspection. Cached request replies cannot prove a new grid transition. Missing or stale evidence stays Unknown. Reconnect the charger to rearm local detection.")
         }
     }
