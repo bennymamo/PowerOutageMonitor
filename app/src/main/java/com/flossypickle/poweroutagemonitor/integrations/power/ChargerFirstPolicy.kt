@@ -6,7 +6,9 @@ internal object ChargerFirstPolicy {
         val recoveryPending: Boolean = false, val detail: String, val ecoFlowOutageStartedAt: Long = 0)
 
     fun evaluate(chargerPowered: Boolean?, ecoFlow: PowerSignal?, lossStartedAt: Long,
-        outageConfirmed: Boolean, recovered: Boolean, now: Long, ecoFlowOutageStartedAt: Long = 0): Result {
+        outageConfirmed: Boolean, recovered: Boolean, now: Long, ecoFlowOutageStartedAt: Long = 0,
+        verificationWindowMs: Long = 0): Result {
+        require(verificationWindowMs >= 0)
         val fresh = ecoFlow?.takeIf { PowerSignalPolicy.evaluate(it, now, 15_000).health == PowerSignalHealth.FRESH }
         val evidence = fresh?.evidenceReceivedAtEpochMs?.takeIf { it in 1..now }
         if (fresh?.availability == GridAvailability.UNAVAILABLE && evidence != null) {
@@ -31,11 +33,17 @@ internal object ChargerFirstPolicy {
             detail = "Android charger state is unavailable.")
         val newRecovery = fresh?.availability == GridAvailability.AVAILABLE &&
             evidence?.let { it > lossStartedAt } == true
-        if (newRecovery && (outageConfirmed || recovered)) return Result(GridAvailability.AVAILABLE, true,
-            fresh!!.recoveryPending, "Charger is off. " + (fresh.detail ?: "EcoFlow reports grid recovery."))
+        if (newRecovery) return Result(GridAvailability.AVAILABLE, true,
+            fresh!!.recoveryPending, "Charger is off. " + (fresh.detail ?: "Current EcoFlow evidence reports grid power available."))
         if (recovered && fresh?.availability != GridAvailability.UNAVAILABLE) return Result(GridAvailability.UNKNOWN, true,
             detail = "Charger is still off; waiting for updated EcoFlow readings. Reconnect the charger to rearm local watching.",
             ecoFlowOutageStartedAt = ecoLoss)
+        val check = ecoFlow?.check
+        val checkCompletedAfterLoss = check != null && !check.active &&
+            check.finishedAtEpochMs?.let { it in lossStartedAt..now } == true
+        if (!outageConfirmed && verificationWindowMs > 0 && now - lossStartedAt in 0 until verificationWindowMs &&
+            !checkCompletedAfterLoss) return Result(GridAvailability.UNKNOWN,
+            detail = "Charger power lost. Checking EcoFlow before confirming an outage.", ecoFlowOutageStartedAt = ecoLoss)
         return Result(GridAvailability.UNAVAILABLE,
             detail = "Charger power lost. " + (ecoFlow?.detail ?: "EcoFlow assistance unavailable; local alerts still work."),
             ecoFlowOutageStartedAt = ecoLoss)

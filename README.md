@@ -141,6 +141,8 @@ Use this only if you have compatible EcoFlow equipment and want grid evidence ev
 
 Background account monitoring currently requires the tested **Single Phase** profile: grid code `0` connected, `1` off-grid, and meter 1 behavior verified against utility loss. Codes and meter behavior can differ by installation. Other models can expose read-only data without being supported outage sources.
 
+With automatic charger-first assistance enabled, unplugging triggers an immediate EcoFlow check before outage confirmation. Current grid-connected evidence cancels the suspected outage. If the check fails or ends without usable evidence, ordinary charger confirmation takes over. A stalled check cannot hold detection indefinitely: the limit is the configured listening time plus up to one minute for connection setup. Paused assistance or manual-only outage checks use the charger directly.
+
 In charger-first mode, charger loss can alert independently if EcoFlow is unreachable. Verified EcoFlow loss can also trigger an outage when a backed-up charger stays on. A powered charger cannot veto an EcoFlow-detected outage. Grid return can be recognized from validated changing meter activity while the inverter reconnects, even if the charger remains off.
 
 **How scheduled checks work:**

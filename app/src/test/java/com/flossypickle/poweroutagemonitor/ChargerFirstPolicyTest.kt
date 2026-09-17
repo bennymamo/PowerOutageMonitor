@@ -19,8 +19,8 @@ class ChargerFirstPolicyTest {
         for (confirmed in listOf(false, true)) assertEquals(GridAvailability.UNAVAILABLE,
             ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE, 500), 1000, confirmed, false, 3000).availability)
     }
-    @Test fun newRecoveryDoesNotPreventThePrimaryChargerAlert() {
-        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE), 1000, false, false, 3000).availability)
+    @Test fun currentConnectedEvidenceCancelsTheSuspectedChargerOutage() {
+        assertEquals(GridAvailability.AVAILABLE, ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE), 1000, false, false, 3000).availability)
     }
     @Test fun newGridRecoveryCompletesOutageWithoutChargerReturn() {
         val r = ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE, pending = true), 1000, true, false, 3000)
@@ -57,4 +57,55 @@ class ChargerFirstPolicyTest {
         assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE), 1000, true, false, 30_000).availability)
         assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE, 4000), 1000, true, false, 3000).availability)
     }
+    @Test fun chargerLossWaitsForAnImmediateCheckEvenWithZeroOutageDelay() {
+        val r = ChargerFirstPolicy.evaluate(false, null, 1000, false, false, 1000, verificationWindowMs = 180_000)
+        assertEquals(GridAvailability.UNKNOWN, r.availability)
+        val engine = OutageEngine.update(OutageEngine.State(OutageEngine.Phase.POWERED),
+            null, 1000, 80, 0, 0)
+        assertEquals(OutageEngine.Phase.POWERED, engine.phase)
+    }
+    @Test fun collectingCheckKeepsTheChargerAlertUnconfirmed() {
+        val check = PowerSourceCheck(1100, null, false, cycleState = PowerSourceCheck.CycleState.COLLECTING)
+        val unknown = grid(GridAvailability.UNKNOWN).copy(check = check)
+        assertEquals(GridAvailability.UNKNOWN, ChargerFirstPolicy.evaluate(false, unknown, 1000, false, false,
+            30_000, verificationWindowMs = 180_000).availability)
+    }
+    @Test fun failedOrCompletedInconclusiveCheckReleasesTheOfflineFallback() {
+        for (state in listOf(PowerSourceCheck.CycleState.FAILED, PowerSourceCheck.CycleState.WAITING)) {
+            val check = PowerSourceCheck(1100, null, false, cycleState = state, finishedAtEpochMs = 2500)
+            val r = ChargerFirstPolicy.evaluate(false, grid(GridAvailability.UNKNOWN).copy(check = check),
+                1000, false, false, 3000, verificationWindowMs = 180_000)
+            assertEquals(GridAvailability.UNAVAILABLE, r.availability)
+        }
+    }
+    @Test fun oldCompletedCheckCannotSkipTheNewUnplugVerification() {
+        val old = PowerSourceCheck(100, null, false, finishedAtEpochMs = 500)
+        assertEquals(GridAvailability.UNKNOWN, ChargerFirstPolicy.evaluate(false,
+            grid(GridAvailability.UNKNOWN).copy(check = old), 1000, false, false, 3000,
+            verificationWindowMs = 180_000).availability)
+    }
+    @Test fun failedWorkerCannotDelayLocalDetectionForever() {
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, null,
+            1000, false, false, 181_000, verificationWindowMs = 180_000).availability)
+    }
+    @Test fun verifiedEcoFlowLossDoesNotWaitForCollectionToFinish() {
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false,
+            grid(GridAvailability.UNAVAILABLE), 1000, false, false, 3000,
+            verificationWindowMs = 180_000).availability)
+    }
+    @Test fun unplugConnectedThenClosedConnectionDoesNotInventAnOutage() {
+        var state = OutageEngine.State(OutageEngine.Phase.POWERED)
+        val waiting = ChargerFirstPolicy.evaluate(false, null, 1000, false, false, 1000,
+            verificationWindowMs = 180_000)
+        state = OutageEngine.update(state, if (waiting.availability == GridAvailability.UNKNOWN) null else false,
+            1000, 80, 0, 0)
+        val connected = ChargerFirstPolicy.evaluate(false, grid(GridAvailability.AVAILABLE), 1000,
+            false, false, 3000, verificationWindowMs = 180_000)
+        assertTrue(connected.recovered)
+        state = OutageEngine.update(state, connected.availability == GridAvailability.AVAILABLE, 3000, 80, 0, 0)
+        assertEquals(OutageEngine.Phase.POWERED, state.phase)
+        assertEquals(GridAvailability.UNKNOWN, ChargerFirstPolicy.evaluate(false, null, 1000,
+            false, connected.recovered, 100_000, verificationWindowMs = 180_000).availability)
+    }
+
 }

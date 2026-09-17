@@ -278,9 +278,13 @@ internal class MonitoringService : Service() {
         val charger = currentBatterySnapshot().externallyPowered
         val lossAt = if (charger == false) store.assistedChargerLossStartedAt().takeIf { it > 0 } ?: now else 0
         val phase = MonitorStore(this).state().phase
+        val assistance = store.powerOceanAssistedSettings()
+        val verify = !store.powerOceanAssistancePaused() && assistance.outageSeconds > 0 &&
+            !(assistance.ignoreUnchanged && primary.dataPossiblyStalled == true)
         val result = ChargerFirstPolicy.evaluate(charger, primary, lossAt,
             phase in setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE),
-            store.assistedChargerLossRecovered(), now, store.assistedEcoFlowOutageStartedAt())
+            store.assistedChargerLossRecovered(), now, store.assistedEcoFlowOutageStartedAt(),
+            verificationWindowMs = if (verify) assistance.checkWindowSeconds * 1000L + 60_000 else 0)
         store.recordAssistedChargerState(lossAt, result.recovered, result.ecoFlowOutageStartedAt)
         return primary.copy(availability = result.availability, observedAtEpochMs = now,
             detail = result.detail, recoveryPending = result.recoveryPending)

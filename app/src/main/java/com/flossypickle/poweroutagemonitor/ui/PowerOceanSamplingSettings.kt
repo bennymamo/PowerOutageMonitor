@@ -12,7 +12,7 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOcean
 @Composable
 internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, onChange: (PowerOceanAssistedSettings) -> Unit) {
     SettingsCard {
-        SettingSwitch("Charger-first assistance", "Charger alerts work offline. Verified EcoFlow grid/meter loss also counts as an outage if backup power keeps the charger on. Each source can detect loss independently.", settings.enabled,
+        SettingSwitch("Charger-first assistance", "Charger loss starts an EcoFlow check. Current grid-connected evidence cancels the suspected outage; failed or inconclusive checks fall back to the charger. EcoFlow can also detect loss while backup power keeps the charger on.", settings.enabled,
             { onChange(settings.copy(enabled = it)) })
         if (settings.enabled) Text("A charger that loses grid power gives the earliest local alert. If backup power keeps it on, EcoFlow can still detect an outage at its next check. A powered charger cannot clear an EcoFlow-detected outage.", style = MaterialTheme.typography.bodySmall)
     }

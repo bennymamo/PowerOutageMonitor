@@ -13,7 +13,14 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     private var worker: Job? = null
     @Volatile private var chargerPowered: Boolean? = null
     private val manualRevision = java.util.concurrent.atomic.AtomicLong(0)
-    fun updateCharger(powered: Boolean?) { chargerPowered = powered }
+    @Synchronized
+    fun updateCharger(powered: Boolean?) {
+        val lostPower = chargerPowered == true && powered == false
+        chargerPowered = powered
+        // Each new unplug must check immediately, even during backoff or an existing incident.
+        if (lostPower && PowerSourceStore(appContext).powerOceanAssistedSettings().let { it.enabled && it.outageSeconds > 0 })
+            manualRevision.incrementAndGet()
+    }
     fun requestCheck(): Boolean {
         if (worker?.isActive != true) return false
         manualRevision.incrementAndGet()
@@ -172,7 +179,11 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                     status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations, cycleState = PowerSourceCheck.CycleState.COLLECTING,
                                     deviceUpdates = status.deviceUpdates, powerUpdates = status.powerUpdates, valuesChanged = status.valuesChanged)
                             } }
-                            emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, update.gridInspection.correlation?.evidenceReceivedAtUtcMillis,
+                            val evidenceAt = update.gridInspection.correlation?.let { grid ->
+                                PowerOceanLossConfirmation.evidenceReceivedAt(grid, update.liveCheck,
+                                    System.currentTimeMillis(), assisted.extraPowerUpdates + 1, update.gridInspection.lastCodeFromDevicePush)
+                            }
+                            emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, evidenceAt,
                                 update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)
 
                         }
