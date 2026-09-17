@@ -30,7 +30,8 @@ internal class PowerSourceStore(context: Context) {
         val availability: GridAvailability,
         val observedAtEpochMs: Long,
         val detail: String?,
-        val recoveryPending: Boolean = false
+        val recoveryPending: Boolean = false,
+        val dataPossiblyStalled: Boolean = false
     )
 
     fun selectedSource(): Source = runCatching {
@@ -93,14 +94,21 @@ internal class PowerSourceStore(context: Context) {
 
     fun powerOceanAssistedSettings() = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
         preferences.getBoolean("account_charger_first", false), preferences.getInt("account_normal_seconds", 3600),
-        preferences.getInt("account_outage_seconds", 60))
+        preferences.getInt("account_outage_seconds", 60), preferences.getBoolean("account_warn_unchanged", true),
+        preferences.getBoolean("account_ignore_unchanged", false))
 
     fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
         val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
         val edit = preferences.edit().putBoolean("account_charger_first", settings.enabled)
             .putInt("account_normal_seconds", settings.normalSeconds).putInt("account_outage_seconds", settings.outageSeconds)
+            .putBoolean("account_warn_unchanged", settings.warnOnUnchanged).putBoolean("account_ignore_unchanged", settings.ignoreUnchanged)
         if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
         check(edit.commit()) { "Unable to save charger-first settings" }
+    }
+
+    fun powerOceanAssistancePaused() = preferences.getBoolean("account_assistance_paused", false)
+    fun setPowerOceanAssistancePaused(paused: Boolean) {
+        check(preferences.edit().putBoolean("account_assistance_paused", paused).commit())
     }
 
     fun assistedChargerLossStartedAt() = preferences.getLong("account_charger_loss_started", 0)
@@ -143,6 +151,8 @@ internal class PowerSourceStore(context: Context) {
             .remove(KEY_POWEROCEAN_PREVIOUS_TEST)
             .remove(KEY_POWEROCEAN_TEST_TIME)
             .remove("account_charger_loss_started")
+            .remove("account_assistance_paused").remove("account_data_warning_episode").remove("account_data_warning_sent")
+            .remove("status_data_stalled")
             .remove("account_charger_loss_recovered")
             .remove(KEY_STATUS_SOURCE)
             .remove(KEY_STATUS_AVAILABILITY)
@@ -204,7 +214,8 @@ internal class PowerSourceStore(context: Context) {
             availability = availability,
             observedAtEpochMs = preferences.getLong(KEY_STATUS_OBSERVED_AT, 0),
             detail = preferences.getString(KEY_STATUS_DETAIL, null),
-            recoveryPending = preferences.getBoolean(KEY_STATUS_RECOVERY_PENDING, false)
+            recoveryPending = preferences.getBoolean(KEY_STATUS_RECOVERY_PENDING, false),
+            dataPossiblyStalled = preferences.getBoolean("status_data_stalled", false)
         )
     }
 
@@ -213,7 +224,8 @@ internal class PowerSourceStore(context: Context) {
         availability = signal.availability,
         observedAtEpochMs = signal.observedAtEpochMs,
         detail = signal.detail?.take(MAX_DETAIL_LENGTH),
-        recoveryPending = signal.recoveryPending
+        recoveryPending = signal.recoveryPending,
+        dataPossiblyStalled = signal.dataPossiblyStalled ?: lastStatus()?.takeIf { it.source == source }?.dataPossiblyStalled ?: false
     )
 
     private fun writeStatus(
@@ -226,6 +238,7 @@ internal class PowerSourceStore(context: Context) {
         .putLong(KEY_STATUS_OBSERVED_AT, signal.observedAtEpochMs)
         .putString(KEY_STATUS_DETAIL, signal.detail?.take(MAX_DETAIL_LENGTH))
         .putBoolean(KEY_STATUS_RECOVERY_PENDING, signal.recoveryPending)
+        .putBoolean("status_data_stalled", PowerSourceRuntime.status?.dataPossiblyStalled ?: false)
 
     companion object {
         const val ECOFLOW_PROVIDER_ID = "ecoflow_modbus"

@@ -132,7 +132,7 @@ internal object AlertQueueEngine {
         AlertKind.OUTAGE -> 0
         AlertKind.OUTAGE_UPDATE, AlertKind.BATTERY_LOW -> 1
         AlertKind.RESTORED -> 2
-        AlertKind.SOURCE_UNAVAILABLE -> 0
+        AlertKind.SOURCE_UNAVAILABLE, AlertKind.SOURCE_DATA_WARNING -> 0
         AlertKind.SOURCE_RESTORED -> 1
         AlertKind.HEARTBEAT, AlertKind.TEST -> 0
     }

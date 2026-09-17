@@ -89,6 +89,7 @@ internal fun DashboardScreen(
     val chargerCorroboration = sourceStore.powerOceanRequiresChargerConfirmation()
     val assistedSettings = sourceStore.powerOceanAssistedSettings()
     val assistedActive = selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && assistedSettings.enabled
+    var assistancePaused by remember { mutableStateOf(sourceStore.powerOceanAssistancePaused()) }
     var checkFeedback by remember { mutableStateOf<String?>(null) }
     val lastEvent = history.firstOrNull()
     var statusClock by remember(lastEvent?.restoredAtEpochMs) {
@@ -215,6 +216,10 @@ internal fun DashboardScreen(
 
             systemHealth.monitoringAttention(settings.monitoringEnabled)?.let { WarningCard(it) }
             deliveryWarning?.let { WarningCard(it) }
+            if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && powerSourceStatus?.dataPossiblyStalled == true) {
+                WarningCard("EcoFlow power readings were identical across three consecutive checks. The feed may be stalled, or the load steady." +
+                    if (assistedActive && assistedSettings.ignoreUnchanged) " These readings are temporarily excluded until they change." else "")
+            }
 
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -278,9 +283,18 @@ internal fun DashboardScreen(
                             setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
                         StatusRow("EcoFlow checks", samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds), colors.onSurfaceVariant)
                         OutlinedButton(onClick = {
+                            assistancePaused = !assistancePaused
+                            sourceStore.setPowerOceanAssistancePaused(assistancePaused)
+                            com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.refreshScheduledAlerts(context)
+                            checkFeedback = if (assistancePaused) "EcoFlow assistance paused; charger monitoring continues." else "EcoFlow assistance resumed."
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (assistancePaused) "Resume EcoFlow assistance" else "Pause EcoFlow assistance")
+                        }
+                        if (assistancePaused) Text("Scheduled EcoFlow requests are paused. Your saved account and current session are kept. Charger monitoring continues.", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = {
                             com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.requestPowerOceanCheck(context)
                             checkFeedback = "EcoFlow check requested. The source reading updates when evidence arrives."
-                        }, enabled = settings.monitoringEnabled, modifier = Modifier.fillMaxWidth()) {
+                        }, enabled = settings.monitoringEnabled && !assistancePaused, modifier = Modifier.fillMaxWidth()) {
                             Text("Check EcoFlow now")
                         }
                         checkFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }

@@ -39,6 +39,15 @@ class PowerOceanSamplingScheduleTest {
         assertFalse(continuous.needsLiveActivation(false, readDue = true, periodicDue = true))
         assertTrue(continuous.needsLiveActivation(true, readDue = false, periodicDue = true))
     }
+    @Test fun pauseStopsScheduledManualAndLegacyLiveRequestsWithoutLosingResume() {
+        val c = PowerOceanSamplingSchedule(); c.due(s(3600), 0)
+        val paused = s(3600, manual = 1).copy(paused = true)
+        assertFalse(c.due(paused, 100)); assertFalse(c.due(paused, 4_000_000))
+        assertFalse(paused.needsLiveActivation(true, true, true))
+        assertFalse(paused.copy(liveOnEachRead = false).needsLiveActivation(true, true, true))
+        assertTrue(c.due(paused.copy(paused = false), 4_000_001))
+        assertFalse(c.due(paused.copy(paused = false), 4_000_002))
+    }
     @Test fun supportedRangesIncludeManualAndHours() {
         assertTrue(PowerOceanAssistedSettings.valid(0)); assertTrue(PowerOceanAssistedSettings.valid(5)); assertTrue(PowerOceanAssistedSettings.valid(86_400))
         assertFalse(PowerOceanAssistedSettings.valid(1)); assertFalse(PowerOceanAssistedSettings.valid(-1)); assertFalse(PowerOceanAssistedSettings.valid(86_401))

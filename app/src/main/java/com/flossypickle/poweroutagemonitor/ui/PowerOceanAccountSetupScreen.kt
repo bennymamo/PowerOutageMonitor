@@ -36,6 +36,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var assistedSettings by remember { mutableStateOf(sourceStore.powerOceanAssistedSettings()) }
     var requireChargerConfirmation by remember { mutableStateOf(sourceStore.powerOceanRequiresChargerConfirmation()) }
     var chargerPowered by remember { mutableStateOf<Boolean?>(null) }
+    var liveCheckStatus by remember { mutableStateOf<PowerOceanLiveCheck.Status?>(null) }
     var lossConfirmation by remember { mutableStateOf<PowerOceanLossConfirmation.Result?>(null) }
     val client = remember { PowerOceanAccountClient() }
     val scope = rememberCoroutineScope()
@@ -173,6 +174,11 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 }
                 if (pushStatus != null) SettingsCard {
                     Text("Grid comparison", fontWeight = FontWeight.Medium)
+                    liveCheckStatus?.let { check ->
+                        Text(if (!check.hasCurrentReport(activationClock)) "Waiting for new live device reports; cached replies do not verify this check."
+                            else if (check.possiblyStalled) "Power readings are identical across successive checks. The feed may be stalled, or the load steady."
+                            else "New live device reports received for this check.", style = MaterialTheme.typography.bodySmall)
+                    }
                     val evidence = gridInspection
                     Text(evidence?.lastCode?.let { "Last reported grid code: $it" } ?: "Waiting for an explicit grid-code report.")
                     evidence?.lastReceivedUtcMillis?.let {
@@ -417,7 +423,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                                         pushStatus = "Push packets: ${update.packets} · unsupported: ${update.unsupported} · retained: ${update.retained}"
                                         gridInspection = update.gridInspection
                                         chargerPowered = update.chargerExternallyPowered
-                                        lossConfirmation = update.confirmation
+                                        lossConfirmation = update.confirmation; liveCheckStatus = update.liveCheck
                                         if (update.confirmation?.availability != com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability.UNKNOWN && update.confirmation != null) {
                                             sourceStore.recordPowerOceanLiveTest(current.connection)
                                         }

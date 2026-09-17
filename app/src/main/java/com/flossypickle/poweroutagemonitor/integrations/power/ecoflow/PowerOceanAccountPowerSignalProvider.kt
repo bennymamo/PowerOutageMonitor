@@ -29,18 +29,19 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = owner
         worker = owner.launch {
-            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null) {
-                if (isActive) onSignal(PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt))
+            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null, dataStalled: Boolean? = null) {
+                if (isActive) onSignal(PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled))
             }
             val client = PowerOceanAccountClient()
             var session: PowerOceanAccountClient.Session? = null
             var credentials: PowerOceanAccountClient.PushCredentials? = null
             var backoff = 60_000L
+            val liveCheck = PowerOceanLiveCheck()
             while (isActive) {
                 val store = PowerSourceStore(appContext)
                 val assisted = store.powerOceanAssistedSettings()
                 val interval = if (incident()) assisted.outageSeconds else assisted.normalSeconds
-                if (assisted.enabled && interval == 0 && manualRevision.get() == 0L && session == null) {
+                if (assisted.enabled && (store.powerOceanAssistancePaused() || interval == 0 && manualRevision.get() == 0L) && session == null) {
                     emit(GridAvailability.UNKNOWN, "EcoFlow checks are manual; the local charger watcher continues.")
                     delay(1000); continue
                 }
@@ -88,8 +89,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                 val settings = store.powerOceanAssistedSettings()
                                 val active = incident()
                                 val seconds = if (settings.enabled) { if (active) settings.outageSeconds else settings.normalSeconds } else account.refreshSeconds.coerceAtLeast(60)
-                                PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), settings.enabled)
-                            }) { update ->
+                                PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), settings.enabled, settings.enabled && store.powerOceanAssistancePaused())
+                            }, liveCheck = liveCheck) { update ->
                             val result = update.confirmation ?: return@inspect
                             val detail = when (result.reason) {
                                 PowerOceanLossConfirmation.Reason.CONNECTED -> "EcoFlow reports a grid connection."
@@ -97,9 +98,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                 PowerOceanLossConfirmation.Reason.ECOFLOW_AND_METER -> "EcoFlow off-grid; meter reports zero flow."
                                 PowerOceanLossConfirmation.Reason.CHARGER_CORROBORATED -> "Grid and charger loss evidence agree."
                                 PowerOceanLossConfirmation.Reason.WAITING_FOR_CHARGER -> "Waiting for charger-loss confirmation."
+                                PowerOceanLossConfirmation.Reason.WAITING_FOR_LIVE_DATA -> "Waiting for new live device reports for this check; cached replies are insufficient."
                                 PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for current grid and meter evidence."
                             }
-                            emit(result.availability, detail, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, update.gridInspection.correlation?.evidenceReceivedAtUtcMillis)
+                            val dataWarning = if (update.liveCheck?.possiblyStalled == true) " Power readings are identical across successive checks; the feed may be stalled or the load steady." else ""
+                            emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, update.gridInspection.correlation?.evidenceReceivedAtUtcMillis,
+                                update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled)
                         }
                         emit(GridAvailability.UNKNOWN, failure ?: "PowerOcean feed stopped.")
                         // Authentication/topic rejection stops automatic access attempts. User reconnects explicitly.

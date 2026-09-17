@@ -16,6 +16,13 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
             { onChange(settings.copy(enabled = it)) })
         if (settings.enabled) Text("Requires a charger that loses power with the grid. EcoFlow cannot recover an outage using a report received before that charger loss.", style = MaterialTheme.typography.bodySmall)
     }
+    ExpandableSettingsSection("Stuck-reading safeguards", "Warning after three identical checks") {
+        Text("Power readings are compared between checks, ignoring request IDs and timestamps. A steady load can legitimately produce identical values. Changing power values clears the warning.", style = MaterialTheme.typography.bodySmall)
+        SettingSwitch("Send stuck-reading warning", "Send one warning per episode through every enabled alert method. Dashboard warnings always remain visible.", settings.warnOnUnchanged,
+            { onChange(settings.copy(warnOnUnchanged = it)) })
+        if (settings.enabled) SettingSwitch("Ignore stuck EcoFlow readings", "Keep checking, but exclude unchanged EcoFlow readings from confirmation and recovery until power values change. Charger detection continues.", settings.ignoreUnchanged,
+            { onChange(settings.copy(ignoreUnchanged = it)) })
+    }
     if (settings.enabled) {
         ExpandableSettingsSection("Normal EcoFlow checks", samplingSummary(settings.normalSeconds)) {
             SamplingIntervalEditor(settings.normalSeconds, 3600) { onChange(settings.copy(normalSeconds = it)) }

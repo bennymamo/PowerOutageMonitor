@@ -328,6 +328,8 @@ internal object BackupDocumentCodec {
         p["power.account.chargerFirst"] = data.powerOceanAssisted.enabled.toString()
         p["power.account.normalSeconds"] = data.powerOceanAssisted.normalSeconds.toString()
         p["power.account.outageSeconds"] = data.powerOceanAssisted.outageSeconds.toString()
+        p["power.account.warnUnchanged"] = data.powerOceanAssisted.warnOnUnchanged.toString()
+        p["power.account.ignoreUnchanged"] = data.powerOceanAssisted.ignoreUnchanged.toString()
         data.powerOceanAccount?.let {
             p["power.account.email"] = it.email
             p["power.account.password"] = it.password
@@ -372,7 +374,9 @@ internal object BackupDocumentCodec {
             powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
                 p.containsKey("power.account.chargerFirst") && p.boolean("power.account.chargerFirst"),
                 if (p.containsKey("power.account.normalSeconds")) p.int("power.account.normalSeconds") else 3600,
-                if (p.containsKey("power.account.outageSeconds")) p.int("power.account.outageSeconds") else 60)
+                if (p.containsKey("power.account.outageSeconds")) p.int("power.account.outageSeconds") else 60,
+                !p.containsKey("power.account.warnUnchanged") || p.boolean("power.account.warnUnchanged"),
+                p.containsKey("power.account.ignoreUnchanged") && p.boolean("power.account.ignoreUnchanged"))
         )
     }
 

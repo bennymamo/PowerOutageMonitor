@@ -45,7 +45,7 @@ class BackupDocumentCodecTest {
     @Test
     fun olderBackupsDefaultNewMonitoringChoicesToDisabled() {
         val text = BackupDocumentCodec.encode(completeDocument()).toString(Charsets.UTF_8)
-        val old = text.lineSequence().filterNot { it.startsWith("power.account.previousTest=") || it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") || it.startsWith("power.account.chargerFirst=") || it.startsWith("power.account.normalSeconds=") || it.startsWith("power.account.outageSeconds=") }.joinToString("\n")
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.warnUnchanged=") || it.startsWith("power.account.ignoreUnchanged=") || it.startsWith("power.account.previousTest=") || it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") || it.startsWith("power.account.chargerFirst=") || it.startsWith("power.account.normalSeconds=") || it.startsWith("power.account.outageSeconds=") }.joinToString("\n")
         val restored = BackupDocumentCodec.decode(old.toByteArray()).powerSources!!
         assertEquals(false, restored.powerOceanProfileVerified)
         assertEquals(false, restored.powerOceanUsePreviousTest)
@@ -127,7 +127,7 @@ class BackupDocumentCodecTest {
             powerOceanProfileVerified = true,
             powerOceanUsePreviousTest = true,
             powerOceanRequestLiveReporting = true,
-            powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(true, 3600, 60)
+            powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(true, 3600, 60, false, true)
         ),
         history = BackupDocument.HistoryData(
             powerEvents = listOf(EventHistoryStore.Record("outage", 100, 200, 300, 90, 89)),

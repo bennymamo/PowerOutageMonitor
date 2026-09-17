@@ -288,8 +288,15 @@ internal class MonitoringService : Service() {
 
     private fun processEcoFlow(primary: PowerSignal) {
         latestPrimarySignal = primary
-        val signal = if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
-            assistedSignal(primary)
+        val sourceStore = PowerSourceStore(this)
+        val assisted = sourceStore.powerOceanAssistedSettings()
+        if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
+            com.flossypickle.poweroutagemonitor.integrations.alerts.SourceDataWarningCoordinator(this)
+                .process(primary.dataPossiblyStalled, assisted.warnOnUnchanged)
+        }
+        val signal = if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && assisted.enabled) {
+            assistedSignal(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistancePolicy.apply(
+                primary, sourceStore.powerOceanAssistancePaused(), assisted.ignoreUnchanged))
         } else ChargerConfirmationPolicy.apply(primary, currentBatterySnapshot().externallyPowered,
             PowerSourceStore(this).powerOceanRequiresChargerConfirmation())
         val availabilityChanged = signal.availability != lastEcoFlowAvailability

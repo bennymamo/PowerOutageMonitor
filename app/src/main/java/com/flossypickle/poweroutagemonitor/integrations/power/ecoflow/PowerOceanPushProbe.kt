@@ -19,7 +19,7 @@ import javax.net.ssl.HttpsURLConnection
 internal class PowerOceanPushProbe(private val context: android.content.Context? = null) {
     data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int,
         val gridInspection: PowerOceanGridInspection.Snapshot, val chargerExternallyPowered: Boolean? = null,
-        val confirmation: PowerOceanLossConfirmation.Result? = null)
+        val confirmation: PowerOceanLossConfirmation.Result? = null, val liveCheck: PowerOceanLiveCheck.Status? = null)
     private data class Packet(val reports: List<PowerOceanPushDecoder.Report>, val received: Long, val retained: Boolean,
         val json: JSONObject? = null, val receivedUtcMillis: Long = System.currentTimeMillis(), val fromDevicePush: Boolean = false)
 
@@ -29,6 +29,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         requireChargerConfirmation: Boolean = false,
         continuous: Boolean = false, readIntervalSeconds: Int = 60,
         readSchedule: (() -> PowerOceanReadSchedule)? = null,
+        liveCheck: PowerOceanLiveCheck = PowerOceanLiveCheck(),
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
         require(inspectionSeconds in setOf(45, 300, 900))
         require(readIntervalSeconds in 60..3600)
@@ -99,6 +100,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 ensureActive()
                 val schedule = readSchedule?.invoke() ?: PowerOceanReadSchedule(readIntervalSeconds, false, 0, false)
                 val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
+                if (readDue) liveCheck.begin(System.currentTimeMillis())
                 if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest)) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
                         PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
@@ -119,6 +121,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     receivedPacket.reports.forEach {
                         reports[it.command] = receivedPacket; changed = true
                         gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
+                        liveCheck.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
                     }
                     runCatching {
                         validationTrace?.takeIf { it.length() < 2_000_000 }?.let { trace ->
@@ -170,10 +173,10 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     lastSnapshot?.let { currentSnapshot ->
                         val comparison = gridInspection.snapshot()
                         val confirmation = comparison.correlation?.let {
-                            PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation)
+                            PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation, liveCheck.status().hasCurrentReport(System.currentTimeMillis()))
                         }
                         withContext(Dispatchers.Main) {
-                            onUpdate(Update(currentSnapshot, packets, unsupported, retained, comparison, chargerPowered, confirmation))
+                            onUpdate(Update(currentSnapshot, packets, unsupported, retained, comparison, chargerPowered, confirmation, liveCheck.status()))
                         }
                     }
                     nextUiUpdate = SystemClock.elapsedRealtime() + 1000

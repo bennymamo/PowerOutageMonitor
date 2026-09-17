@@ -8,7 +8,9 @@ internal data class PowerSignal(
     val detail: String? = null,
     val recoveryPending: Boolean = false,
     // Receipt of the qualifying device report, distinct from a provider health update.
-    val evidenceReceivedAtEpochMs: Long? = null
+    val evidenceReceivedAtEpochMs: Long? = null,
+    // Null means this update did not assess consecutive power readings.
+    val dataPossiblyStalled: Boolean? = null
 )
 
 internal enum class GridAvailability { AVAILABLE, UNAVAILABLE, UNKNOWN }
