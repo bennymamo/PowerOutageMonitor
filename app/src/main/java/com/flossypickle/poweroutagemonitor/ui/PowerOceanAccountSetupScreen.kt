@@ -33,6 +33,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val store = remember(context) { PowerOceanAccountStore(context) }
     val sourceStore = remember(context) { com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore(context) }
+    var assistedSettings by remember { mutableStateOf(sourceStore.powerOceanAssistedSettings()) }
     var requireChargerConfirmation by remember { mutableStateOf(sourceStore.powerOceanRequiresChargerConfirmation()) }
     var chargerPowered by remember { mutableStateOf<Boolean?>(null) }
     var lossConfirmation by remember { mutableStateOf<PowerOceanLossConfirmation.Result?>(null) }
@@ -280,6 +281,12 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
 
         }
         SetupFlowSection(4, setupStep, helpLevel.isGuided, "Verify and monitor") {
+        PowerOceanSamplingSettings(assistedSettings) {
+            sourceStore.setPowerOceanAssistedSettings(it)
+            assistedSettings = it
+            com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.refreshScheduledAlerts(context)
+        }
+        if (!assistedSettings.enabled) {
         SettingsCard {
             OutlinedTextField(interval, { interval = it }, label = { Text("Refresh interval · 60–3,600 seconds") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, enabled = !loading && !accountActive, modifier = Modifier.fillMaxWidth())
             Text("This controls how often we ask. EcoFlow may update individual readings less often. Auto-refresh is opt-in on the device dashboard.", style = MaterialTheme.typography.bodySmall)
@@ -297,9 +304,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             }
             Text("Off by default. When enabled, the phone must also lose charger power before EcoFlow and meter evidence can confirm an outage. Grid recovery does not wait for the charger to reconnect. This setting is included in Power sources backups.", style = MaterialTheme.typography.bodySmall)
         }
+        }
         SettingsCard {
             Text("Background monitoring", fontWeight = FontWeight.SemiBold)
-            Text(if (accountActive) "PowerOcean is selected. The dashboard master switch controls monitoring." else "Select this source only after testing grid loss and restoration on your installation.")
+            Text(if (accountActive) "${if (assistedSettings.enabled) "Charger + EcoFlow assistance" else "PowerOcean"} is selected. The dashboard master switch controls monitoring." else "Select this source only after testing grid loss and restoration on your installation.")
             if (accountActive) OutlinedButton({
                 sourceStore.select(com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore.Source.ANDROID_CHARGER)
                 selectedSource = sourceStore.selectedSource(); onPowerSourceChanged()
@@ -309,7 +317,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     selectedSource = sourceStore.selectedSource(); onPowerSourceChanged()
                     feedback = "PowerOcean selected. Use the Status master switch to start or stop monitoring."
                 } else error = "Verify the profile and run a fresh live inspection before selecting this source."
-            }, enabled = !loading && !unsaved && sourceStore.powerOceanReadyToActivate(), modifier = Modifier.fillMaxWidth()) { Text("Use PowerOcean for monitoring") }
+            }, enabled = !loading && !unsaved && sourceStore.powerOceanReadyToActivate(), modifier = Modifier.fillMaxWidth()) { Text(if (assistedSettings.enabled) "Use charger + EcoFlow assistance" else "Use PowerOcean for monitoring") }
             Text("Unofficial access is opt-in. Low traffic is not a guarantee against account restrictions. Missing or stale evidence stays Unknown.", style = MaterialTheme.typography.bodySmall)
         }
         ExpandableSettingsSection("Live-feed test", "Connect first, then check fresh grid evidence", initiallyExpanded = false) {
@@ -328,7 +336,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 Text("Request live reporting", modifier = Modifier.weight(1f))
                 Switch(requestLiveReporting, { requestLiveReporting = it; sourceStore.setPowerOceanLiveReporting(it) }, enabled = !loading && !accountActive)
             }
-            Text("Enable if readings only update when EcoFlow's app is open. Sends a temporary live-report request every 20 seconds during inspections or selected background monitoring. Turning monitoring off stops requests. No charging, reserve or output controls are sent. This unofficial protocol still needs checking on your model.", style = MaterialTheme.typography.bodySmall)
+            Text("Enable if readings only update when EcoFlow's app is open. Continuous mode and inspections request temporary live reporting every 20 seconds. Charger-first mode requests it once per scheduled or manual check. Turning monitoring off stops requests. No charging, reserve or output controls are sent. This unofficial protocol still needs checking on your model.", style = MaterialTheme.typography.bodySmall)
             Text("Stops when you leave the dashboard or put the app in the background. If no readings arrive, the result explains what remains to investigate.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Use my tested grid/meter comparison", modifier = Modifier.weight(1f))

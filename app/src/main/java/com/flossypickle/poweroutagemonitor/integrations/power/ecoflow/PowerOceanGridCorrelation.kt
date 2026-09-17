@@ -17,7 +17,7 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
 
     enum class State { UNKNOWN, INVERTER_CONNECTED, INVERTER_OFF_GRID, GRID_RETURN_LIKELY }
     data class Snapshot(val state: State, val zeroFlowSeen: Boolean, val returnEvidenceAtUtcMillis: Long?,
-        val currentMeterValue: Double? = null)
+        val currentMeterValue: Double? = null, val evidenceReceivedAtUtcMillis: Long? = null)
 
     private var gridCode: Long? = null
     private var gridReceived: Long? = null
@@ -94,7 +94,13 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
             returnEvidence != null && fresh(meterReceived) -> State.GRID_RETURN_LIKELY
             else -> State.INVERTER_OFF_GRID
         }
-        return Snapshot(state, zeroFlowReceived != null, returnEvidence, meterValue.takeIf { fresh(meterReceived) })
+        val evidence = when (state) {
+            State.INVERTER_CONNECTED -> gridReceived
+            State.GRID_RETURN_LIKELY -> returnEvidence
+            State.INVERTER_OFF_GRID -> meterReceived ?: gridReceived
+            State.UNKNOWN -> null
+        }
+        return Snapshot(state, zeroFlowReceived != null, returnEvidence, meterValue.takeIf { fresh(meterReceived) }, evidence)
     }
 
     private fun resetMeterSequence() {

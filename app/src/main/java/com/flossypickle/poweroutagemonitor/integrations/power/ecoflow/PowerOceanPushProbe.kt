@@ -28,6 +28,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         correlationProfile: PowerOceanGridCorrelation.Profile? = null,
         requireChargerConfirmation: Boolean = false,
         continuous: Boolean = false, readIntervalSeconds: Int = 60,
+        readSchedule: (() -> PowerOceanReadSchedule)? = null,
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
         require(inspectionSeconds in setOf(45, 300, 900))
         require(readIntervalSeconds in 60..3600)
@@ -91,21 +92,27 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 catch (failure: MqttException) { if (failure.reasonCode != 128) throw failure }
             }
             val deadline = if (continuous) Long.MAX_VALUE else SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
-            var nextRequest = 0L
+            val sampling = PowerOceanSamplingSchedule()
             var nextLiveRequest = 0L
             stage = "requesting and receiving readings"
             while (SystemClock.elapsedRealtime() < deadline && !disconnected.get()) {
                 ensureActive()
-                if (requestLiveReporting && SystemClock.elapsedRealtime() >= nextLiveRequest) {
+                val schedule = readSchedule?.invoke() ?: PowerOceanReadSchedule(readIntervalSeconds, false, 0, false)
+                val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
+                if (requestLiveReporting && !schedule.liveOnEachRead && SystemClock.elapsedRealtime() >= nextLiveRequest) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
                         PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
                     nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
                 }
-                if (SystemClock.elapsedRealtime() >= nextRequest) {
+                if (readDue) {
+                    // Assisted mode couples temporary activation to the requested interval.
+                    if (requestLiveReporting && schedule.liveOnEachRead) {
+                        client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
+                            PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
+                    }
                     // GET-only request used by the app to ask for current observations.
                     val getTopic = "/app/${session.userId}/${session.connection.serial}/thing/property/get"
                     client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    nextRequest = SystemClock.elapsedRealtime() + readIntervalSeconds * 1000L
                 }
                 var packet = queue.poll()
                 var changed = false
@@ -151,7 +158,10 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     val snapshot = PowerOceanAccountTelemetry.snapshot(data, System.currentTimeMillis()).copy(
                         sourceName = "PowerOcean push feed · experimental",
                         acquisitionNote = (if (continuous) "Experimental background account feed. " else "$inspectionSeconds-second account push inspection. ") +
-                            (if (requestLiveReporting) "Temporary live reporting is requested every 20 seconds using portal command 96/97. " else "Live-report activation is off; reading requests only. ") +
+                            (if (requestLiveReporting) {
+                                if (readSchedule?.invoke()?.liveOnEachRead == true) "Assisted mode requests temporary live reporting with each scheduled/manual check. "
+                                else "Temporary live reporting is requested every 20 seconds using portal command 96/97. "
+                            } else "Live-report activation is off; reading requests only. ") +
                             "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. Grid comparisons use only explicitly selected, installation-tested profiles."
                     )
                     if (snapshot.sections.isNotEmpty()) lastSnapshot = snapshot

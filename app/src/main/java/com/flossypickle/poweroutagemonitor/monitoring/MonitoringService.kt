@@ -30,6 +30,7 @@ import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountPowerSignalProvider
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSignalProvider
 import com.flossypickle.poweroutagemonitor.integrations.power.ChargerConfirmationPolicy
+import com.flossypickle.poweroutagemonitor.integrations.power.ChargerFirstPolicy
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowModbusPowerSignalProvider
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
@@ -100,6 +101,14 @@ internal class MonitoringService : Service() {
             }
             ACTION_REFRESH_NOTIFICATION -> refreshNotification()
             ACTION_RELOAD_POWER_SOURCE -> reloadPowerSource()
+            ACTION_REQUEST_POWEROCEAN_CHECK -> {
+                if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
+                    if ((ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.requestCheck() != true) {
+                        reloadPowerSource()
+                        (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.requestCheck()
+                    }
+                }
+            }
             ACTION_REFRESH_SCHEDULED_ALERTS -> reconcileSelectedPower()
             else -> reconcileSelectedPower()
         }
@@ -205,6 +214,7 @@ internal class MonitoringService : Service() {
         } else if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
             process(currentBatterySnapshot(), null, System.currentTimeMillis())
             ecoFlowProvider = PowerOceanAccountPowerSignalProvider(this).also { provider ->
+                provider.updateCharger(currentBatterySnapshot().externallyPowered)
                 acquireEcoFlowLocks()
                 provider.start { signal -> handler.post {
                     if (sourceGeneration == generation && isRunning) processEcoFlow(signal)
@@ -217,6 +227,11 @@ internal class MonitoringService : Service() {
 
     private fun onBatterySnapshot(snapshot: PowerSnapshot) {
         latestBatterySnapshot = snapshot
+        (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.updateCharger(snapshot.externallyPowered)
+        if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
+            processEcoFlow(latestPrimarySignal ?: PowerSignal(GridAvailability.UNKNOWN, System.currentTimeMillis(), PowerSourceStore.POWEROCEAN_PROVIDER_ID))
+            return
+        }
         if (activeSource == PowerSourceStore.Source.ANDROID_CHARGER) {
             processAndroid(snapshot)
         } else {
@@ -257,9 +272,25 @@ internal class MonitoringService : Service() {
         process(snapshot, snapshot.externallyPowered, now)
     }
 
+    private fun assistedSignal(primary: PowerSignal): PowerSignal {
+        val store = PowerSourceStore(this)
+        val now = System.currentTimeMillis()
+        val charger = currentBatterySnapshot().externallyPowered
+        val lossAt = if (charger == false) store.assistedChargerLossStartedAt().takeIf { it > 0 } ?: now else 0
+        val phase = MonitorStore(this).state().phase
+        val result = ChargerFirstPolicy.evaluate(charger, primary, lossAt,
+            phase in setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE),
+            store.assistedChargerLossRecovered(), now)
+        store.recordAssistedChargerState(lossAt, result.recovered)
+        return primary.copy(availability = result.availability, observedAtEpochMs = now,
+            detail = result.detail, recoveryPending = result.recoveryPending)
+    }
+
     private fun processEcoFlow(primary: PowerSignal) {
         latestPrimarySignal = primary
-        val signal = ChargerConfirmationPolicy.apply(primary, currentBatterySnapshot().externallyPowered,
+        val signal = if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
+            assistedSignal(primary)
+        } else ChargerConfirmationPolicy.apply(primary, currentBatterySnapshot().externallyPowered,
             PowerSourceStore(this).powerOceanRequiresChargerConfirmation())
         val availabilityChanged = signal.availability != lastEcoFlowAvailability
         val persistStatus = availabilityChanged ||
@@ -485,6 +516,12 @@ internal class MonitoringService : Service() {
             )
         }
 
+        fun requestPowerOceanCheck(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(context, Intent(context, MonitoringService::class.java)
+                .setAction(ACTION_REQUEST_POWEROCEAN_CHECK))
+        }
+
         fun reloadPowerSource(context: Context) {
             if (!MonitorStore(context).settings().monitoringEnabled) return
             ContextCompat.startForegroundService(
@@ -514,6 +551,8 @@ internal class MonitoringService : Service() {
             "com.flossypickle.poweroutagemonitor.SERVICE_AUDIBLE_TICK"
         private const val ACTION_REFRESH_NOTIFICATION =
             "com.flossypickle.poweroutagemonitor.REFRESH_MONITOR_NOTIFICATION"
+        private const val ACTION_REQUEST_POWEROCEAN_CHECK =
+            "com.flossypickle.poweroutagemonitor.REQUEST_POWEROCEAN_CHECK"
         private const val ACTION_RELOAD_POWER_SOURCE =
             "com.flossypickle.poweroutagemonitor.RELOAD_POWER_SOURCE"
         private const val ACTION_REFRESH_SCHEDULED_ALERTS =

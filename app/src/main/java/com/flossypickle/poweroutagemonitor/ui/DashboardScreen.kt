@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,7 +84,12 @@ internal fun DashboardScreen(
     onDismissAudibleAlarm: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val chargerCorroboration = PowerSourceStore(LocalContext.current).powerOceanRequiresChargerConfirmation()
+    val context = LocalContext.current
+    val sourceStore = PowerSourceStore(context)
+    val chargerCorroboration = sourceStore.powerOceanRequiresChargerConfirmation()
+    val assistedSettings = sourceStore.powerOceanAssistedSettings()
+    val assistedActive = selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && assistedSettings.enabled
+    var checkFeedback by remember { mutableStateOf<String?>(null) }
     val lastEvent = history.firstOrNull()
     var statusClock by remember(lastEvent?.restoredAtEpochMs) {
         mutableLongStateOf(System.currentTimeMillis())
@@ -108,7 +114,7 @@ internal fun DashboardScreen(
     val lastGridReadingEpochMs = if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
         powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
     } else lastObservationEpochMs
-    val effectivePowered = when (selectedPowerSource) {
+    val effectivePowered = if (assistedActive && snapshot?.externallyPowered == true) true else when (selectedPowerSource) {
         PowerSourceStore.Source.ANDROID_CHARGER -> snapshot?.externallyPowered
         PowerSourceStore.Source.ECOFLOW_MODBUS, PowerSourceStore.Source.ECOFLOW_ACCOUNT -> when (sourceReading?.availability) {
             GridAvailability.AVAILABLE -> true
@@ -253,12 +259,12 @@ internal fun DashboardScreen(
                         when (selectedPowerSource) {
                             PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger"
                             PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow local"
-                            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> "PowerOcean account · experimental"
+                            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> if (assistedActive) "Charger + EcoFlow assistance" else "PowerOcean account · experimental"
                         },
                         colors.primary
                     )
                     if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
-                        if (chargerCorroboration) StatusRow("Outage confirmation", "Grid source + charger loss", colors.onSurfaceVariant)
+                        if (chargerCorroboration && !assistedActive) StatusRow("Outage confirmation", "Grid source + charger loss", colors.onSurfaceVariant)
                         StatusRow(
                             "Source reading",
                             sourceReading?.detail ?: "Unavailable or stale",
@@ -266,6 +272,18 @@ internal fun DashboardScreen(
                                 Color(0xFFF0C580)
                             } else colors.onSurfaceVariant
                         )
+                    }
+                    if (assistedActive) {
+                        val incident = snapshot?.externallyPowered == false || monitorState.phase in
+                            setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
+                        StatusRow("EcoFlow checks", samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds), colors.onSurfaceVariant)
+                        OutlinedButton(onClick = {
+                            com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.requestPowerOceanCheck(context)
+                            checkFeedback = "EcoFlow check requested. The source reading updates when evidence arrives."
+                        }, enabled = settings.monitoringEnabled, modifier = Modifier.fillMaxWidth()) {
+                            Text("Check EcoFlow now")
+                        }
+                        checkFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
                     }
                     if (effectivePowered == null && settings.monitoringEnabled &&
                         scheduledAlertSettings.sourceUnavailableEnabled

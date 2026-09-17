@@ -67,7 +67,8 @@ internal data class BackupDocument(
         val powerOceanAccount: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection? = null,
         val powerOceanRequireChargerConfirmation: Boolean = false,
         val powerOceanProfileVerified: Boolean = false,
-        val powerOceanRequestLiveReporting: Boolean = false
+        val powerOceanRequestLiveReporting: Boolean = false,
+        val powerOceanAssisted: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings()
     )
 
     data class HistoryData(
@@ -320,6 +321,9 @@ internal object BackupDocumentCodec {
         p["power.account.chargerConfirmation"] = data.powerOceanRequireChargerConfirmation.toString()
         p["power.account.profileVerified"] = data.powerOceanProfileVerified.toString()
         p["power.account.liveReporting"] = data.powerOceanRequestLiveReporting.toString()
+        p["power.account.chargerFirst"] = data.powerOceanAssisted.enabled.toString()
+        p["power.account.normalSeconds"] = data.powerOceanAssisted.normalSeconds.toString()
+        p["power.account.outageSeconds"] = data.powerOceanAssisted.outageSeconds.toString()
         data.powerOceanAccount?.let {
             p["power.account.email"] = it.email
             p["power.account.password"] = it.password
@@ -359,7 +363,11 @@ internal object BackupDocumentCodec {
             } else null,
             powerOceanRequireChargerConfirmation = p.containsKey("power.account.chargerConfirmation") && p.boolean("power.account.chargerConfirmation"),
             powerOceanProfileVerified = p.containsKey("power.account.profileVerified") && p.boolean("power.account.profileVerified"),
-            powerOceanRequestLiveReporting = p.containsKey("power.account.liveReporting") && p.boolean("power.account.liveReporting")
+            powerOceanRequestLiveReporting = p.containsKey("power.account.liveReporting") && p.boolean("power.account.liveReporting"),
+            powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
+                p.containsKey("power.account.chargerFirst") && p.boolean("power.account.chargerFirst"),
+                if (p.containsKey("power.account.normalSeconds")) p.int("power.account.normalSeconds") else 3600,
+                if (p.containsKey("power.account.outageSeconds")) p.int("power.account.outageSeconds") else 60)
         )
     }
 

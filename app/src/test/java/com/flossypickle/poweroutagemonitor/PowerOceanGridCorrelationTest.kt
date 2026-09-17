@@ -123,6 +123,19 @@ class PowerOceanGridCorrelationTest {
         assertEquals(PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY, comparison.snapshot(7_000).state)
     }
 
+    @Test fun healthTicksAndSnapshotRepliesDoNotMakeOldConnectedEvidenceNew() {
+        val comparison = PowerOceanGridCorrelation(profile)
+        comparison.observe(grid(0), 1_000, false, true)
+        comparison.observe(PowerOceanPushDecoder.Report(33, mapOf("sysLoadPwr" to 700f)), 80_000, false, true)
+        comparison.observe(grid(0), 81_000, false, false)
+        assertEquals(1_000L, comparison.snapshot(82_000).evidenceReceivedAtUtcMillis)
+        comparison.observe(grid(0), 83_000, true, true)
+        assertEquals(1_000L, comparison.snapshot(84_000).evidenceReceivedAtUtcMillis)
+        comparison.observe(grid(0), 85_000, false, true)
+        assertEquals(85_000L, comparison.snapshot(86_000).evidenceReceivedAtUtcMillis)
+        assertNull(comparison.snapshot(180_000).evidenceReceivedAtUtcMillis)
+    }
+
     private fun grid(code: Long) = PowerOceanPushDecoder.Report(8, mapOf("sysGridSta" to code))
     private fun meter(value: Float) = PowerOceanPushDecoder.Report(1, mapOf(profile.meterKey to value))
 }

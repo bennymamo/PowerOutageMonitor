@@ -74,6 +74,26 @@ internal class PowerSourceStore(context: Context) {
         java.security.MessageDigest.getInstance("SHA-256").digest("single-phase-v1|${connection.serial}|${connection.model}|${connection.region}".toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it.toInt() and 255) }
 
+    fun powerOceanAssistedSettings() = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
+        preferences.getBoolean("account_charger_first", false), preferences.getInt("account_normal_seconds", 3600),
+        preferences.getInt("account_outage_seconds", 60))
+
+    fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
+        val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
+        val edit = preferences.edit().putBoolean("account_charger_first", settings.enabled)
+            .putInt("account_normal_seconds", settings.normalSeconds).putInt("account_outage_seconds", settings.outageSeconds)
+        if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
+        check(edit.commit()) { "Unable to save charger-first settings" }
+    }
+
+    fun assistedChargerLossStartedAt() = preferences.getLong("account_charger_loss_started", 0)
+    fun assistedChargerLossRecovered() = preferences.getBoolean("account_charger_loss_recovered", false)
+    fun recordAssistedChargerState(lossStartedAt: Long, recovered: Boolean) {
+        if (lossStartedAt == assistedChargerLossStartedAt() && recovered == assistedChargerLossRecovered()) return
+        check(preferences.edit().putLong("account_charger_loss_started", lossStartedAt)
+            .putBoolean("account_charger_loss_recovered", recovered).commit())
+    }
+
     fun ecoFlowConfig() = EcoFlowConfig(
         host = preferences.getString(KEY_ECOFLOW_HOST, "").orEmpty(),
         port = preferences.getInt(KEY_ECOFLOW_PORT, EcoFlowModbusProtocol.DEFAULT_PORT),
@@ -104,6 +124,8 @@ internal class PowerSourceStore(context: Context) {
             .remove(KEY_ECOFLOW_TESTED_CONFIG)
             .remove(KEY_POWEROCEAN_PROFILE)
             .remove(KEY_POWEROCEAN_TEST_TIME)
+            .remove("account_charger_loss_started")
+            .remove("account_charger_loss_recovered")
             .remove(KEY_STATUS_SOURCE)
             .remove(KEY_STATUS_AVAILABILITY)
             .remove(KEY_STATUS_OBSERVED_AT)

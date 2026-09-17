@@ -103,6 +103,8 @@ internal fun PowerSourceSettingsContent(
     )
 
     var chargerConfirmation by remember { mutableStateOf(store.powerOceanRequiresChargerConfirmation()) }
+    val assistedActive = selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && store.powerOceanAssistedSettings().enabled
+    if (!assistedActive) {
     SettingsCard {
         SettingSwitch("Also require charger loss", "For integration sources: both grid loss and charger loss must agree before an outage. Recovery uses the grid source alone.", chargerConfirmation, {
             store.setPowerOceanChargerConfirmation(it); chargerConfirmation = it; onPowerSourceChanged()
@@ -110,6 +112,11 @@ internal fun PowerSourceSettingsContent(
         if (chargerConfirmation && selectedSource != PowerSourceStore.Source.ANDROID_CHARGER) {
             Text("Active evidence: grid integration + phone charger", color = MaterialTheme.colorScheme.primary)
         }
+    }
+    } else SettingsCard {
+        Text("Charger-first assistance is selected. Local charger alerts continue offline; EcoFlow helps identify grid recovery.")
+        val assisted = store.powerOceanAssistedSettings()
+        Text("Normal checks: ${samplingSummary(assisted.normalSeconds)}. Outage checks: ${samplingSummary(assisted.outageSeconds)}.", style = MaterialTheme.typography.bodySmall)
     }
     PowerSourceSectionTitle("Main grid source")
     SettingsCard {

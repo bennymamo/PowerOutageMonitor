@@ -45,10 +45,25 @@ class BackupDocumentCodecTest {
     @Test
     fun olderBackupsDefaultNewMonitoringChoicesToDisabled() {
         val text = BackupDocumentCodec.encode(completeDocument()).toString(Charsets.UTF_8)
-        val old = text.lineSequence().filterNot { it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") }.joinToString("\n")
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") || it.startsWith("power.account.chargerFirst=") || it.startsWith("power.account.normalSeconds=") || it.startsWith("power.account.outageSeconds=") }.joinToString("\n")
         val restored = BackupDocumentCodec.decode(old.toByteArray()).powerSources!!
         assertEquals(false, restored.powerOceanProfileVerified)
         assertEquals(false, restored.powerOceanRequestLiveReporting)
+        assertEquals(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(), restored.powerOceanAssisted)
+    }
+
+    @Test
+    fun manualSchedulesRoundTripAndInvalidIntervalsAreRejected() {
+        val document = completeDocument()
+        val manual = document.copy(powerSources = document.powerSources!!.copy(
+            powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(true, 0, 0)))
+        assertEquals(manual, BackupDocumentCodec.decode(BackupDocumentCodec.encode(manual)))
+        val text = BackupDocumentCodec.encode(manual).toString(Charsets.UTF_8)
+        listOf("-1", "4", "86401", "not-a-number").forEach { bad ->
+            assertThrows(IllegalArgumentException::class.java) {
+                BackupDocumentCodec.decode(text.replace("power.account.normalSeconds=0", "power.account.normalSeconds=$bad").toByteArray())
+            }
+        }
     }
 
     private fun completeDocument() = BackupDocument(
@@ -102,7 +117,8 @@ class BackupDocumentCodecTest {
                 "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20),
             powerOceanRequireChargerConfirmation = true,
             powerOceanProfileVerified = true,
-            powerOceanRequestLiveReporting = true
+            powerOceanRequestLiveReporting = true,
+            powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(true, 3600, 60)
         ),
         history = BackupDocument.HistoryData(
             powerEvents = listOf(EventHistoryStore.Record("outage", 100, 200, 300, 90, 89)),
