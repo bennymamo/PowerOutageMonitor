@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -66,33 +67,35 @@ internal fun TestModeScreen(
         Text("Power event", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TestCard {
-            Button(
-                onClick = {
-                    lostAt = System.currentTimeMillis()
-                    restoredAt = 0L
-                    stage = SimulationStage.OUTAGE
-                    deliveryFeedback = null
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Simulate confirmed outage") }
-            OutlinedButton(
-                onClick = {
-                    batteryLowAt = System.currentTimeMillis()
-                    stage = SimulationStage.BATTERY_LOW
-                    deliveryFeedback = null
-                },
-                enabled = stage == SimulationStage.OUTAGE,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Simulate low monitor battery") }
-            OutlinedButton(
-                onClick = {
-                    restoredAt = System.currentTimeMillis()
-                    stage = SimulationStage.RESTORED
-                    deliveryFeedback = null
-                },
-                enabled = stage == SimulationStage.OUTAGE || stage == SimulationStage.BATTERY_LOW,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Simulate restored power") }
+            CompactActions {
+                Button(
+                    onClick = {
+                        lostAt = System.currentTimeMillis()
+                        restoredAt = 0L
+                        stage = SimulationStage.OUTAGE
+                        deliveryFeedback = null
+                    },
+                    modifier = Modifier
+                ) { Text("Simulate confirmed outage") }
+                OutlinedButton(
+                    onClick = {
+                        batteryLowAt = System.currentTimeMillis()
+                        stage = SimulationStage.BATTERY_LOW
+                        deliveryFeedback = null
+                    },
+                    enabled = stage == SimulationStage.OUTAGE,
+                    modifier = Modifier
+                ) { Text("Simulate low monitor battery") }
+                OutlinedButton(
+                    onClick = {
+                        restoredAt = System.currentTimeMillis()
+                        stage = SimulationStage.RESTORED
+                        deliveryFeedback = null
+                    },
+                    enabled = stage == SimulationStage.OUTAGE || stage == SimulationStage.BATTERY_LOW,
+                    modifier = Modifier
+                ) { Text("Simulate restored power") }
+            }
             Text("Previewing is local. Use the separate send button below to exercise configured channels.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
@@ -132,7 +135,7 @@ internal fun TestModeScreen(
                         "No alert channel is enabled. Configure one in Settings first."
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Send simulated alert") }
             deliveryFeedback?.let {
                 TestCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
@@ -150,7 +153,7 @@ internal fun TestModeScreen(
                     batteryLowAt = 0L
                     deliveryFeedback = null
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Reset simulation") }
         }
     }
@@ -161,7 +164,7 @@ private fun TestCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(shape = RoundedCornerShape(20.dp),
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp), content = content)

@@ -328,6 +328,8 @@ internal object BackupDocumentCodec {
         p["power.account.chargerFirst"] = data.powerOceanAssisted.enabled.toString()
         p["power.account.normalSeconds"] = data.powerOceanAssisted.normalSeconds.toString()
         p["power.account.outageSeconds"] = data.powerOceanAssisted.outageSeconds.toString()
+        p["power.account.windowSeconds"] = data.powerOceanAssisted.checkWindowSeconds.toString()
+        p["power.account.extraUpdates"] = data.powerOceanAssisted.extraPowerUpdates.toString()
         p["power.account.warnUnchanged"] = data.powerOceanAssisted.warnOnUnchanged.toString()
         p["power.account.ignoreUnchanged"] = data.powerOceanAssisted.ignoreUnchanged.toString()
         data.powerOceanAccount?.let {
@@ -376,7 +378,9 @@ internal object BackupDocumentCodec {
                 if (p.containsKey("power.account.normalSeconds")) p.int("power.account.normalSeconds") else 3600,
                 if (p.containsKey("power.account.outageSeconds")) p.int("power.account.outageSeconds") else 60,
                 !p.containsKey("power.account.warnUnchanged") || p.boolean("power.account.warnUnchanged"),
-                p.containsKey("power.account.ignoreUnchanged") && p.boolean("power.account.ignoreUnchanged"))
+                p.containsKey("power.account.ignoreUnchanged") && p.boolean("power.account.ignoreUnchanged"),
+                if (p.containsKey("power.account.windowSeconds")) p.int("power.account.windowSeconds") else 120,
+                if (p.containsKey("power.account.extraUpdates")) p.int("power.account.extraUpdates") else 2)
         )
     }
 

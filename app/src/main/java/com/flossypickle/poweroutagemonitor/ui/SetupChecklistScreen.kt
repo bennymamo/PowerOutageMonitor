@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -80,7 +81,7 @@ internal fun SetupChecklistScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Card(
+        OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (completed == coreChecks.size) {
@@ -179,7 +180,7 @@ internal fun SetupChecklistScreen(
 
         NetworkBackupGuidance()
 
-        Card(
+        OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
@@ -201,7 +202,7 @@ internal fun SetupChecklistScreen(
                     } else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
-                OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier) {
                     Text("Open reliability guidance")
                 }
             }
@@ -219,7 +220,7 @@ private fun ChecklistItem(
     onAction: () -> Unit,
     extraActions: List<Pair<String, () -> Unit>> = emptyList()
 ) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
@@ -249,12 +250,12 @@ private fun ChecklistItem(
             }
             Text(explanation, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             if (!complete) {
-                Button(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onAction, modifier = Modifier) {
                     Text(actionLabel)
                 }
             }
             extraActions.forEach { (label, action) ->
-                OutlinedButton(onClick = action, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = action, modifier = Modifier) {
                     Text(label)
                 }
             }

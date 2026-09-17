@@ -74,6 +74,20 @@ class BackupDocumentCodecTest {
         }
     }
 
+    @Test fun checkLimitsRoundTripAndOlderArchivesUseSafeDefaults() {
+        val original = completeDocument()
+        val configured = original.copy(powerSources = original.powerSources!!.copy(
+            powerOceanAssisted = original.powerSources.powerOceanAssisted.copy(checkWindowSeconds = 180, extraPowerUpdates = 4)))
+        assertEquals(configured, BackupDocumentCodec.decode(BackupDocumentCodec.encode(configured)))
+        val text = BackupDocumentCodec.encode(configured).toString(Charsets.UTF_8)
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.windowSeconds=") || it.startsWith("power.account.extraUpdates=") }.joinToString("\n")
+        val settings = BackupDocumentCodec.decode(old.toByteArray()).powerSources!!.powerOceanAssisted
+        assertEquals(120, settings.checkWindowSeconds); assertEquals(2, settings.extraPowerUpdates)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("power.account.windowSeconds=180", "power.account.windowSeconds=301").toByteArray())
+        }
+    }
+
     private fun completeDocument() = BackupDocument(
         createdAtEpochMs = 1_700_000_000_000,
         appVersionName = "1.0-test",

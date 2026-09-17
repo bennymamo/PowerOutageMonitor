@@ -14,17 +14,21 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+internal val LocalDashboardReturn = staticCompositionLocalOf<(() -> Unit)?> { null }
+
 /** Short, reusable setup steps. Only the step number is saved; secrets remain in memory. */
 @Composable
 internal fun SetupFlowHeader(steps: List<String>, step: Int, guided: Boolean, busy: Boolean,
     onStep: (Int) -> Unit) {
-    BackHandler(guided && step > 0 && !busy) { onStep(step - 1) }
+    val directReturn = LocalDashboardReturn.current
+    BackHandler(guided && step > 0 && !busy) { if (directReturn != null) directReturn() else onStep(step - 1) }
     if (guided) {
         Text("Step ${step + 1} of ${steps.size} · ${steps[step]}", fontWeight = FontWeight.SemiBold)
         LinearProgressIndicator(progress = { (step + 1f) / steps.size }, modifier = Modifier.fillMaxWidth())
-        ExpandableSettingsSection("Jump to a step", "Return to an earlier section") {
+        var jumpSelection by remember { mutableIntStateOf(0) }
+        ExpandableSettingsSection("Jump to a step", "Return to an earlier section", collapseOnKey = jumpSelection) {
             steps.forEachIndexed { index, title ->
-                TextButton({ onStep(index) }, enabled = !busy) { Text("${index + 1}. $title") }
+                TextButton({ onStep(index); jumpSelection++ }, enabled = !busy) { Text("${index + 1}. $title") }
             }
         }
     } else Text("Open only the sections you need. Save changes before leaving.",
@@ -45,9 +49,9 @@ internal fun SetupFlowFooter(steps: List<String>, step: Int, guided: Boolean, bu
     if (!guided) return
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (step > 0) OutlinedButton({ onStep(step - 1) }, enabled = !busy,
-            modifier = Modifier.weight(1f)) { Text("Previous") }
+            modifier = Modifier) { Text("Previous") }
         Button({ if (step < steps.lastIndex) onStep(step + 1) else onFinish() },
-            enabled = !busy && (if (step < steps.lastIndex) nextEnabled else finishEnabled), modifier = Modifier.weight(1f)) {
+            enabled = !busy && (if (step < steps.lastIndex) nextEnabled else finishEnabled), modifier = Modifier) {
             Text(if (step < steps.lastIndex) "Next" else "Finish")
         }
     }
@@ -57,9 +61,10 @@ internal fun SetupFlowFooter(steps: List<String>, step: Int, guided: Boolean, bu
 }
 
 @Composable
-internal fun ExpandableSettingsSection(title: String, summary: String = "", initiallyExpanded: Boolean = false,
+internal fun ExpandableSettingsSection(title: String, summary: String = "", initiallyExpanded: Boolean = false, collapseOnKey: Any? = null,
     content: @Composable ColumnScope.() -> Unit) {
     var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
+    LaunchedEffect(collapseOnKey) { if (collapseOnKey != null) expanded = false }
     SettingsCard {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
@@ -74,4 +79,12 @@ internal fun ExpandableSettingsSection(title: String, summary: String = "", init
         }
         if (expanded) content()
     }
+}
+
+/** Wraps compact actions on narrow screens and at larger font sizes. Material keeps touch targets accessible. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun CompactActions(content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
 }

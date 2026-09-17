@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,7 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -91,7 +92,7 @@ internal fun EmailProvidersScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
-            OutlinedButton(onClick = onOpenGmail, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onOpenGmail, modifier = Modifier) {
                 Text("Configure Gmail")
             }
         }
@@ -125,7 +126,7 @@ internal fun EmailProvidersScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
-            OutlinedButton(onClick = onOpenResend, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onOpenResend, modifier = Modifier) {
                 Text("Configure Resend")
             }
         }
@@ -134,7 +135,7 @@ internal fun EmailProvidersScreen(
 
 @Composable
 private fun ProviderCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {

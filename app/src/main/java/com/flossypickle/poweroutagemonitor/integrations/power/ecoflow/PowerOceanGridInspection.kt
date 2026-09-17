@@ -18,6 +18,8 @@ internal class PowerOceanGridInspection(profile: PowerOceanGridCorrelation.Profi
     private var lastReceivedUtcMillis: Long? = null
     private val changes = ArrayDeque<Change>()
 
+    fun resumeOffGridEpisode(receivedAt: Long) { correlation?.resumeOffGridEpisode(receivedAt) }
+
     fun observe(report: PowerOceanPushDecoder.Report, receivedUtcMillis: Long, retained: Boolean, fromDevicePush: Boolean = true, allowSnapshotBaseline: Boolean = false) {
         correlation?.observe(report, receivedUtcMillis, retained, fromDevicePush, allowSnapshotBaseline)
         if (retained || receivedUtcMillis <= 0) return

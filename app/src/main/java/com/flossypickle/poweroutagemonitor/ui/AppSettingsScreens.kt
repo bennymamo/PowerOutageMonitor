@@ -129,7 +129,7 @@ internal fun ReliabilitySettingsContent(onOpenDiagnostics: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier) {
             Text("Open reliability diagnostics")
         }
     }
@@ -166,7 +166,7 @@ internal fun HistorySettingsContent(
         if (!confirmClearHistory) {
             OutlinedButton(
                 onClick = { confirmClearHistory = true },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Clear power history") }
         } else {
             Text(
@@ -175,12 +175,14 @@ internal fun HistorySettingsContent(
                 fontSize = 12.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    onClearHistory()
-                    confirmClearHistory = false
-                }) { Text("Clear") }
-                OutlinedButton(onClick = { confirmClearHistory = false }) {
-                    Text("Cancel")
+                CompactActions {
+                    Button(onClick = {
+                        onClearHistory()
+                        confirmClearHistory = false
+                    }) { Text("Clear") }
+                    OutlinedButton(onClick = { confirmClearHistory = false }) {
+                        Text("Cancel")
+                    }
                 }
             }
         }

@@ -1,5 +1,13 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,7 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,10 +42,13 @@ internal fun HistoryScreen(
     deliverySummaries: Map<String, AlertDeliverySummary.Event>,
     padding: PaddingValues
 ) {
+    var filter by rememberSaveable { mutableStateOf("All") }
     val timeline = (
         records.map { TimelineEntry.Power(it) } +
             operationalRecords.map { TimelineEntry.Operation(it) }
-        ).sortedByDescending(TimelineEntry::timestampEpochMs)
+        ).sortedByDescending(TimelineEntry::timestampEpochMs).filter {
+            when (filter) { "Grid" -> it is TimelineEntry.Power; "App & monitor" -> it is TimelineEntry.Operation; else -> true }
+        }
     LazyColumn(
         Modifier.fillMaxSize().padding(padding),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
@@ -45,6 +56,15 @@ internal fun HistoryScreen(
     ) {
         item { Text("History", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold) }
+        item {
+            CompactActions {
+                listOf("All", "Grid", "App & monitor").forEach { label ->
+                    FilterChip(selected = filter == label, onClick = { filter = label }, label = { Text(label) })
+                }
+            }
+            Text("${timeline.size} records · Tap Details to expand", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (monitorState.phase == OutageEngine.Phase.OUTAGE ||
             monitorState.phase == OutageEngine.Phase.PENDING_RESTORE
         ) {
@@ -57,11 +77,11 @@ internal fun HistoryScreen(
         }
         if (timeline.isEmpty()) {
             item {
-                Card(shape = RoundedCornerShape(20.dp),
+                OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.fillMaxWidth().padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("No history yet", fontWeight = FontWeight.Medium)
+                        Text(if (filter == "All") "No history yet" else "No $filter records", fontWeight = FontWeight.Medium)
                         Text("Grid events and app-operation checks will appear here.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -105,6 +125,7 @@ private sealed interface TimelineEntry {
 
 @Composable
 private fun OperationalCard(record: OperationalHistoryStore.Record) {
+    var expanded by rememberSaveable(record.kind, record.timestampEpochMs) { mutableStateOf(false) }
     val title = when (record.kind) {
         OperationalHistoryStore.KIND_APP_OPENED -> "App opened"
         OperationalHistoryStore.KIND_APP_RECOVERED -> "Unrecorded app interruption"
@@ -119,7 +140,7 @@ private fun OperationalCard(record: OperationalHistoryStore.Record) {
         OperationalHistoryStore.KIND_BACKUP_RESTORED -> "Backup restored"
         else -> "App event"
     }
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (record.kind in setOf(
@@ -139,7 +160,11 @@ private fun OperationalCard(record: OperationalHistoryStore.Record) {
                 DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
                     .format(Date(record.timestampEpochMs))
             )
-            Text(record.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (record.kind in setOf(OperationalHistoryStore.KIND_APP_RECOVERED, OperationalHistoryStore.KIND_MONITORING_RECOVERED)) {
+                Text("A start was recorded without a matching stop. Check device reliability.", style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton({ expanded = !expanded }) { Text(if (expanded) "Hide details" else "Details") }
+            if (expanded) Text(record.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -155,8 +180,9 @@ private fun EventCard(
     endTemperature: Int?,
     deliverySummary: AlertDeliverySummary.Event?
 ) {
+    var expanded by rememberSaveable(startedAt, restoredAt) { mutableStateOf(false) }
     val formatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
-    Card(shape = RoundedCornerShape(20.dp),
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold)
@@ -165,6 +191,8 @@ private fun EventCard(
                 Text("Restored: ${formatter.format(Date(restoredAt))}")
                 Text("Duration: ${formatDuration(restoredAt - startedAt)}")
             }
+            TextButton({ expanded = !expanded }) { Text(if (expanded) "Hide details" else "Details") }
+            if (expanded) {
             val batteryText = when {
                 startBattery != null && endBattery != null -> "$startBattery% → $endBattery%"
                 startBattery != null -> "$startBattery% at power loss"
@@ -179,6 +207,7 @@ private fun EventCard(
             }
             temperatureText?.let {
                 Text("Temperature: $it", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             }
             deliverySummary?.let {
                 Text("Alerts: ${it.label()}", color = when {

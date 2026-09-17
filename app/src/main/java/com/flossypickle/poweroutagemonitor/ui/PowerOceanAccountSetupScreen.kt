@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, padding: PaddingValues, onPowerSourceChanged: () -> Unit, onBack: () -> Unit) {
+    val directReturn = LocalDashboardReturn.current
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val store = remember(context) { PowerOceanAccountStore(context) }
@@ -98,7 +99,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         while (true) { activationClock = System.currentTimeMillis(); delay(1000) }
     }
     val activationStage = sourceStore.powerOceanActivationStage(saved, activationClock)
-    BackHandler(!dashboardOpen && helpLevel.isGuided && setupStep > 0 && !loading) { setupStep-- }
+    BackHandler(!dashboardOpen && helpLevel.isGuided && setupStep > 0 && !loading) { if (directReturn != null) directReturn() else setupStep-- }
 
     suspend fun read(current: PowerOceanAccountClient.Session, openAfter: Boolean) {
         if (loading) return
@@ -146,14 +147,14 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             }
         }
     }
-    BackHandler(dashboardOpen) { closeDashboard() }
+    BackHandler(dashboardOpen) { if (directReturn != null) directReturn() else closeDashboard() }
     val currentSnapshot = snapshot
     if (dashboardOpen && currentSnapshot != null) {
         SourceDetailsScreen(currentSnapshot, padding, loading, error,
             onRefresh = { if (!probeRunning) {
                 if (pushStatus != null) closeDashboard() else session?.let { current -> scope.launch { read(current, false) } }
             } },
-            onBack = { closeDashboard() },
+            onBack = { if (directReturn != null) directReturn() else closeDashboard() },
             refreshLabel = if (pushStatus == null) "Refresh device readings" else "Set up another live inspection",
             dashboardControls = {
                 SettingsCard {
@@ -195,7 +196,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY -> "Grid appears back · waiting for EcoFlow to reconnect"
                         }
                         Text(label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                        Text("Installation-specific inspection comparison. Requires a live device feed, an explicit pushed grid code, then zero flow followed by two changing non-zero meter readings. Old pre-zero meter values and retained messages cannot establish return. Receipt times do not prove measurement freshness. This does not send alerts or change monitoring.", style = MaterialTheme.typography.bodySmall)
+                        ExpandableSettingsSection("How grid comparison works", "Tested grid code, meter activity and changing device data") {
+                            Text("This setup test compares the reported grid code with meter 1. Zero flow alone does not prove an outage. After confirmed loss, two changing non-zero meter readings support grid return while the inverter reconnects. Retained messages and repeated old pre-outage values cannot establish return.", style = MaterialTheme.typography.bodySmall)
+                            Text("An unchanged grid code is usable while new device values arrive. Phone receipt times and changing values support apparent freshness; EcoFlow does not supply a verified measurement time. This inspection does not send outage alerts.", style = MaterialTheme.typography.bodySmall)
+                        }
                         if (requireChargerConfirmation) {
                             Text("Charger: ${when (chargerPowered) { true -> "connected"; false -> "disconnected"; null -> "unknown" }}", style = MaterialTheme.typography.bodySmall)
                             Text(when (lossConfirmation?.reason) {
@@ -206,7 +210,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             }, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    Text("Compare codes before a grid cut, during backup operation and after restoration. Codes can differ by model; they do not yet trigger outage alerts. Receipt time is not a verified measurement time. Retained values are excluded from this comparison.", style = MaterialTheme.typography.bodySmall)
+                    Text("Test loss and restoration before enabling a new installation. Codes and meter behavior can differ by model.", style = MaterialTheme.typography.bodySmall)
                     Text("Backup can keep AC voltage present during an outage. Grid reconnection can also be reported several minutes after the supply returns. Allow time for recovery.", style = MaterialTheme.typography.bodySmall)
                 }
             })
@@ -215,7 +219,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
 
     Column(Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onBack) { Text("‹ Power sources") }
+        TextButton(onClick = onBack) { Text(if (LocalDashboardReturn.current != null) "‹ Status" else "‹ Power sources") }
         Text("PowerOcean account", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         SetupGuidanceCaption(helpLevel)
         SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
@@ -224,8 +228,11 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         SetupFlowSection(0, setupStep, helpLevel.isGuided, "Before you begin") {
         SettingsCard {
             Text("Optional · experimental", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-            Text("Uses your normal EcoFlow login to read PowerOcean's cloud service. No developer keys, Modbus or installer are needed. EcoFlow may change this unofficial interface. EcoFlow has not confirmed permission or request limits for this connection; account restrictions are possible. Ask EcoFlow for approved PowerOcean API access before relying on it for continuous monitoring.")
-            Text("This reads your inverter and batteries while your home remains powered by backup. It does not change inverter settings. Monitoring needs an installation-tested grid profile and a fresh live-feed test. Stop monitoring or choose the charger source before changing this account.", style = MaterialTheme.typography.bodySmall)
+            Text("Read PowerOcean with your normal EcoFlow login. No developer keys or installer access needed. This optional connection is unofficial; EcoFlow has not confirmed permitted usage.")
+            ExpandableSettingsSection("Connection details", "Read-only equipment access and tested grid behavior") {
+                Text("Reads inverter and battery data without changing charging, reserve or output settings. Scheduled checks open briefly and close between cycles. Low traffic does not guarantee EcoFlow account approval.", style = MaterialTheme.typography.bodySmall)
+                Text("Verify grid behavior on your installation, or confirm your previous successful test. Choose the charger source before changing this account. New changing device reports are needed for EcoFlow monitoring decisions.", style = MaterialTheme.typography.bodySmall)
+            }
         }
         ExpandableSettingsSection("Keep internet working during an outage", "Router, Wi-Fi and network adapters need backup power") { NetworkBackupGuidance() }
         if (helpLevel.isGuided) ExpandableSettingsSection("Find your login and inverter serial", "Step-by-step help") {
@@ -234,7 +241,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             Text("2. In EcoFlow, open your PowerOcean system and its device information. Copy the inverter's serial number (S/N), not a battery's serial number.")
             Text("3. Choose your actual model and account region below. Single Phase and Europe are selected initially.")
             Text("4. Tap Save account, then Connect and read device. Keep your password private; enter it here, never in chat.")
-            Text("5. Once readings appear, close EcoFlow's app and web portal. Use auto-refresh here to check whether the readings keep changing.")
+            Text("5. In Verify and monitor, run a live-feed test with EcoFlow's app and web portal closed. Check whether power values change.")
         }
 
         }
@@ -264,30 +271,32 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
 
         }
         SetupFlowSection(3, setupStep, helpLevel.isGuided, "Save and connect") {
-        Button(onClick = {
-            runCatching { store.save(editedConnection()); sourceStore.setPowerOceanLiveReporting(requestLiveReporting) }.onSuccess {
-                generation++; saved = store.connection(); password = ""; session = null; snapshot = null; pushStatus = null
-                successfulReads = 0; changedFields = 0; error = null; feedback = "Account saved securely. Tap Connect and read device."
-            }.onFailure { error = "Check all account fields. Refresh must be between 60 and 3,600 seconds." }
-        }, enabled = !loading && !accountActive && editedConnection().isValid, modifier = Modifier.fillMaxWidth()) { Text("Save account") }
-        Button(onClick = {
-            val account = saved ?: return@Button
-            val requestedGeneration = generation
-            loading = true; error = null; pushStatus = null; feedback = "Connecting to EcoFlow…"
-            scope.launch {
-                try {
-                    val result = withContext(Dispatchers.IO) { client.login(account) }
-                    if (requestedGeneration != generation) return@launch
-                    loading = false
-                    when (result) {
-                        is EcoFlowCloudClient.Result.Success -> { session = result.value; read(result.value, false) }
-                        is EcoFlowCloudClient.Result.Failure -> { error = result.message; feedback = null }
-                    }
-                } finally { loading = false }
+        CompactActions {
+            Button(onClick = {
+                runCatching { store.save(editedConnection()); sourceStore.setPowerOceanLiveReporting(requestLiveReporting) }.onSuccess {
+                    generation++; saved = store.connection(); password = ""; session = null; snapshot = null; pushStatus = null
+                    successfulReads = 0; changedFields = 0; error = null; feedback = "Account saved securely. Tap Connect and read device."
+                }.onFailure { error = "Check all account fields. Refresh must be between 60 and 3,600 seconds." }
+            }, enabled = !loading && !accountActive && editedConnection().isValid, modifier = Modifier) { Text("Save account") }
+            Button(onClick = {
+                val account = saved ?: return@Button
+                val requestedGeneration = generation
+                loading = true; error = null; pushStatus = null; feedback = "Connecting to EcoFlow…"
+                scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) { client.login(account) }
+                        if (requestedGeneration != generation) return@launch
+                        loading = false
+                        when (result) {
+                            is EcoFlowCloudClient.Result.Success -> { session = result.value; read(result.value, false) }
+                            is EcoFlowCloudClient.Result.Failure -> { error = result.message; feedback = null }
+                        }
+                    } finally { loading = false }
+                }
+            }, enabled = saved != null && !unsaved && !loading, modifier = Modifier) {
+                if (loading) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp)
+                Text(if (loading) "Connecting…" else "Connect and read device")
             }
-        }, enabled = saved != null && !unsaved && !loading, modifier = Modifier.fillMaxWidth()) {
-            if (loading) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp)
-            Text(if (loading) "Connecting…" else "Connect and read device")
         }
         if (unsaved && saved != null) Text("Save your changes before connecting.", style = MaterialTheme.typography.bodySmall)
         if (snapshot != null) OutlinedButton({ dashboardOpen = true }, enabled = !loading) { Text("Open device readings") }
@@ -355,7 +364,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     selectedSource = sourceStore.selectedSource(); onPowerSourceChanged()
                     feedback = "PowerOcean selected. Use the Status master switch to start or stop monitoring."
                 } else error = "Check the activation requirements above. Use your previous successful test or complete a new live check."
-            }, enabled = !loading && !unsaved && activationStage == PowerOceanActivationPolicy.Stage.READY, modifier = Modifier.fillMaxWidth()) { Text(if (assistedSettings.enabled) "Use charger + EcoFlow assistance" else "Use PowerOcean for monitoring") }
+            }, enabled = !loading && !unsaved && activationStage == PowerOceanActivationPolicy.Stage.READY, modifier = Modifier) { Text(if (assistedSettings.enabled) "Use charger + EcoFlow assistance" else "Use PowerOcean for monitoring") }
             Text("Unofficial access is opt-in. Low traffic is not a guarantee against account restrictions. Missing or stale evidence stays Unknown.", style = MaterialTheme.typography.bodySmall)
         }
         ExpandableSettingsSection("Live-feed test", "Inspect saved account and fresh grid evidence", initiallyExpanded = !accountActive && !assistedSettings.enabled && activationStage != PowerOceanActivationPolicy.Stage.READY) {
@@ -373,13 +382,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
             if (assistedSettings.enabled) {
                 Text("Live reporting is automatic", fontWeight = FontWeight.Medium)
                 Text("Each charger-first check activates the live feed. This inspection also requests live reporting; EcoFlow's app can stay closed.", style = MaterialTheme.typography.bodySmall)
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Continuous background live reporting", modifier = Modifier.weight(1f))
-                    Switch(requestLiveReporting, { requestLiveReporting = it; sourceStore.setPowerOceanLiveReporting(it) }, enabled = !loading && !accountActive)
-                }
             }
-            Text("Live inspections always request reporting every 20 seconds during the test. Charger-first monitoring requests it once per check. The continuous-background option applies only outside charger-first mode. No power-control commands are sent.", style = MaterialTheme.typography.bodySmall)
+            Text("Setup inspections request temporary live reporting every 20 seconds until the test ends. Scheduled monitoring requests it once per check and closes the connection afterward. No power-control commands are sent.", style = MaterialTheme.typography.bodySmall)
             Text("Stops when you leave the dashboard or put the app in the background. If no readings arrive, the result explains what remains to investigate.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Use my tested grid/meter comparison", modifier = Modifier.weight(1f))
@@ -445,13 +449,13 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                         throw cancelled
                     } finally { probeRunning = false; loading = false }
                 }
-            }, enabled = saved != null && !unsaved && !loading && !accountActive, modifier = Modifier.fillMaxWidth()) {
+            }, enabled = saved != null && !unsaved && !loading && !accountActive, modifier = Modifier) {
                 if (probeRunning) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp)
                 Text(if (probeRunning) "Opening and inspecting live feed…" else if (session == null) "Connect and inspect live feed" else "Inspect live push feed")
             }
         }
         if (saved != null) {
-            OutlinedButton({ confirmClear = true }, enabled = !loading && !accountActive, modifier = Modifier.fillMaxWidth()) { Text("Remove saved account") }
+            OutlinedButton({ confirmClear = true }, enabled = !loading && !accountActive, modifier = Modifier) { Text("Remove saved account") }
         }
         }
 

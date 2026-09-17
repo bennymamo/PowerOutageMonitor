@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -128,7 +129,7 @@ internal fun ResendEmailSetupScreen(
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RESEND_SETUP_URL)))
                     }.onFailure { feedback = "No browser is available to open Resend." }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Open Resend setup") }
             if (helpLevel.isGuided) {
                 Text(
@@ -214,83 +215,85 @@ internal fun ResendEmailSetupScreen(
                 }
                 Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !loading)
             }
-            Button(
-                onClick = {
-                    runAsync {
-                        val validation = validateEmailInputs(sender, recipientText)
-                        if (validation.error != null) {
-                            feedback = validation.error
-                            return@runAsync
-                        }
-                        val requestedEnabled = enabled
-                        runCatching {
-                            withContext(Dispatchers.IO) {
-                                store.save(
-                                    apiKeyInput,
-                                    enabled,
-                                    sender,
-                                    validation.recipients
-                                )
+            CompactActions {
+                Button(
+                    onClick = {
+                        runAsync {
+                            val validation = validateEmailInputs(sender, recipientText)
+                            if (validation.error != null) {
+                                feedback = validation.error
+                                return@runAsync
                             }
-                        }.onSuccess {
-                            config = withContext(Dispatchers.IO) { store.config() }
-                            withContext(Dispatchers.IO) {
-                                AlertDeliveryCoordinator(context).materializePending()
-                            }
-                            onConfigurationChanged()
-                            enabled = config.enabled
-                            apiKeyInput = ""
-                            feedback = if (requestedEnabled && !config.enabled) {
-                                "Saved, but email remains disabled until the API key, sender and recipient are present."
-                            } else "Email configuration saved."
-                        }.onFailure {
-                            feedback = "Email configuration could not be saved."
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Save configuration") }
-            OutlinedButton(
-                onClick = {
-                    runAsync {
-                        val validation = validateEmailInputs(sender, recipientText)
-                        val apiKey = withContext(Dispatchers.IO) { apiKeyForOperation() }
-                        if (apiKey == null) {
-                            feedback = "Enter a Resend API key first."
-                            return@runAsync
-                        }
-                        if (!ResendEmailProtocol.isValidApiKey(apiKey)) {
-                            feedback = "The Resend API key format is not valid."
-                            return@runAsync
-                        }
-                        if (validation.error != null || validation.recipients.isEmpty()) {
-                            feedback = validation.error ?: "Enter at least one recipient."
-                            return@runAsync
-                        }
-                        val message = AlertMessage(
-                            eventId = "email-test-${UUID.randomUUID()}",
-                            kind = AlertKind.TEST,
-                            title = "FP GRID MONITOR TEST",
-                            body = "SIMULATION\n\nDevice: $deviceName\nEmail alerts can reach this address."
-                        )
-                        val results = withContext(Dispatchers.IO) {
-                            validation.recipients.map { recipient ->
-                                client.send(apiKey, sender.trim(), recipient, message)
+                            val requestedEnabled = enabled
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    store.save(
+                                        apiKeyInput,
+                                        enabled,
+                                        sender,
+                                        validation.recipients
+                                    )
+                                }
+                            }.onSuccess {
+                                config = withContext(Dispatchers.IO) { store.config() }
+                                withContext(Dispatchers.IO) {
+                                    AlertDeliveryCoordinator(context).materializePending()
+                                }
+                                onConfigurationChanged()
+                                enabled = config.enabled
+                                apiKeyInput = ""
+                                feedback = if (requestedEnabled && !config.enabled) {
+                                    "Saved, but email remains disabled until the API key, sender and recipient are present."
+                                } else "Email configuration saved."
+                            }.onFailure {
+                                feedback = "Email configuration could not be saved."
                             }
                         }
-                        val sent = results.count { it is DeliveryResult.Sent }
-                        val failure = results.firstOrNull { it !is DeliveryResult.Sent }
-                        feedback = if (sent == results.size) {
-                            "Test email sent to $sent address(es)."
-                        } else {
-                            "Sent to $sent of ${results.size} addresses. ${emailFailureText(failure)}"
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Save configuration") }
+                OutlinedButton(
+                    onClick = {
+                        runAsync {
+                            val validation = validateEmailInputs(sender, recipientText)
+                            val apiKey = withContext(Dispatchers.IO) { apiKeyForOperation() }
+                            if (apiKey == null) {
+                                feedback = "Enter a Resend API key first."
+                                return@runAsync
+                            }
+                            if (!ResendEmailProtocol.isValidApiKey(apiKey)) {
+                                feedback = "The Resend API key format is not valid."
+                                return@runAsync
+                            }
+                            if (validation.error != null || validation.recipients.isEmpty()) {
+                                feedback = validation.error ?: "Enter at least one recipient."
+                                return@runAsync
+                            }
+                            val message = AlertMessage(
+                                eventId = "email-test-${UUID.randomUUID()}",
+                                kind = AlertKind.TEST,
+                                title = "FP GRID MONITOR TEST",
+                                body = "SIMULATION\n\nDevice: $deviceName\nEmail alerts can reach this address."
+                            )
+                            val results = withContext(Dispatchers.IO) {
+                                validation.recipients.map { recipient ->
+                                    client.send(apiKey, sender.trim(), recipient, message)
+                                }
+                            }
+                            val sent = results.count { it is DeliveryResult.Sent }
+                            val failure = results.firstOrNull { it !is DeliveryResult.Sent }
+                            feedback = if (sent == results.size) {
+                                "Test email sent to $sent address(es)."
+                            } else {
+                                "Sent to $sent of ${results.size} addresses. ${emailFailureText(failure)}"
+                            }
                         }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Send test email") }
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Send test email") }
+            }
         }
 
         if (loading) {
@@ -325,20 +328,22 @@ internal fun ResendEmailSetupScreen(
                     color = MaterialTheme.colorScheme.error
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        runAsync {
-                            withContext(Dispatchers.IO) { store.clear() }
-                            config = store.config()
-                            enabled = false
-                            apiKeyInput = ""
-                            sender = ""
-                            recipientText = ""
-                            confirmRemove = false
-                            feedback = "Email configuration removed."
-                            onConfigurationChanged()
-                        }
-                    }) { Text("Remove") }
-                    TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    CompactActions {
+                        Button(onClick = {
+                            runAsync {
+                                withContext(Dispatchers.IO) { store.clear() }
+                                config = store.config()
+                                enabled = false
+                                apiKeyInput = ""
+                                sender = ""
+                                recipientText = ""
+                                confirmRemove = false
+                                feedback = "Email configuration removed."
+                                onConfigurationChanged()
+                            }
+                        }) { Text("Remove") }
+                        TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    }
                 }
             }
         }
@@ -365,7 +370,7 @@ private fun EmailCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {

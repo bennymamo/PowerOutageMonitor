@@ -91,7 +91,8 @@ internal fun SettingsScreen(
     onOpenSms: () -> Unit,
     onOpenEmail: () -> Unit,
     requestedSection: SettingsSection? = null,
-    onSectionOpened: () -> Unit = {}
+    onSectionOpened: () -> Unit = {},
+    onDirectBack: (() -> Unit)? = null
 ) {
     var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
     LaunchedEffect(requestedSection) {
@@ -99,7 +100,7 @@ internal fun SettingsScreen(
     }
 
     BackHandler(enabled = section != SettingsSection.HOME) {
-        section = parentSection(section)
+        if (onDirectBack != null) onDirectBack() else section = parentSection(section)
     }
     val context = LocalContext.current
     val telegramConfig = TelegramConfigStore(context).config()
@@ -112,8 +113,8 @@ internal fun SettingsScreen(
         title = section.title,
         resetScrollKey = section.name,
         padding = padding,
-        backTitle = parentSection(section).title,
-        onBack = if (section == SettingsSection.HOME) null else {
+        backTitle = if (onDirectBack != null) "Status" else parentSection(section).title,
+        onBack = onDirectBack ?: if (section == SettingsSection.HOME) null else {
             { section = parentSection(section) }
         }
     ) {

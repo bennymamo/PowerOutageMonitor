@@ -96,12 +96,14 @@ internal class PowerSourceStore(context: Context) {
     fun powerOceanAssistedSettings() = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
         preferences.getBoolean("account_charger_first", false), preferences.getInt("account_normal_seconds", 3600),
         preferences.getInt("account_outage_seconds", 60), preferences.getBoolean("account_warn_unchanged", true),
-        preferences.getBoolean("account_ignore_unchanged", false))
+        preferences.getBoolean("account_ignore_unchanged", false),
+        preferences.getInt("account_window_seconds", 120), preferences.getInt("account_extra_updates", 2))
 
     fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
         val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
         val edit = preferences.edit().putBoolean("account_charger_first", settings.enabled)
             .putInt("account_normal_seconds", settings.normalSeconds).putInt("account_outage_seconds", settings.outageSeconds)
+            .putInt("account_window_seconds", settings.checkWindowSeconds).putInt("account_extra_updates", settings.extraPowerUpdates)
             .putBoolean("account_warn_unchanged", settings.warnOnUnchanged).putBoolean("account_ignore_unchanged", settings.ignoreUnchanged)
         if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
         check(edit.commit()) { "Unable to save charger-first settings" }

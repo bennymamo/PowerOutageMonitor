@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.verticalScroll
@@ -15,7 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -128,7 +129,7 @@ internal fun TelegramSetupScreen(
                         feedback = "No app is available to open BotFather."
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Open BotFather") }
             TelegramOperationStatus(
                 area = TelegramFeedbackArea.SETUP,
@@ -174,7 +175,7 @@ internal fun TelegramSetupScreen(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 enabled = !loading
             ) { Text("Check bot token") }
             TelegramOperationStatus(
@@ -195,7 +196,7 @@ internal fun TelegramSetupScreen(
                 OutlinedButton({
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/$username"))) }
                         .onFailure { feedbackArea = TelegramFeedbackArea.RECIPIENTS; feedback = "No app can open your bot." }
-                }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Open my bot") }
+                }, enabled = !loading, modifier = Modifier) { Text("Open my bot") }
             }
             Text("${parseDestinations(destinationText).size} chat(s) selected", color = MaterialTheme.colorScheme.primary)
             ExpandableSettingsSection("Enter chat IDs manually", "Optional advanced method") {
@@ -228,7 +229,7 @@ internal fun TelegramSetupScreen(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 enabled = !loading
             ) { Text("Find chats") }
             TelegramOperationStatus(
@@ -269,64 +270,66 @@ internal fun TelegramSetupScreen(
                 }
                 Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !loading)
             }
-            Button(
-                onClick = {
-                    runAsync(TelegramFeedbackArea.ACTIVATION) {
-                        val requestedEnabled = enabled
-                        val destinations = parseDestinations(destinationText)
-                        runCatching {
-                            withContext(Dispatchers.IO) {
-                                store.save(tokenInput, enabled, botName, destinations)
-                            }
-                        }.onSuccess {
-                            config = withContext(Dispatchers.IO) { store.config() }
-                            withContext(Dispatchers.IO) {
-                                AlertDeliveryCoordinator(context).materializePending()
-                            }
-                            onConfigurationChanged()
-                            enabled = config.enabled
-                            tokenInput = ""
-                            feedback = if (requestedEnabled && !config.enabled) {
-                                "Saved, but Telegram remains disabled until a token and chat are present."
-                            } else "Telegram configuration saved."
-                        }.onFailure {
-                            feedback = "Telegram configuration could not be saved."
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Save configuration") }
-            OutlinedButton(
-                onClick = {
-                    runAsync(TelegramFeedbackArea.ACTIVATION) {
-                        val token = withContext(Dispatchers.IO) { tokenForOperation() }
-                        val destinations = parseDestinations(destinationText)
-                        if (token == null || destinations.isEmpty()) {
-                            feedback = "Enter a token and at least one chat first."
-                            return@runAsync
-                        }
-                        val results = withContext(Dispatchers.IO) {
-                            destinations.map { destination ->
-                                client.sendMessage(
-                                    token,
-                                    destination.chatId,
-                                    "FP GRID MONITOR TEST\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
-                                )
+            CompactActions {
+                Button(
+                    onClick = {
+                        runAsync(TelegramFeedbackArea.ACTIVATION) {
+                            val requestedEnabled = enabled
+                            val destinations = parseDestinations(destinationText)
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    store.save(tokenInput, enabled, botName, destinations)
+                                }
+                            }.onSuccess {
+                                config = withContext(Dispatchers.IO) { store.config() }
+                                withContext(Dispatchers.IO) {
+                                    AlertDeliveryCoordinator(context).materializePending()
+                                }
+                                onConfigurationChanged()
+                                enabled = config.enabled
+                                tokenInput = ""
+                                feedback = if (requestedEnabled && !config.enabled) {
+                                    "Saved, but Telegram remains disabled until a token and chat are present."
+                                } else "Telegram configuration saved."
+                            }.onFailure {
+                                feedback = "Telegram configuration could not be saved."
                             }
                         }
-                        val sent = results.count { it is DeliveryResult.Sent }
-                        val firstFailure = results.filterNot { it is DeliveryResult.Sent }.firstOrNull()
-                        feedback = if (sent == results.size) {
-                            "Test message sent to $sent chat(s)."
-                        } else {
-                            "Sent to $sent of ${results.size} chats. ${failureText(firstFailure)}"
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Save configuration") }
+                OutlinedButton(
+                    onClick = {
+                        runAsync(TelegramFeedbackArea.ACTIVATION) {
+                            val token = withContext(Dispatchers.IO) { tokenForOperation() }
+                            val destinations = parseDestinations(destinationText)
+                            if (token == null || destinations.isEmpty()) {
+                                feedback = "Enter a token and at least one chat first."
+                                return@runAsync
+                            }
+                            val results = withContext(Dispatchers.IO) {
+                                destinations.map { destination ->
+                                    client.sendMessage(
+                                        token,
+                                        destination.chatId,
+                                        "FP GRID MONITOR TEST\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
+                                    )
+                                }
+                            }
+                            val sent = results.count { it is DeliveryResult.Sent }
+                            val firstFailure = results.filterNot { it is DeliveryResult.Sent }.firstOrNull()
+                            feedback = if (sent == results.size) {
+                                "Test message sent to $sent chat(s)."
+                            } else {
+                                "Sent to $sent of ${results.size} chats. ${failureText(firstFailure)}"
+                            }
                         }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Send test message") }
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Send test message") }
+            }
             TelegramOperationStatus(
                 area = TelegramFeedbackArea.ACTIVATION,
                 activeArea = feedbackArea,
@@ -350,21 +353,23 @@ internal fun TelegramSetupScreen(
             } else {
                 Text("This removes the stored token and all chat IDs.", color = MaterialTheme.colorScheme.error)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        runAsync(TelegramFeedbackArea.SECURITY) {
-                            withContext(Dispatchers.IO) { store.clear() }
-                            config = store.config()
-                            enabled = false
-                            tokenInput = ""
-                            destinationText = ""
-                            botName = null
-                            discovered = emptyList()
-                            confirmRemove = false
-                            feedback = "Telegram configuration removed."
-                            onConfigurationChanged()
-                        }
-                    }) { Text("Remove") }
-                    TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    CompactActions {
+                        Button(onClick = {
+                            runAsync(TelegramFeedbackArea.SECURITY) {
+                                withContext(Dispatchers.IO) { store.clear() }
+                                config = store.config()
+                                enabled = false
+                                tokenInput = ""
+                                destinationText = ""
+                                botName = null
+                                discovered = emptyList()
+                                confirmRemove = false
+                                feedback = "Telegram configuration removed."
+                                onConfigurationChanged()
+                            }
+                        }) { Text("Remove") }
+                        TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    }
                 }
             }
             TelegramOperationStatus(
@@ -409,7 +414,7 @@ private fun TelegramCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(shape = RoundedCornerShape(20.dp),
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp), content = content)

@@ -65,7 +65,7 @@ internal fun PowerSourceSettingsScreen(
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(onClick = onBack) { Text("‹ Settings") }
+        TextButton(onClick = onBack) { Text(if (LocalDashboardReturn.current != null) "‹ Status" else "‹ Settings") }
         Text(
             "Power sources",
             style = MaterialTheme.typography.headlineMedium,
@@ -98,7 +98,7 @@ internal fun PowerSourceSettingsContent(
 
     SetupGuidanceCaption(helpLevel)
     Text(
-        "Choose the main grid source. You can also require charger loss to corroborate an outage; grid recovery does not wait for the charger. Battery readings remain available.",
+        "Choose charger detection or an optional grid integration. PowerOcean can assist the charger so either source detects loss.",
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
@@ -135,17 +135,17 @@ internal fun PowerSourceSettingsContent(
                     store.select(PowerSourceStore.Source.ANDROID_CHARGER)
                     onPowerSourceChanged()
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Use Android charger") }
         }
     }
 
-    PowerSourceSectionTitle("EcoFlow modules")
+    PowerSourceSectionTitle("Optional integrations")
     SettingsCard {
         SourceHeading(title = "PowerOcean account", status = if (selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) "ACTIVE · EXPERIMENTAL" else "EXPERIMENTAL")
         Text("For homes powered through PowerOcean battery backup. Reads EcoFlow's account service with your normal login, without developer keys or installer access.",
             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        OutlinedButton(onClick = onOpenPowerOceanAccount, modifier = Modifier.fillMaxWidth()) { Text("Set up PowerOcean account") }
+        OutlinedButton(onClick = onOpenPowerOceanAccount, modifier = Modifier) { Text("Set up PowerOcean account") }
     }
     ExpandableSettingsSection("Other EcoFlow connections", "Local Modbus or approved Developer API") {
     SettingsCard {
@@ -161,7 +161,7 @@ internal fun PowerSourceSettingsContent(
         sourceStatus?.takeIf { it.source == PowerSourceStore.Source.ECOFLOW_MODBUS }?.let {
             SettingText("Last reading", it.detail ?: it.availability.name)
         }
-        OutlinedButton(onClick = onOpenEcoFlowLocal, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenEcoFlowLocal, modifier = Modifier) {
             Text("Set up local connection")
         }
     }
@@ -172,7 +172,7 @@ internal fun PowerSourceSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        OutlinedButton(onClick = onOpenEcoFlowCloud, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenEcoFlowCloud, modifier = Modifier) {
             Text("Set up EcoFlow Cloud")
         }
     }
@@ -181,7 +181,7 @@ internal fun PowerSourceSettingsContent(
     ExpandableSettingsSection("Which source should I choose?", "Simple charger detection or an optional integration") {
         SettingText("Simplest", "Android charger")
         SettingText("Most private", "EcoFlow local connection")
-        SettingText("No installer", "EcoFlow Cloud")
+        SettingText("No installer", "PowerOcean account")
         Text(
             "Developer Cloud is a read-only preview. Account monitoring is experimental and requires verified grid behavior, fresh live data and an explicit opt-in. Manufacturer restrictions may apply.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -279,7 +279,7 @@ private fun EcoFlowLocalSettingsContent(
                     feedback = "Android charger is now the active grid source."
                     onPowerSourceChanged()
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Use Android charger") }
         }
     }
@@ -339,7 +339,7 @@ private fun EcoFlowLocalSettingsContent(
             )
             OutlinedButton(
                 onClick = { requestLocalNetworkAccess.launch(LOCAL_NETWORK_PERMISSION) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Allow local network access") }
         }
         OutlinedTextField(
@@ -375,70 +375,72 @@ private fun EcoFlowLocalSettingsContent(
         }
         SetupFlowSection(2, setupStep, helpLevel.isGuided, "Save, test and select") {
         if (editingAllowed) {
-            OutlinedButton(
-                onClick = {
-                    val parsed = parsedConfig(host, portText, unitText)
-                    if (parsed == null) {
-                        feedback = "Enter a private local IPv4 address, a port from 1 to 65535, and a unit from 0 to 247."
-                    } else {
-                        store.saveEcoFlowConfig(parsed)
-                        savedConfig = parsed
-                        feedback = "Connection settings saved. Run the read-only test next."
-                        onPowerSourceChanged()
-                    }
-                },
-                enabled = !testing,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Save connection") }
-            Button(
-                onClick = {
-                    if (!hasLocalNetworkAccess(context)) {
-                        requestLocalNetworkAccess.launch(LOCAL_NETWORK_PERMISSION)
-                        return@Button
-                    }
-                    val config = store.ecoFlowConfig()
-                    if (!config.isValid || config.host != host.trim() ||
-                        config.port.toString() != portText || config.unitId.toString() != unitText
-                    ) {
-                        feedback = "Save these connection settings before testing them."
-                        return@Button
-                    }
-                    testing = true
-                    feedback = null
-                    scope.launch {
-                        val signal = withContext(Dispatchers.IO) {
-                            runCatching {
-                                EcoFlowGridSignalMapper.toSignal(
-                                    EcoFlowGridSignalMapper.decode(
-                                        client.readGridRegisters(config.host, config.port, config.unitId)
-                                    ),
-                                    System.currentTimeMillis()
-                                )
-                            }.getOrElse { error ->
-                                PowerSignal(
-                                    GridAvailability.UNKNOWN,
-                                    System.currentTimeMillis(),
-                                    PowerSourceStore.ECOFLOW_PROVIDER_ID,
-                                    connectionErrorMessage(error)
-                                )
+            CompactActions {
+                OutlinedButton(
+                    onClick = {
+                        val parsed = parsedConfig(host, portText, unitText)
+                        if (parsed == null) {
+                            feedback = "Enter a private local IPv4 address, a port from 1 to 65535, and a unit from 0 to 247."
+                        } else {
+                            store.saveEcoFlowConfig(parsed)
+                            savedConfig = parsed
+                            feedback = "Connection settings saved. Run the read-only test next."
+                            onPowerSourceChanged()
+                        }
+                    },
+                    enabled = !testing,
+                    modifier = Modifier
+                ) { Text("Save connection") }
+                Button(
+                    onClick = {
+                        if (!hasLocalNetworkAccess(context)) {
+                            requestLocalNetworkAccess.launch(LOCAL_NETWORK_PERMISSION)
+                            return@Button
+                        }
+                        val config = store.ecoFlowConfig()
+                        if (!config.isValid || config.host != host.trim() ||
+                            config.port.toString() != portText || config.unitId.toString() != unitText
+                        ) {
+                            feedback = "Save these connection settings before testing them."
+                            return@Button
+                        }
+                        testing = true
+                        feedback = null
+                        scope.launch {
+                            val signal = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    EcoFlowGridSignalMapper.toSignal(
+                                        EcoFlowGridSignalMapper.decode(
+                                            client.readGridRegisters(config.host, config.port, config.unitId)
+                                        ),
+                                        System.currentTimeMillis()
+                                    )
+                                }.getOrElse { error ->
+                                    PowerSignal(
+                                        GridAvailability.UNKNOWN,
+                                        System.currentTimeMillis(),
+                                        PowerSourceStore.ECOFLOW_PROVIDER_ID,
+                                        connectionErrorMessage(error)
+                                    )
+                                }
                             }
+                            store.recordEcoFlowTest(signal)
+                            testing = false
+                            feedback = when (signal.availability) {
+                                GridAvailability.AVAILABLE -> "Connected. EcoFlow reports grid power available."
+                                GridAvailability.UNAVAILABLE -> "Connected. EcoFlow reports islanded operation with grid power unavailable."
+                                GridAvailability.UNKNOWN -> "No trustworthy reading: ${signal.detail.orEmpty()}"
+                            }
+                            onPowerSourceChanged()
                         }
-                        store.recordEcoFlowTest(signal)
-                        testing = false
-                        feedback = when (signal.availability) {
-                            GridAvailability.AVAILABLE -> "Connected. EcoFlow reports grid power available."
-                            GridAvailability.UNAVAILABLE -> "Connected. EcoFlow reports islanded operation with grid power unavailable."
-                            GridAvailability.UNKNOWN -> "No trustworthy reading: ${signal.detail.orEmpty()}"
-                        }
-                        onPowerSourceChanged()
-                    }
-                },
-                enabled = !testing && savedConfig.isValid && localNetworkAllowed,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (testing) {
-                    CircularProgressIndicator(strokeWidth = 2.dp)
-                } else Text("Test read-only connection")
+                    },
+                    enabled = !testing && savedConfig.isValid && localNetworkAllowed,
+                    modifier = Modifier
+                ) {
+                    if (testing) {
+                        CircularProgressIndicator(strokeWidth = 2.dp)
+                    } else Text("Test read-only connection")
+                }
             }
         }
         if (sourceStatus?.source == PowerSourceStore.Source.ECOFLOW_MODBUS) {
@@ -455,7 +457,7 @@ private fun EcoFlowLocalSettingsContent(
                     }
                 },
                 enabled = ready && !testing && localNetworkAllowed,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Use EcoFlow PowerOcean") }
         }
         }

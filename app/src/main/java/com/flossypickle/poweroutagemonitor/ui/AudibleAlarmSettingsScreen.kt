@@ -60,12 +60,12 @@ internal fun AudibleAlarmSettingsContent(
         if (audibleAlarmActive) {
             OutlinedButton(
                 onClick = onDismissAudibleAlarm,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Dismiss current outage alarm") }
         }
         OutlinedButton(
             onClick = onTestAudibleAlarm,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Play 5-second test") }
     }
     ExpandableSettingsSection("Sound", "Selected tone or built-in beep") {
@@ -96,14 +96,14 @@ internal fun AudibleAlarmSettingsContent(
                         )
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Choose Android alarm sound") }
         if (audibleSettings.soundUri != null) {
             TextButton(
                 onClick = {
                     onAudibleSettingsChange(audibleSettings.copy(soundUri = null))
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Use built-in beep") }
         }
         Text(
@@ -166,7 +166,7 @@ internal fun AudibleAlarmSettingsContent(
             )
             OutlinedButton(
                 onClick = { openExactAlarmSettings(context) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Allow exact alarms") }
         }
     }

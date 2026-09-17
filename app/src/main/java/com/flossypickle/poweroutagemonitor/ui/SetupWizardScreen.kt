@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -123,12 +124,12 @@ internal fun SetupWizardScreen(
             if (step == 0) {
                 OutlinedButton(
                     onClick = { showRestore = true },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 ) { Text("Restore an existing backup") }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (step > 0) {
-                    OutlinedButton(onClick = { step-- }, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { step-- }) {
                         Text("Back")
                     }
                 }
@@ -404,7 +405,7 @@ private fun WizardCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
-    Card(shape = RoundedCornerShape(22.dp),
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.fillMaxWidth().padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(11.dp), content = content)

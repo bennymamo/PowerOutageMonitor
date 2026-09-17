@@ -29,69 +29,112 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = owner
         worker = owner.launch {
-            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null, dataStalled: Boolean? = null, check: PowerSourceCheck? = null) {
-                if (isActive) onSignal(PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled, check))
+            var latest: PowerSignal? = null
+            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null,
+                dataStalled: Boolean? = null, check: PowerSourceCheck? = null) {
+                if (isActive) {
+                    val signal = PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled, check)
+                    latest = signal; onSignal(signal)
+                }
             }
             val client = PowerOceanAccountClient()
             var session: PowerOceanAccountClient.Session? = null
             var credentials: PowerOceanAccountClient.PushCredentials? = null
-            var backoff = 60_000L
             val liveCheck = PowerOceanLiveCheck()
+            val gridInspection = PowerOceanGridInspection(PowerOceanGridCorrelation.Profile())
+            gridInspection.resumeOffGridEpisode(PowerSourceStore(appContext).assistedEcoFlowOutageStartedAt())
+            val sampling = PowerOceanSamplingSchedule()
+            var backoff = 60_000L
+            var retryAt = 0L
+            var attemptedManual = 0L
+            var lastFailure: String? = null
+            // Account editing requires switching away from this source; avoid decrypting secrets every idle tick.
+            var savedAccount = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
+            var nextAccountRetry = 0L
             while (isActive) {
+                if (savedAccount == null && android.os.SystemClock.elapsedRealtime() >= nextAccountRetry) {
+                    savedAccount = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
+                    nextAccountRetry = android.os.SystemClock.elapsedRealtime() + 10_000
+                    // Credential-protected storage becomes available after the first unlock.
+                    if (savedAccount != null) manualRevision.incrementAndGet()
+                }
                 val store = PowerSourceStore(appContext)
                 val assisted = store.powerOceanAssistedSettings()
-                val interval = if (incident()) assisted.outageSeconds else assisted.normalSeconds
-                if (assisted.enabled && (store.powerOceanAssistancePaused() || interval == 0 && manualRevision.get() == 0L) && session == null) {
-                    emit(GridAvailability.UNKNOWN, "EcoFlow checks are manual; the local charger watcher continues.")
+                val active = incident()
+                val seconds = if (assisted.enabled) {
+                    if (active) assisted.outageSeconds else assisted.normalSeconds
+                } else savedAccount?.refreshSeconds?.coerceAtLeast(60) ?: 60
+                val schedule = PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), true,
+                    store.powerOceanAssistancePaused(), assisted.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
+                val monotonic = android.os.SystemClock.elapsedRealtime()
+                val retryBlocked = monotonic < retryAt && schedule.manualRevision <= attemptedManual
+                val due = !retryBlocked && sampling.due(schedule, monotonic)
+                if (!due) {
+                    val now = System.currentTimeMillis()
+                    val next = if (schedule.paused) null else sampling.nextDueAt?.let {
+                        now + (maxOf(it, retryAt) - monotonic).coerceAtLeast(0)
+                    }
+                    val last = latest
+                    val check = last?.check?.copy(cycleState = when { schedule.paused -> PowerSourceCheck.CycleState.PAUSED; lastFailure != null -> PowerSourceCheck.CycleState.FAILED; else -> PowerSourceCheck.CycleState.WAITING },
+                        nextCheckAtEpochMs = next)
+                    val recent = last?.check?.liveReportAtEpochMs?.let { now - it in 0..90_000 } == true
+                    val availability = if (recent && !schedule.paused && lastFailure == null) last?.availability ?: GridAvailability.UNKNOWN else GridAvailability.UNKNOWN
+                    val detail = lastFailure ?: when {
+                        schedule.paused -> "EcoFlow paused. Connection closed; charger watching continues."
+                        check == null -> "EcoFlow connection closed. Waiting for a scheduled or manual check."
+                        else -> "EcoFlow connection closed between checks. " + if (recent) "Last readings remain recent." else "Last check is saved; charger watching continues."
+                    }
+                    // Reassess existing evidence without receiving or making any network request.
+                    emit(availability, detail, last?.recoveryPending ?: false, last?.evidenceReceivedAtEpochMs,
+                        last?.dataPossiblyStalled, check)
                     delay(1000); continue
                 }
-                val account = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
-                if (account == null) {
-                    emit(GridAvailability.UNKNOWN, "Unlock this device and check PowerOcean account settings.")
-                    delay(60_000); continue
+                attemptedManual = schedule.manualRevision
+                val account = savedAccount
+                val started = System.currentTimeMillis()
+                liveCheck.begin(started)
+                emit(GridAvailability.UNKNOWN, "Connecting for an EcoFlow check…", check = PowerSourceCheck(started, null, false,
+                    cycleState = PowerSourceCheck.CycleState.CONNECTING))
+                if (account == null || !store.powerOceanProfileVerified(account)) {
+                    lastFailure = if (account == null) "Unlock this device and check PowerOcean account settings." else "Verify this installation's grid profile before monitoring."
+                    emit(GridAvailability.UNKNOWN, lastFailure!!, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                    if (account != null) return@launch
+                    sampling.finishCheck(android.os.SystemClock.elapsedRealtime()); delay(1000); continue
                 }
-                if (!store.powerOceanProfileVerified(account)) {
-                    emit(GridAvailability.UNKNOWN, "Verify this installation's grid profile before monitoring.")
-                    return@launch
-                }
-                emit(GridAvailability.UNKNOWN, "Connecting to PowerOcean live readings…")
                 try {
-                    ensureActive()
+                    if (session?.connection != account) { session = null; credentials = null }
                     if (session == null) {
-                        when (val result = client.login(account)) {
-                            is EcoFlowCloudClient.Result.Success -> session = result.value
+                        when (val login = client.login(account)) {
+                            is EcoFlowCloudClient.Result.Success -> session = login.value
                             is EcoFlowCloudClient.Result.Failure -> {
-                                emit(GridAvailability.UNKNOWN, result.message)
-                                if (!result.retryable) return@launch
+                                lastFailure = login.message
+                                emit(GridAvailability.UNKNOWN, login.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                                if (!login.retryable) return@launch
                             }
                         }
                     }
                     val current = session
-                    ensureActive()
                     if (current != null && credentials == null) {
-                        when (val result = client.pushCredentials(current)) {
-                            is EcoFlowCloudClient.Result.Success -> credentials = result.value
+                        when (val access = client.pushCredentials(current)) {
+                            is EcoFlowCloudClient.Result.Success -> credentials = access.value
                             is EcoFlowCloudClient.Result.Failure -> {
-                                emit(GridAvailability.UNKNOWN, result.message)
-                                if (!result.retryable) return@launch
+                                lastFailure = access.message
+                                emit(GridAvailability.UNKNOWN, access.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                                if (!access.retryable) return@launch
                             }
                         }
                     }
                     val access = credentials
                     if (current != null && access != null) {
-                        val connectedAt = android.os.SystemClock.elapsedRealtime()
+                        lastFailure = null
                         val failure = PowerOceanPushProbe(appContext).inspect(current, access,
-                            requestLiveReporting = store.powerOceanRequestsLiveReporting(),
+                            requestLiveReporting = true, inspectionSeconds = assisted.checkWindowSeconds,
                             correlationProfile = PowerOceanGridCorrelation.Profile(),
                             requireChargerConfirmation = store.powerOceanRequiresChargerConfirmation(),
-                            continuous = true, readIntervalSeconds = account.refreshSeconds.coerceAtLeast(60),
-                            readSchedule = {
-                                val settings = store.powerOceanAssistedSettings()
-                                val active = incident()
-                                val seconds = if (settings.enabled) { if (active) settings.outageSeconds else settings.normalSeconds } else account.refreshSeconds.coerceAtLeast(60)
-                                PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), settings.enabled, settings.enabled && store.powerOceanAssistancePaused(),
-                                    settings.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
-                            }, liveCheck = liveCheck) { update ->
+                            readIntervalSeconds = account.refreshSeconds.coerceAtLeast(60), singleCheck = true,
+                            cyclePolicy = PowerOceanCheckCyclePolicy(assisted.checkWindowSeconds, assisted.extraPowerUpdates),
+                            sharedGridInspection = gridInspection, liveCheck = liveCheck,
+                            readSchedule = { PowerOceanReadSchedule(null, incident(), 1, true, store.powerOceanAssistancePaused()) }) { update ->
                             val result = update.confirmation ?: return@inspect
                             val detail = when (result.reason) {
                                 PowerOceanLossConfirmation.Reason.CONNECTED -> "EcoFlow reports a grid connection."
@@ -126,20 +169,43 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                     } })
                                 PowerSourceCheck(requested, status.lastDevicePushAt,
                                     result.availability != GridAvailability.UNKNOWN,
-                                    status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations)
+                                    status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations, cycleState = PowerSourceCheck.CycleState.COLLECTING,
+                                    deviceUpdates = status.deviceUpdates, powerUpdates = status.powerUpdates, valuesChanged = status.valuesChanged)
                             } }
                             emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, update.gridInspection.correlation?.evidenceReceivedAtUtcMillis,
                                 update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)
+
                         }
-                        emit(GridAvailability.UNKNOWN, failure ?: "PowerOcean feed stopped.")
-                        // Authentication/topic rejection stops automatic access attempts. User reconnects explicitly.
-                        if (failure?.contains(Regex("MQTT code (4|5|128)\\)")) == true) return@launch
-                        if (android.os.SystemClock.elapsedRealtime() - connectedAt > 5 * 60_000L) backoff = 60_000
+                        lastFailure = failure
+                        if (failure?.contains(Regex("MQTT code (4|5)\\)")) == true) {
+                            // Broker rejected previously saved access. Reauthenticate on the next bounded retry.
+                            session = null; credentials = null
+                        }
+                        if (failure?.contains(Regex("MQTT code 128\\)")) == true) {
+                            emit(GridAvailability.UNKNOWN, failure, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                            return@launch
+                        }
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { emit(GridAvailability.UNKNOWN, "PowerOcean readings unavailable; waiting before reconnecting.") }
-                delay(backoff + kotlin.random.Random.nextLong(0, 10_000))
-                backoff = (backoff * 2).coerceAtMost(30 * 60_000L)
+                catch (_: Exception) { lastFailure = "EcoFlow check unavailable. Connection closed; waiting before retrying." }
+                val after = store.powerOceanAssistedSettings()
+                val afterIncident = incident()
+                val afterSeconds = if (after.enabled) { if (afterIncident) after.outageSeconds else after.normalSeconds } else account.refreshSeconds.coerceAtLeast(60)
+                sampling.finishCheck(android.os.SystemClock.elapsedRealtime(), schedule.copy(intervalSeconds = afterSeconds.takeIf { it > 0 }, incident = afterIncident,
+                    paused = store.powerOceanAssistancePaused()))
+                if (lastFailure != null) {
+                    retryAt = android.os.SystemClock.elapsedRealtime() + backoff
+                    backoff = (backoff * 2).coerceAtMost(30 * 60_000L)
+                } else { retryAt = 0; backoff = 60_000 }
+                val now = System.currentTimeMillis()
+                val next = sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
+                val completed = latest
+                emit(if (lastFailure == null) completed?.availability ?: GridAvailability.UNKNOWN else GridAvailability.UNKNOWN,
+                    lastFailure ?: "EcoFlow check complete. Connection closed.", completed?.recoveryPending ?: false,
+                    completed?.evidenceReceivedAtEpochMs, completed?.dataPossiblyStalled,
+                    completed?.check?.copy(cycleState = if (lastFailure == null) PowerSourceCheck.CycleState.WAITING else PowerSourceCheck.CycleState.FAILED,
+                        finishedAtEpochMs = now, nextCheckAtEpochMs = next))
+                delay(1000)
             }
         }
     }

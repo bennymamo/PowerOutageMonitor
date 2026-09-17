@@ -192,6 +192,55 @@ class PowerOceanGridCorrelationTest {
         assertEquals(PowerOceanGridCorrelation.State.INVERTER_OFF_GRID, c.snapshot(3_000).state)
     }
 
+    @Test fun sampledConnectionNeedsNewDeviceDataAfterAnIntentionalGapAndKeepsOriginalCodeTime() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1000, false, false, true); c.observe(power(700f), 2000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(3_600_000).state)
+        c.observe(grid(0), 3_600_001, false, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(3_600_001).state)
+        c.observe(power(740f), 3_601_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, c.snapshot(3_601_000).state)
+        assertEquals(1000L, c.snapshot(3_601_000).evidenceReceivedAtUtcMillis)
+    }
+    @Test fun knownOffGridEpisodeKeepsZeroAcrossClosedConnectionButCannotRecoverFromCachedCodeAlone() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(1), 1000, false, true, true); c.observe(meter(0f), 2000, false, true, true)
+        c.observe(grid(0), 122_000, false, false, true)
+        c.observe(grid(1), 123_000, false, true, true)
+        assertTrue(c.snapshot(123_000).zeroFlowSeen)
+        c.observe(meter(-800f), 124_000, false, true, true)
+        c.observe(meter(-790f), 127_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY, c.snapshot(127_000).state)
+        c.observe(grid(0), 128_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, c.snapshot(128_000).state)
+    }
+    @Test fun replyMeterArrivingBeforeDeviceFeedIsUsedOnlyAfterDeviceDataArrives() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1000, false, false, true); c.observe(meter(12f), 1100, false, false, true)
+        assertNull(c.snapshot(1100).currentMeterValue)
+        c.observe(power(700f), 2000, false, true, true)
+        assertEquals(12.0, c.snapshot(2000).currentMeterValue!!, 0.0)
+    }
+    @Test fun restartedKnownOutageStillNeedsLiveMeterReturnEvidence() {
+        val c = PowerOceanGridCorrelation(profile); c.resumeOffGridEpisode(1000)
+        c.observe(grid(0), 5000, false, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(5000).state)
+        c.observe(power(700f), 6000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_OFF_GRID, c.snapshot(6000).state)
+        c.observe(meter(-800f), 7000, false, true, true); c.observe(meter(-790f), 10_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY, c.snapshot(10_000).state)
+    }
+    @Test fun changingMeterActivityAcrossBoundedChecksCanEstablishReturnAfterLongIntentionalGap() {
+        val c = PowerOceanGridCorrelation(profile); c.resumeOffGridEpisode(1000)
+        c.observe(meter(-800f), 2000, false, false, true)
+        c.observe(power(700f), 3000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_OFF_GRID, c.snapshot(3000).state)
+        c.observe(meter(-790f), 183_000, false, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(183_000).state)
+        c.observe(power(740f), 184_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY, c.snapshot(184_000).state)
+        assertEquals(183_000L, c.snapshot(184_000).evidenceReceivedAtUtcMillis)
+    }
     private fun power(watts: Float) = PowerOceanPushDecoder.Report(33, mapOf("sysLoadPwr" to watts))
 
     private fun grid(code: Long) = PowerOceanPushDecoder.Report(8, mapOf("sysGridSta" to code))

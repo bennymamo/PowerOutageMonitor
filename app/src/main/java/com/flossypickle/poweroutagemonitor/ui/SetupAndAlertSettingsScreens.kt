@@ -28,14 +28,16 @@ internal fun SetupTestingSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        Button(onClick = onOpenSetupChecklist, modifier = Modifier.fillMaxWidth()) {
-            Text("Open setup checklist")
-        }
-        OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) {
-            Text("Open diagnostics")
-        }
-        OutlinedButton(onClick = onOpenTestMode, modifier = Modifier.fillMaxWidth()) {
-            Text("Open test mode")
+        CompactActions {
+            Button(onClick = onOpenSetupChecklist, modifier = Modifier) {
+                Text("Open setup checklist")
+            }
+            OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier) {
+                Text("Open diagnostics")
+            }
+            OutlinedButton(onClick = onOpenTestMode, modifier = Modifier) {
+                Text("Open test mode")
+            }
         }
     }
 }
@@ -65,7 +67,7 @@ internal fun AlertChannelsSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenTelegram, modifier = Modifier) {
             Text("Configure Telegram")
         }
     }
@@ -81,7 +83,7 @@ internal fun AlertChannelsSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        OutlinedButton(onClick = onOpenSms, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenSms, modifier = Modifier) {
             Text("Configure device SMS")
         }
     }
@@ -98,7 +100,7 @@ internal fun AlertChannelsSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
-        OutlinedButton(onClick = onOpenEmail, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onOpenEmail, modifier = Modifier) {
             Text("Configure email")
         }
     }

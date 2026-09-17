@@ -54,6 +54,24 @@ class PowerOceanSamplingScheduleTest {
         assertFalse(c.due(incident, 1000)); assertFalse(c.due(incident, 59_999))
         assertTrue(c.due(incident, 60_000)); assertFalse(c.due(incident, 60_001))
     }
+    @Test fun completedLongCycleSkipsElapsedSlotsAndAlwaysLeavesAFutureCheck() {
+        val c = PowerOceanSamplingSchedule(); assertTrue(c.due(s(60), 1000))
+        c.finishCheck(121_000)
+        assertEquals(181_000L, c.nextDueAt); assertFalse(c.due(s(60), 121_001))
+        assertTrue(c.due(s(60), 181_000))
+    }
+    @Test fun incidentFoundDuringLongCollectionAdoptsMinuteScheduleWithoutImmediateReconnect() {
+        val c = PowerOceanSamplingSchedule(); c.due(s(3600), 1000)
+        val incident = s(60, true).copy(incidentDetectedDuringCheck = true)
+        c.finishCheck(121_000, incident)
+        assertEquals(181_000L, c.nextDueAt); assertFalse(c.due(incident, 121_001))
+        assertTrue(c.due(incident, 181_000))
+    }
+    @Test fun manualOnlyFinishAndPauseHaveNoScheduledNextTime() {
+        val c = PowerOceanSamplingSchedule(); c.due(s(null, manual = 1), 1000); c.finishCheck(121_000)
+        assertNull(c.nextDueAt)
+        c.due(s(3600).copy(paused = true), 122_000); assertNull(c.nextDueAt)
+    }
     @Test fun supportedRangesIncludeManualAndHours() {
         assertTrue(PowerOceanAssistedSettings.valid(0)); assertTrue(PowerOceanAssistedSettings.valid(5)); assertTrue(PowerOceanAssistedSettings.valid(86_400))
         assertFalse(PowerOceanAssistedSettings.valid(1)); assertFalse(PowerOceanAssistedSettings.valid(-1)); assertFalse(PowerOceanAssistedSettings.valid(86_401))

@@ -10,6 +10,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,10 +113,19 @@ internal fun PowerMonitorApp(
         )
     }
     val settingsPageState = rememberSaveableStateHolder()
+    var dashboardShortcut by rememberSaveable { mutableStateOf<AppScreen?>(null) }
+    fun openShortcut(target: AppScreen) { dashboardShortcut = target; screen = target }
+    fun returnFrom(target: AppScreen, parent: AppScreen) {
+        if (dashboardShortcut == target) { dashboardShortcut = null; screen = AppScreen.STATUS }
+        else screen = parent
+    }
     var requestedSettingsSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
     var returnToChecklist by rememberSaveable { mutableStateOf(false) }
     val returnFromChecklistChild: () -> Unit = {
-        if (returnToChecklist) {
+        if (dashboardShortcut == screen) {
+            dashboardShortcut = null
+            screen = AppScreen.STATUS
+        } else if (returnToChecklist) {
             returnToChecklist = false
             screen = AppScreen.SETUP_CHECKLIST
         } else {
@@ -138,243 +148,257 @@ internal fun PowerMonitorApp(
             AppScreen.STATUS -> Unit
         }
     }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surface) {
-                Row(Modifier.fillMaxWidth().navigationBarsPadding().height(52.dp)) {
-                    primaryScreens.forEach { item ->
-                        val selected = screen == item ||
-                            item == AppScreen.SETTINGS && screen in listOf(
-                                        AppScreen.DIAGNOSTICS,
-                                        AppScreen.SETUP_CHECKLIST,
-                                        AppScreen.TEST_MODE,
-                                        AppScreen.TELEGRAM,
-                                        AppScreen.SMS,
-                                        AppScreen.EMAIL,
-                                        AppScreen.GMAIL_EMAIL,
-                                        AppScreen.RESEND_EMAIL,
-                                        AppScreen.POWER_SOURCES,
-                                        AppScreen.ECOFLOW_LOCAL,
-                                        AppScreen.ECOFLOW_CLOUD,
-                                        AppScreen.POWEROCEAN_ACCOUNT
-                            )
-                        TextButton(
-                            onClick = {
-                                returnToChecklist = false
-                                checklistAfterGuidedSetup = false
-                                screen = item
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                item.label,
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                            )
+    val directReturn: (() -> Unit)? = if (dashboardShortcut != null && dashboardShortcut == screen) {
+        { dashboardShortcut = null; screen = AppScreen.STATUS }
+    } else null
+    CompositionLocalProvider(LocalDashboardReturn provides directReturn) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            bottomBar = {
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    Row(Modifier.fillMaxWidth().navigationBarsPadding().height(52.dp)) {
+                        primaryScreens.forEach { item ->
+                            val selected = screen == item ||
+                                item == AppScreen.SETTINGS && screen in listOf(
+                                            AppScreen.DIAGNOSTICS,
+                                            AppScreen.SETUP_CHECKLIST,
+                                            AppScreen.TEST_MODE,
+                                            AppScreen.TELEGRAM,
+                                            AppScreen.SMS,
+                                            AppScreen.EMAIL,
+                                            AppScreen.GMAIL_EMAIL,
+                                            AppScreen.RESEND_EMAIL,
+                                            AppScreen.POWER_SOURCES,
+                                            AppScreen.ECOFLOW_LOCAL,
+                                            AppScreen.ECOFLOW_CLOUD,
+                                            AppScreen.POWEROCEAN_ACCOUNT
+                                )
+                            TextButton(
+                                onClick = {
+                                    returnToChecklist = false
+                                    checklistAfterGuidedSetup = false
+                                    dashboardShortcut = null
+                                    if (item == AppScreen.SETTINGS) requestedSettingsSection = SettingsSection.HOME
+                                    screen = item
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    item.label,
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
                         }
                     }
                 }
             }
+        ) { padding ->
+            when (screen) {
+                AppScreen.STATUS -> DashboardScreen(
+                    snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
+                    alertChannels, systemHealth, audibleAlarmActive, selectedPowerSource,
+                    powerSourceStatus, scheduledAlertSettings, scheduledAlertState, padding,
+                    onMonitoringEnabledChange, onDismissAudibleAlarm,
+                    onOpenPowerSources = { openShortcut(AppScreen.POWER_SOURCES) },
+                    onOpenAlertChannels = { requestedSettingsSection = SettingsSection.ALERTS; openShortcut(AppScreen.SETTINGS) },
+                    onOpenDiagnostics = { returnToChecklist = false; openShortcut(AppScreen.DIAGNOSTICS) },
+                    onOpenEcoFlowSchedule = { openShortcut(AppScreen.POWEROCEAN_ACCOUNT) }
+                )
+                AppScreen.HISTORY -> HistoryScreen(
+                    history, operationalHistory, monitorState, deliverySummaries, padding
+                )
+                AppScreen.SETTINGS -> settingsPageState.SaveableStateProvider("settings") { SettingsScreen(
+                    settings,
+                    padding,
+                    onSettingsChange,
+                    onHistoryLimitChange,
+                    onThemeModeChange,
+                    onHelpLevelChange,
+                    onBatteryLowAlertChange,
+                    scheduledAlertSettings,
+                    onScheduledAlertSettingsChange,
+                    audibleSettings,
+                    onAudibleSettingsChange,
+                    audibleAlarmActive,
+                    exactAlarmAccessGranted,
+                    onDismissAudibleAlarm,
+                    onTestAudibleAlarm,
+                    selectedPowerSource,
+                    onClearHistory,
+                    onBackupRestore,
+                    onOpenPowerSources = {
+                        returnToChecklist = false
+                        screen = AppScreen.POWER_SOURCES
+                    },
+                    onOpenSetupChecklist = {
+                        returnToChecklist = false
+                        checklistAfterGuidedSetup = false
+                        screen = AppScreen.SETUP_CHECKLIST
+                    },
+                    onOpenDiagnostics = {
+                        returnToChecklist = false
+                        screen = AppScreen.DIAGNOSTICS
+                    },
+                    onOpenTestMode = {
+                        returnToChecklist = false
+                        screen = AppScreen.TEST_MODE
+                    },
+                    onOpenTelegram = {
+                        returnToChecklist = false
+                        screen = AppScreen.TELEGRAM
+                    },
+                    onOpenSms = {
+                        returnToChecklist = false
+                        screen = AppScreen.SMS
+                    },
+                    onOpenEmail = {
+                        returnToChecklist = false
+                        screen = AppScreen.EMAIL
+                    },
+                    requestedSection = requestedSettingsSection,
+                    onSectionOpened = { requestedSettingsSection = null },
+                    onDirectBack = if (dashboardShortcut == AppScreen.SETTINGS) {
+                        { returnFrom(AppScreen.SETTINGS, AppScreen.STATUS) }
+                    } else null
+                ) }
+                AppScreen.POWER_SOURCES -> PowerSourceSettingsScreen(
+                    selectedSource = selectedPowerSource,
+                    sourceStatus = powerSourceStatus,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onOpenEcoFlowLocal = {
+                        returnToChecklist = false
+                        screen = AppScreen.ECOFLOW_LOCAL
+                    },
+                    onOpenEcoFlowCloud = {
+                        returnToChecklist = false
+                        screen = AppScreen.ECOFLOW_CLOUD
+                    },
+                    onOpenPowerOceanAccount = {
+                        returnToChecklist = false
+                        screen = AppScreen.POWEROCEAN_ACCOUNT
+                    },
+                    onPowerSourceChanged = onPowerSourceChanged,
+                    onBack = { returnFrom(AppScreen.POWER_SOURCES, AppScreen.SETTINGS) }
+                )
+                AppScreen.SETUP_CHECKLIST -> SetupChecklistScreen(
+                    settings = settings,
+                    monitorState = monitorState,
+                    systemHealth = systemHealth,
+                    alertChannels = alertChannels,
+                    hasEnabledAlertChannel = hasEnabledAlertChannel,
+                    hasSentTestAlert = hasSentTestAlert,
+                    padding = padding,
+                    backLabel = if (checklistAfterGuidedSetup) "Status" else "Settings",
+                    onOpenStatus = {
+                        returnToChecklist = false
+                        checklistAfterGuidedSetup = false
+                        screen = AppScreen.STATUS
+                    },
+                    onOpenDiagnostics = {
+                        returnToChecklist = true
+                        screen = AppScreen.DIAGNOSTICS
+                    },
+                    onOpenTestMode = {
+                        returnToChecklist = true
+                        screen = AppScreen.TEST_MODE
+                    },
+                    onOpenEmail = {
+                        returnToChecklist = true
+                        screen = AppScreen.EMAIL
+                    },
+                    onOpenTelegram = {
+                        returnToChecklist = true
+                        screen = AppScreen.TELEGRAM
+                    },
+                    onOpenSms = {
+                        returnToChecklist = true
+                        screen = AppScreen.SMS
+                    },
+                    onBack = {
+                        returnToChecklist = false
+                        screen = if (checklistAfterGuidedSetup) AppScreen.STATUS else AppScreen.SETTINGS
+                        checklistAfterGuidedSetup = false
+                    }
+                )
+                AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
+                    settings = settings,
+                    state = monitorState,
+                    snapshot = snapshot,
+                    lastObservationEpochMs = lastObservationEpochMs,
+                    deliverySummaries = deliverySummaries,
+                    padding = padding,
+                    onRetryFailedDeliveries = onRetryFailedDeliveries,
+                    onClearDeliveryRecords = onClearDeliveryRecords,
+                    onBack = returnFromChecklistChild
+                )
+                AppScreen.TEST_MODE -> TestModeScreen(
+                    settings = settings,
+                    padding = padding,
+                    onSendTestAlert = onSendTestAlert,
+                    onBack = returnFromChecklistChild
+                )
+                AppScreen.TELEGRAM -> TelegramSetupScreen(
+                    deviceName = settings.deviceName,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onConfigurationChanged = onAlertConfigurationChanged,
+                    onBack = returnFromChecklistChild
+                )
+                AppScreen.SMS -> SmsSetupScreen(
+                    deviceName = settings.deviceName,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onConfigurationChanged = onAlertConfigurationChanged,
+                    onBack = returnFromChecklistChild
+                )
+                AppScreen.EMAIL -> EmailProvidersScreen(
+                    padding = padding,
+                    helpLevel = settings.helpLevel,
+                    onOpenGmail = { screen = AppScreen.GMAIL_EMAIL },
+                    onOpenResend = { screen = AppScreen.RESEND_EMAIL },
+                    onBack = returnFromChecklistChild
+                )
+                AppScreen.GMAIL_EMAIL -> GmailEmailSetupScreen(
+                    deviceName = settings.deviceName,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onConfigurationChanged = onAlertConfigurationChanged,
+                    onBack = { screen = AppScreen.EMAIL }
+                )
+                AppScreen.RESEND_EMAIL -> ResendEmailSetupScreen(
+                    deviceName = settings.deviceName,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onConfigurationChanged = onAlertConfigurationChanged,
+                    onBack = { screen = AppScreen.EMAIL }
+                )
+                AppScreen.ECOFLOW_LOCAL -> EcoFlowLocalSetupScreen(
+                    selectedSource = selectedPowerSource,
+                    sourceStatus = powerSourceStatus,
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onPowerSourceChanged = onPowerSourceChanged,
+                    onBack = { screen = AppScreen.POWER_SOURCES }
+                )
+                AppScreen.ECOFLOW_CLOUD -> EcoFlowCloudSetupScreen(
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onBack = { screen = AppScreen.POWER_SOURCES }
+                )
+                AppScreen.POWEROCEAN_ACCOUNT -> PowerOceanAccountSetupScreen(
+                    helpLevel = settings.helpLevel,
+                    padding = padding,
+                    onPowerSourceChanged = onPowerSourceChanged,
+                    onBack = { returnFrom(AppScreen.POWEROCEAN_ACCOUNT, AppScreen.POWER_SOURCES) }
+                )
+            }
         }
-    ) { padding ->
-        when (screen) {
-            AppScreen.STATUS -> DashboardScreen(
-                snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
-                alertChannels, systemHealth, audibleAlarmActive, selectedPowerSource,
-                powerSourceStatus, scheduledAlertSettings, scheduledAlertState, padding,
-                onMonitoringEnabledChange, onDismissAudibleAlarm,
-                onOpenPowerSources = { screen = AppScreen.POWER_SOURCES },
-                onOpenAlertChannels = { requestedSettingsSection = SettingsSection.ALERTS; screen = AppScreen.SETTINGS },
-                onOpenDiagnostics = { returnToChecklist = false; screen = AppScreen.DIAGNOSTICS },
-                onOpenEcoFlowSchedule = { screen = AppScreen.POWEROCEAN_ACCOUNT }
-            )
-            AppScreen.HISTORY -> HistoryScreen(
-                history, operationalHistory, monitorState, deliverySummaries, padding
-            )
-            AppScreen.SETTINGS -> settingsPageState.SaveableStateProvider("settings") { SettingsScreen(
-                settings,
-                padding,
-                onSettingsChange,
-                onHistoryLimitChange,
-                onThemeModeChange,
-                onHelpLevelChange,
-                onBatteryLowAlertChange,
-                scheduledAlertSettings,
-                onScheduledAlertSettingsChange,
-                audibleSettings,
-                onAudibleSettingsChange,
-                audibleAlarmActive,
-                exactAlarmAccessGranted,
-                onDismissAudibleAlarm,
-                onTestAudibleAlarm,
-                selectedPowerSource,
-                onClearHistory,
-                onBackupRestore,
-                onOpenPowerSources = {
-                    returnToChecklist = false
-                    screen = AppScreen.POWER_SOURCES
-                },
-                onOpenSetupChecklist = {
-                    returnToChecklist = false
-                    checklistAfterGuidedSetup = false
-                    screen = AppScreen.SETUP_CHECKLIST
-                },
-                onOpenDiagnostics = {
-                    returnToChecklist = false
-                    screen = AppScreen.DIAGNOSTICS
-                },
-                onOpenTestMode = {
-                    returnToChecklist = false
-                    screen = AppScreen.TEST_MODE
-                },
-                onOpenTelegram = {
-                    returnToChecklist = false
-                    screen = AppScreen.TELEGRAM
-                },
-                onOpenSms = {
-                    returnToChecklist = false
-                    screen = AppScreen.SMS
-                },
-                onOpenEmail = {
-                    returnToChecklist = false
-                    screen = AppScreen.EMAIL
-                },
-                requestedSection = requestedSettingsSection,
-                onSectionOpened = { requestedSettingsSection = null }
-            ) }
-            AppScreen.POWER_SOURCES -> PowerSourceSettingsScreen(
-                selectedSource = selectedPowerSource,
-                sourceStatus = powerSourceStatus,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onOpenEcoFlowLocal = {
-                    returnToChecklist = false
-                    screen = AppScreen.ECOFLOW_LOCAL
-                },
-                onOpenEcoFlowCloud = {
-                    returnToChecklist = false
-                    screen = AppScreen.ECOFLOW_CLOUD
-                },
-                onOpenPowerOceanAccount = {
-                    returnToChecklist = false
-                    screen = AppScreen.POWEROCEAN_ACCOUNT
-                },
-                onPowerSourceChanged = onPowerSourceChanged,
-                onBack = { screen = AppScreen.SETTINGS }
-            )
-            AppScreen.SETUP_CHECKLIST -> SetupChecklistScreen(
-                settings = settings,
-                monitorState = monitorState,
-                systemHealth = systemHealth,
-                alertChannels = alertChannels,
-                hasEnabledAlertChannel = hasEnabledAlertChannel,
-                hasSentTestAlert = hasSentTestAlert,
-                padding = padding,
-                backLabel = if (checklistAfterGuidedSetup) "Status" else "Settings",
-                onOpenStatus = {
-                    returnToChecklist = false
-                    checklistAfterGuidedSetup = false
-                    screen = AppScreen.STATUS
-                },
-                onOpenDiagnostics = {
-                    returnToChecklist = true
-                    screen = AppScreen.DIAGNOSTICS
-                },
-                onOpenTestMode = {
-                    returnToChecklist = true
-                    screen = AppScreen.TEST_MODE
-                },
-                onOpenEmail = {
-                    returnToChecklist = true
-                    screen = AppScreen.EMAIL
-                },
-                onOpenTelegram = {
-                    returnToChecklist = true
-                    screen = AppScreen.TELEGRAM
-                },
-                onOpenSms = {
-                    returnToChecklist = true
-                    screen = AppScreen.SMS
-                },
-                onBack = {
-                    returnToChecklist = false
-                    screen = if (checklistAfterGuidedSetup) AppScreen.STATUS else AppScreen.SETTINGS
-                    checklistAfterGuidedSetup = false
-                }
-            )
-            AppScreen.DIAGNOSTICS -> DiagnosticsScreen(
-                settings = settings,
-                state = monitorState,
-                snapshot = snapshot,
-                lastObservationEpochMs = lastObservationEpochMs,
-                deliverySummaries = deliverySummaries,
-                padding = padding,
-                onRetryFailedDeliveries = onRetryFailedDeliveries,
-                onClearDeliveryRecords = onClearDeliveryRecords,
-                onBack = returnFromChecklistChild
-            )
-            AppScreen.TEST_MODE -> TestModeScreen(
-                settings = settings,
-                padding = padding,
-                onSendTestAlert = onSendTestAlert,
-                onBack = returnFromChecklistChild
-            )
-            AppScreen.TELEGRAM -> TelegramSetupScreen(
-                deviceName = settings.deviceName,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = returnFromChecklistChild
-            )
-            AppScreen.SMS -> SmsSetupScreen(
-                deviceName = settings.deviceName,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = returnFromChecklistChild
-            )
-            AppScreen.EMAIL -> EmailProvidersScreen(
-                padding = padding,
-                helpLevel = settings.helpLevel,
-                onOpenGmail = { screen = AppScreen.GMAIL_EMAIL },
-                onOpenResend = { screen = AppScreen.RESEND_EMAIL },
-                onBack = returnFromChecklistChild
-            )
-            AppScreen.GMAIL_EMAIL -> GmailEmailSetupScreen(
-                deviceName = settings.deviceName,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = { screen = AppScreen.EMAIL }
-            )
-            AppScreen.RESEND_EMAIL -> ResendEmailSetupScreen(
-                deviceName = settings.deviceName,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onConfigurationChanged = onAlertConfigurationChanged,
-                onBack = { screen = AppScreen.EMAIL }
-            )
-            AppScreen.ECOFLOW_LOCAL -> EcoFlowLocalSetupScreen(
-                selectedSource = selectedPowerSource,
-                sourceStatus = powerSourceStatus,
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onPowerSourceChanged = onPowerSourceChanged,
-                onBack = { screen = AppScreen.POWER_SOURCES }
-            )
-            AppScreen.ECOFLOW_CLOUD -> EcoFlowCloudSetupScreen(
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onBack = { screen = AppScreen.POWER_SOURCES }
-            )
-            AppScreen.POWEROCEAN_ACCOUNT -> PowerOceanAccountSetupScreen(
-                helpLevel = settings.helpLevel,
-                padding = padding,
-                onPowerSourceChanged = onPowerSourceChanged,
-                onBack = { screen = AppScreen.POWER_SOURCES }
-            )
-        }
+    }
+    BackHandler(enabled = dashboardShortcut != null && dashboardShortcut == screen) {
+        dashboardShortcut = null
+        screen = AppScreen.STATUS
     }
 }

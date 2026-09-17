@@ -130,7 +130,7 @@ internal fun ScheduledUpdatesSettingsContent(
 
 @Composable
 private fun IntervalEditorToggle(expanded: Boolean, onClick: () -> Unit) {
-    Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onClick, modifier = Modifier) {
         Text(if (expanded) "Done" else "Change interval")
     }
 }
@@ -183,7 +183,7 @@ private fun DurationEditor(
     Button(
         onClick = { customMs?.let(onSelect) },
         enabled = customMs in ScheduledAlertStore.INTERVAL_RANGE_MS,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
     ) { Text("Save custom interval") }
     Text(
         "Custom range: 1 minute to 30 days",

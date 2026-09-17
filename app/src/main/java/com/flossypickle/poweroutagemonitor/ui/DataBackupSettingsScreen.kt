@@ -209,6 +209,7 @@ internal fun DataBackupSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
+        ExpandableSettingsSection("Included data", "${backupCategories.size} sections selected") {
         BackupCategory.entries.forEach { category ->
             SettingSwitch(
                 title = category.title,
@@ -219,6 +220,7 @@ internal fun DataBackupSettingsContent(
                     else backupCategories - category
                 }
             )
+        }
         }
         PasswordField("Backup password", exportPassword) { exportPassword = it }
         PasswordField("Confirm password", exportConfirmation) { exportConfirmation = it }
@@ -232,7 +234,7 @@ internal fun DataBackupSettingsContent(
             enabled = !busy && backupCategories.isNotEmpty() &&
                 exportPassword.length >= PasswordBackupCipher.MIN_PASSWORD_LENGTH &&
                 exportPassword == exportConfirmation,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text(if (busy) "Working…" else "Choose where to save backup") }
         if (exportConfirmation.isNotEmpty() && exportPassword != exportConfirmation) {
             Text("The two passwords do not match.", color = MaterialTheme.colorScheme.error)
@@ -255,9 +257,10 @@ internal fun DataBackupSettingsContent(
         SettingText("Folder", automaticFolderLabel ?: "Not connected")
         OutlinedButton(
             onClick = { chooseBackupFolder.launch(automaticFolderUri?.let(Uri::parse)) },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text(if (automaticFolderUri == null) "Choose backup folder" else "Change backup folder") }
 
+        ExpandableSettingsSection("Frequency & copies", "How often to save and how many copies to keep") {
         Text("Backup frequency", fontWeight = FontWeight.Medium)
         BackupScheduleStore.ALLOWED_INTERVAL_HOURS.forEach { hours ->
             RadioChoice(
@@ -278,6 +281,8 @@ internal fun DataBackupSettingsContent(
                 onClick = { retainedCopies = copies }
             )
         }
+        }
+        ExpandableSettingsSection("Included data", "Choose the sections in each automatic backup") {
         Text("Data in each automatic backup", fontWeight = FontWeight.Medium)
         BackupCategory.entries.forEach { category ->
             SettingSwitch(
@@ -290,6 +295,8 @@ internal fun DataBackupSettingsContent(
                 }
             )
         }
+        }
+        ExpandableSettingsSection("Backup password", "Set a password or keep the saved password") {
         PasswordField(
             if (scheduleSettings.hasPassword) "New password (leave blank to keep current)"
             else "Automatic backup password",
@@ -303,6 +310,7 @@ internal fun DataBackupSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
+        }
         val automaticPasswordValid = if (automaticPassword.isEmpty()) {
             scheduleSettings.hasPassword
         } else {
@@ -335,7 +343,7 @@ internal fun DataBackupSettingsContent(
             enabled = automaticCategories.isNotEmpty() &&
                 (!automaticEnabled || automaticFolderUri != null && automaticPasswordValid) &&
                 enteredPasswordValid,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Save automatic backup plan") }
         if (automaticPassword.isNotEmpty() && automaticPassword != automaticConfirmation) {
             Text("The two automatic-backup passwords do not match.", color = MaterialTheme.colorScheme.error)
@@ -352,7 +360,7 @@ internal fun DataBackupSettingsContent(
                 }
             },
             enabled = scheduleSettings.enabled,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Create an automatic backup now") }
         scheduleStatus.lastSuccessAtEpochMs?.let {
             SettingText("Last successful copy", formatBackupDate(it))
@@ -377,7 +385,7 @@ internal fun DataBackupSettingsContent(
             },
             enabled = !busy && !settings.monitoringEnabled &&
                 importPassword.length >= PasswordBackupCipher.MIN_PASSWORD_LENGTH,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Choose backup to unlock") }
         if (settings.monitoringEnabled) {
             Text(
@@ -422,37 +430,39 @@ internal fun DataBackupSettingsContent(
                     fontSize = 12.sp
                 )
             }
-            Button(
-                onClick = {
-                    val restoreError = onRestore(document, restoreCategories, resumeMonitoring)
-                    if (restoreError == null) {
-                        pendingRestore = null
-                        editorText = null
-                        restoreCategories = emptySet()
-                        scheduleSettings = scheduleStore.settings()
-                        automaticEnabled = scheduleSettings.enabled
-                        automaticFolderUri = scheduleSettings.folderUri
-                        automaticFolderLabel = scheduleSettings.folderLabel
-                        automaticInterval = scheduleSettings.intervalHours
-                        retainedCopies = scheduleSettings.retainedCopies
-                        automaticCategories = scheduleSettings.categories
-                        result(if (resumeMonitoring) "Backup restored and monitoring resumed."
-                            else "Selected backup data restored.")
-                    } else {
-                        result(restoreError, true)
-                    }
-                },
-                enabled = !settings.monitoringEnabled && restoreCategories.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Restore selected data") }
-            OutlinedButton(
-                onClick = {
-                    editorText = if (editorText == null) manager.editableText(document) else null
-                    editorPassword = ""
-                    editorConfirmation = ""
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (editorText == null) "Open advanced backup editor" else "Close backup editor") }
+            CompactActions {
+                Button(
+                    onClick = {
+                        val restoreError = onRestore(document, restoreCategories, resumeMonitoring)
+                        if (restoreError == null) {
+                            pendingRestore = null
+                            editorText = null
+                            restoreCategories = emptySet()
+                            scheduleSettings = scheduleStore.settings()
+                            automaticEnabled = scheduleSettings.enabled
+                            automaticFolderUri = scheduleSettings.folderUri
+                            automaticFolderLabel = scheduleSettings.folderLabel
+                            automaticInterval = scheduleSettings.intervalHours
+                            retainedCopies = scheduleSettings.retainedCopies
+                            automaticCategories = scheduleSettings.categories
+                            result(if (resumeMonitoring) "Backup restored and monitoring resumed."
+                                else "Selected backup data restored.")
+                        } else {
+                            result(restoreError, true)
+                        }
+                    },
+                    enabled = !settings.monitoringEnabled && restoreCategories.isNotEmpty(),
+                    modifier = Modifier
+                ) { Text("Restore selected data") }
+                OutlinedButton(
+                    onClick = {
+                        editorText = if (editorText == null) manager.editableText(document) else null
+                        editorPassword = ""
+                        editorConfirmation = ""
+                    },
+                    modifier = Modifier
+                ) { Text(if (editorText == null) "Open advanced backup editor" else "Close backup editor") }
+            }
             editorText?.let { editable ->
                 Text(
                     "Advanced testing tool: this decrypted text may show passwords and API keys. Edit property values carefully. The original archive is never changed.",
@@ -482,7 +492,7 @@ internal fun DataBackupSettingsContent(
                     enabled = !busy &&
                         editorPassword.length >= PasswordBackupCipher.MIN_PASSWORD_LENGTH &&
                         editorPassword == editorConfirmation,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 ) { Text("Validate and save edited copy") }
                 Text(
                     "The editor cannot bypass safety checks. Invalid or incomplete data will be rejected before a new file is written.",
@@ -497,7 +507,7 @@ internal fun DataBackupSettingsContent(
                     editorPassword = ""
                     editorConfirmation = ""
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) {
                 Text("Cancel")
             }

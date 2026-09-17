@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -23,7 +24,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -94,7 +95,7 @@ internal fun DiagnosticsScreen(
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(onClick = onBack) { Text("‹ Settings") }
+        TextButton(onClick = onBack) { Text(if (LocalDashboardReturn.current != null) "‹ Status" else "‹ Settings") }
         Text("Diagnostics", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold)
         Text("A local health report for this monitoring device. It contains no credentials.",
@@ -124,7 +125,7 @@ internal fun DiagnosticsScreen(
                     color = MaterialTheme.colorScheme.onErrorContainer)
                 OutlinedButton(
                     onClick = { openNotificationSettings(context) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 ) { Text("Open notification settings") }
             }
         }
@@ -142,9 +143,7 @@ internal fun DiagnosticsScreen(
             DiagnosticRow("Last observation", report.lastObservation)
         }
 
-        Text("Delivery readiness", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection("Delivery readiness", "Channels, connection and delivery results") {
             DiagnosticRow("Internet", if (report.internetAvailable) "Available" else "Unavailable")
             DiagnosticRow("Notifications", if (report.notificationsAllowed) "Allowed" else "Blocked")
             DiagnosticRow("Power source", report.configuredPowerProviders)
@@ -164,7 +163,7 @@ internal fun DiagnosticsScreen(
                         onRetryFailedDeliveries()
                         refresh()
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 ) { Text("Retry failed alerts") }
             }
             if (report.sentDeliveries + report.failedDeliveries > 0) {
@@ -176,20 +175,20 @@ internal fun DiagnosticsScreen(
                     Text("This removes sent and failed delivery details. Outage history is kept.",
                         color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            onClearDeliveryRecords()
-                            confirmClearDeliveries = false
-                            refresh()
-                        }) { Text("Clear") }
-                        TextButton(onClick = { confirmClearDeliveries = false }) { Text("Cancel") }
+                        CompactActions {
+                            Button(onClick = {
+                                onClearDeliveryRecords()
+                                confirmClearDeliveries = false
+                                refresh()
+                            }) { Text("Clear") }
+                            TextButton(onClick = { confirmClearDeliveries = false }) { Text("Cancel") }
+                        }
                     }
                 }
             }
         }
 
-        Text("Background reliability", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection("Background reliability", "Battery settings, boot startup and interruptions") {
             DiagnosticRow("Boot startup", if (report.bootStartupConfigured) "Configured" else "Unavailable")
             DiagnosticRow("Battery optimization",
                 if (report.batteryOptimizationExcluded) "Unrestricted" else "System managed")
@@ -199,19 +198,19 @@ internal fun DiagnosticsScreen(
             report.lastOperationalInterruption?.let {
                 DiagnosticRow("Latest interruption", it)
             }
-            OutlinedButton(
-                onClick = { openAppSettings(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Open this app's system settings") }
-            TextButton(
-                onClick = { openBatteryOptimizationSettings(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("View battery optimization list") }
+            CompactActions {
+                OutlinedButton(
+                    onClick = { openAppSettings(context) },
+                    modifier = Modifier
+                ) { Text("Open this app's system settings") }
+                TextButton(
+                    onClick = { openBatteryOptimizationSettings(context) },
+                    modifier = Modifier
+                ) { Text("View battery optimization list") }
+            }
         }
 
-        Text("Local audible alarm", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection("Local audible alarm", "Sound, repeats and current alarm state") {
             DiagnosticRow("Enabled", yesNo(report.audibleAlarmEnabled))
             DiagnosticRow("Currently sounding", yesNo(report.audibleAlarmActive))
             DiagnosticRow("Repeat interval", formatMinutes(report.audibleAlarmRepeatMinutes))
@@ -225,9 +224,7 @@ internal fun DiagnosticsScreen(
             }
         }
 
-        Text("Recovery backups", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection("Recovery backups", "Schedule, destination and latest result") {
             DiagnosticRow("Automatic backups", yesNo(report.automaticBackupEnabled))
             DiagnosticRow("Destination", report.automaticBackupDestination)
             DiagnosticRow("Frequency", report.automaticBackupFrequency)
@@ -239,9 +236,7 @@ internal fun DiagnosticsScreen(
             }
         }
 
-        Text(guidance.title, style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection(guidance.title, "Device-specific instructions") {
             Text(guidance.summary, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp)
             guidance.steps.forEachIndexed { index, step ->
@@ -249,28 +244,26 @@ internal fun DiagnosticsScreen(
             }
         }
 
-        Text("Device", style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary)
-        DiagnosticCard {
+        ExpandableSettingsSection("Device", "App version, Android and model") {
             DiagnosticRow("App version", report.appVersion)
             DiagnosticRow("Android", report.androidVersion)
             DiagnosticRow("Device", report.device)
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = refresh, modifier = Modifier.weight(1f)) { Text("Refresh") }
+        CompactActions {
+            Button(onClick = refresh) { Text("Refresh") }
             OutlinedButton(
                 onClick = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText("FP Grid Monitor diagnostics", report.asPlainText()))
                     Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
             ) { Text("Copy report") }
         }
         OutlinedButton(
             onClick = { exportReport.launch(diagnosticsFileName()) },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
         ) { Text("Export report as text file") }
     }
 }
@@ -284,7 +277,7 @@ private fun DiagnosticCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(shape = RoundedCornerShape(20.dp),
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(11.dp), content = content)

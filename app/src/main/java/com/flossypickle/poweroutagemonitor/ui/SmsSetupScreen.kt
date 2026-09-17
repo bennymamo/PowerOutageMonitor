@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -19,7 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -149,21 +150,23 @@ internal fun SmsSetupScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
-                Button(
-                    onClick = { requestSmsPermission.launch(Manifest.permission.SEND_SMS) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Allow SMS sending") }
-                OutlinedButton(
-                    onClick = {
-                        openAppSettings.launch(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.parse("package:${context.packageName}")
+                CompactActions {
+                    Button(
+                        onClick = { requestSmsPermission.launch(Manifest.permission.SEND_SMS) },
+                        modifier = Modifier
+                    ) { Text("Allow SMS sending") }
+                    OutlinedButton(
+                        onClick = {
+                            openAppSettings.launch(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
                             )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Open app permission settings") }
+                        },
+                        modifier = Modifier
+                    ) { Text("Open app permission settings") }
+                }
             } else if (!capability.hasDefaultSubscription) {
                 Text(
                     "Choose a default SMS SIM in Android's SIM settings, then return here. This prevents an unattended alert from using an arbitrary SIM.",
@@ -172,7 +175,7 @@ internal fun SmsSetupScreen(
                 )
                 OutlinedButton(
                     onClick = { capability = SmsCapability.capture(context) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 ) { Text("Check again") }
             }
         }
@@ -221,70 +224,72 @@ internal fun SmsSetupScreen(
                         capability.hasDefaultSubscription && !loading
                 )
             }
-            Button(
-                onClick = {
-                    val validation = validateSmsRecipients(recipientText)
-                    if (validation.error != null) {
-                        feedback = validation.error
-                        return@Button
-                    }
-                    val canEnable = capability.supported && capability.permissionGranted &&
-                        capability.hasDefaultSubscription
-                    val requestedEnabled = enabled
-                    store.save(requestedEnabled && canEnable, validation.recipients)
-                    config = store.config()
-                    enabled = config.enabled
-                    AlertDeliveryCoordinator(context).materializePending()
-                    onConfigurationChanged()
-                    feedback = if (!canEnable && requestedEnabled) {
-                        "Recipients saved. SMS remains off until the availability checks pass."
-                    } else "SMS configuration saved."
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Save configuration") }
-            OutlinedButton(
-                onClick = {
-                    runAsync {
+            CompactActions {
+                Button(
+                    onClick = {
                         val validation = validateSmsRecipients(recipientText)
                         if (validation.error != null) {
                             feedback = validation.error
-                            return@runAsync
+                            return@Button
                         }
-                        capability = SmsCapability.capture(context)
-                        if (!capability.supported) {
-                            feedback = "This device does not support SMS messaging."
-                            return@runAsync
+                        val canEnable = capability.supported && capability.permissionGranted &&
+                            capability.hasDefaultSubscription
+                        val requestedEnabled = enabled
+                        store.save(requestedEnabled && canEnable, validation.recipients)
+                        config = store.config()
+                        enabled = config.enabled
+                        AlertDeliveryCoordinator(context).materializePending()
+                        onConfigurationChanged()
+                        feedback = if (!canEnable && requestedEnabled) {
+                            "Recipients saved. SMS remains off until the availability checks pass."
+                        } else "SMS configuration saved."
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Save configuration") }
+                OutlinedButton(
+                    onClick = {
+                        runAsync {
+                            val validation = validateSmsRecipients(recipientText)
+                            if (validation.error != null) {
+                                feedback = validation.error
+                                return@runAsync
+                            }
+                            capability = SmsCapability.capture(context)
+                            if (!capability.supported) {
+                                feedback = "This device does not support SMS messaging."
+                                return@runAsync
+                            }
+                            if (!capability.permissionGranted) {
+                                feedback = "Allow SMS sending first."
+                                return@runAsync
+                            }
+                            if (!capability.hasDefaultSubscription) {
+                                feedback = "Choose a default SMS SIM in Android settings first."
+                                return@runAsync
+                            }
+                            val message = AlertMessage(
+                                eventId = "sms-test-${UUID.randomUUID()}",
+                                kind = AlertKind.TEST,
+                                title = "FP GRID MONITOR TEST",
+                                body = "SIMULATION\n\nDevice: $deviceName\nSMS alerts can reach this number."
+                            )
+                            val results = withContext(Dispatchers.IO) {
+                                validation.recipients.map { client.send(it, message) }
+                            }
+                            val sent = results.count { it is DeliveryResult.Sent }
+                            val failure = results.firstOrNull { it !is DeliveryResult.Sent }
+                            feedback = if (sent == results.size) {
+                                "Test SMS accepted for $sent number(s)."
+                            } else {
+                                "Accepted for $sent of ${results.size} numbers. ${smsFailureText(failure)}"
+                            }
                         }
-                        if (!capability.permissionGranted) {
-                            feedback = "Allow SMS sending first."
-                            return@runAsync
-                        }
-                        if (!capability.hasDefaultSubscription) {
-                            feedback = "Choose a default SMS SIM in Android settings first."
-                            return@runAsync
-                        }
-                        val message = AlertMessage(
-                            eventId = "sms-test-${UUID.randomUUID()}",
-                            kind = AlertKind.TEST,
-                            title = "FP GRID MONITOR TEST",
-                            body = "SIMULATION\n\nDevice: $deviceName\nSMS alerts can reach this number."
-                        )
-                        val results = withContext(Dispatchers.IO) {
-                            validation.recipients.map { client.send(it, message) }
-                        }
-                        val sent = results.count { it is DeliveryResult.Sent }
-                        val failure = results.firstOrNull { it !is DeliveryResult.Sent }
-                        feedback = if (sent == results.size) {
-                            "Test SMS accepted for $sent number(s)."
-                        } else {
-                            "Accepted for $sent of ${results.size} numbers. ${smsFailureText(failure)}"
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading && capability.supported
-            ) { Text("Send test SMS") }
+                    },
+                    modifier = Modifier,
+                    enabled = !loading && capability.supported
+                ) { Text("Send test SMS") }
+            }
         }
 
         if (loading) {
@@ -321,16 +326,18 @@ internal fun SmsSetupScreen(
                 Text("This removes every saved recipient and disables SMS.",
                     color = MaterialTheme.colorScheme.error)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        store.clear()
-                        config = store.config()
-                        enabled = false
-                        recipientText = ""
-                        confirmRemove = false
-                        feedback = "SMS configuration removed."
-                        onConfigurationChanged()
-                    }) { Text("Remove") }
-                    TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    CompactActions {
+                        Button(onClick = {
+                            store.clear()
+                            config = store.config()
+                            enabled = false
+                            recipientText = ""
+                            confirmRemove = false
+                            feedback = "SMS configuration removed."
+                            onConfigurationChanged()
+                        }) { Text("Remove") }
+                        TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    }
                 }
             }
         }
@@ -367,7 +374,7 @@ private fun SmsCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {

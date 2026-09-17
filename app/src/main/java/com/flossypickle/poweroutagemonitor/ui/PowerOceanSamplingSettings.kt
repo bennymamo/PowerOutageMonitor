@@ -29,21 +29,33 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
         }
         ExpandableSettingsSection("Outage EcoFlow checks", samplingSummary(settings.outageSeconds)) {
             SamplingIntervalEditor(settings.outageSeconds, 60) { onChange(settings.copy(outageSeconds = it)) }
-            Text("Starts when charger power is lost or EcoFlow reports a possible outage. Continues until the charger reconnects and restoration finishes, even if EcoFlow has already reported grid recovery.", style = MaterialTheme.typography.bodySmall)
-        }
-        ExpandableSettingsSection("Traffic and live data", "One session; fewer requests; unofficial access") {
-            Text("Sessions and broker credentials are reused; changing intervals does not log in again. Normal requests default to hourly and outage requests to once a minute. Manual-only stops scheduled reading requests for that phase; use Check EcoFlow now on Status. These intervals control requests, not incoming updates. EcoFlow can send additional device readings while connected without another reading request from this app. The dashboard shows request and device-update times separately.")
-            Text("Every assisted check sends one temporary live-report activation plus one reading request. Live reporting is automatic in this mode; EcoFlow’s app does not need to stay open. It does not run a separate 20-second activation loop in this mode. Short intervals increase traffic; EcoFlow has not confirmed permitted quotas.")
-            Text("The same device-push grid/meter comparison is used as in the live inspection. Cached request replies cannot prove a new grid transition. Missing or stale evidence stays Unknown. Reconnect the charger to rearm local detection.")
+            Text("Starts when charger power is lost or EcoFlow reports a possible outage. Continues while the charger remains disconnected or an outage/recovery is still in progress.", style = MaterialTheme.typography.bodySmall)
         }
     }
+        ExpandableSettingsSection("Check duration & updates", "Up to ${settings.checkWindowSeconds}s · ${settings.extraPowerUpdates} extra power reports") {
+            Text("Listen to the first power report and extra reports to see whether values change. A check ends early when enough changing reports and usable grid/meter evidence arrive; otherwise it ends at the time limit. The connection is then closed. Missed schedule slots are skipped, so checks never overlap.", style = MaterialTheme.typography.bodySmall)
+            var window by remember(settings.checkWindowSeconds) { mutableStateOf(settings.checkWindowSeconds.toString()) }
+            var extra by remember(settings.extraPowerUpdates) { mutableStateOf(settings.extraPowerUpdates.toString()) }
+            OutlinedTextField(window, { window = it.take(3) }, label = { Text("Maximum listening time · seconds") }, singleLine = true,
+                supportingText = { Text("30–300 seconds; default 120") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(extra, { extra = it.take(2) }, label = { Text("Extra power reports") }, singleLine = true,
+                supportingText = { Text("1–10; default 2 after the first report") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            val w = window.toIntOrNull(); val e = extra.toIntOrNull()
+            Button({ if (w != null && e != null) onChange(settings.copy(checkWindowSeconds = w, extraPowerUpdates = e)) },
+                enabled = w != null && w in 30..300 && e != null && e in 1..10 && (w != settings.checkWindowSeconds || e != settings.extraPowerUpdates)) { Text("Save check limits") }
+        }
+        ExpandableSettingsSection("Connection & live data", "Closed between checks; saved login reused") {
+            Text("Each check opens a secure connection and sends one temporary live-report activation and one reading request. Default schedules are hourly normally and every minute during an outage. Manual-only leaves that phase disconnected until Check now. Very short intervals can leave little time between checks.", style = MaterialTheme.typography.bodySmall)
+            Text("The saved login session and broker credentials are reused until access fails or account settings change. Closing the connection stops this app receiving updates; it does not control other EcoFlow apps. This is unofficial access and EcoFlow has not confirmed permitted quotas.", style = MaterialTheme.typography.bodySmall)
+            Text("New changing device values support an unchanged grid code. Missing device data stays Unknown for EcoFlow decisions. Charger detection continues while the connection is closed, unavailable or paused.", style = MaterialTheme.typography.bodySmall)
+        }
 }
 
 internal fun samplingSummary(seconds: Int) = if (seconds == 0) "Manual only" else "Every ${formatCustomDelay(seconds * 1000L)}"
 
 @Composable
 private fun SamplingIntervalEditor(seconds: Int, defaultSeconds: Int, onSave: (Int) -> Unit) {
-    SettingSwitch("Manual checks only", "No scheduled reading requests in this phase.", seconds == 0,
+    SettingSwitch("Manual checks only", "Stay disconnected until you choose Check now in this phase.", seconds == 0,
         { onSave(if (it) 0 else defaultSeconds) })
     if (seconds == 0) return
     var unit by remember(seconds) { mutableIntStateOf(if (seconds % 3600 == 0) 3600 else if (seconds % 60 == 0) 60 else 1) }
@@ -57,5 +69,5 @@ private fun SamplingIntervalEditor(seconds: Int, defaultSeconds: Int, onSave: (I
     }
     val value = quantity.toLongOrNull()?.let { it * unit }?.takeIf { it in 5..86_400 }?.toInt()
     Text("Choose 5 seconds to 24 hours. Intervals below one minute create substantially more traffic.", style = MaterialTheme.typography.bodySmall)
-    Button({ value?.let(onSave) }, enabled = value != null && value != seconds, modifier = Modifier.fillMaxWidth()) { Text("Save interval") }
+    Button({ value?.let(onSave) }, enabled = value != null && value != seconds, modifier = Modifier) { Text("Save interval") }
 }

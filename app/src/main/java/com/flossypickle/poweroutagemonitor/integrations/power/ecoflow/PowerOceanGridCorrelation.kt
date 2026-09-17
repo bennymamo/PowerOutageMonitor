@@ -20,6 +20,7 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
         val currentMeterValue: Double? = null, val evidenceReceivedAtUtcMillis: Long? = null)
 
     private data class InitialConnectedReply(val receivedAt: Long)
+    private var pendingMeterReply: Pair<Double, Long>? = null
     private var initialConnectedReply: InitialConnectedReply? = null
     private var gridCode: Long? = null
     private var gridReceived: Long? = null
@@ -33,30 +34,52 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
     private var lastLivePush: Long? = null
     private val preZeroValues = ArrayDeque<Double>()
 
+    fun resumeOffGridEpisode(receivedAt: Long) {
+        if (receivedAt <= 0) return
+        gridCode = profile.offGridCode; gridReceived = receivedAt; offGridStarted = receivedAt; zeroFlowReceived = receivedAt
+    }
+
     fun observe(report: PowerOceanPushDecoder.Report, receivedUtcMillis: Long,
         retained: Boolean, fromDevicePush: Boolean, allowSnapshotBaseline: Boolean = false) {
         if (retained || receivedUtcMillis <= 0) return
         // Bootstrap a normal connected state only when a new device update follows the reply.
         // Once a grid state is established, snapshot replies can never overwrite it.
         // Incident monitoring disables this baseline, protecting known outages from cached recovery.
-        if (!fromDevicePush && report.command == 8 && allowSnapshotBaseline && gridCode == null &&
+        if (!fromDevicePush && report.command == 8 && allowSnapshotBaseline && (gridCode == null || gridCode == profile.connectedCode || returnEvidence != null) &&
             report.values["sysGridSta"] == profile.connectedCode) {
             initialConnectedReply = InitialConnectedReply(receivedUtcMillis)
+        }
+        if (!fromDevicePush && report.command == 1 && allowSnapshotBaseline) {
+            (report.values[profile.meterKey] as? Number)?.toDouble()?.takeIf(Double::isFinite)?.let {
+                pendingMeterReply = it to receivedUtcMillis
+            }
         }
         val previousLivePush = lastLivePush
         if (fromDevicePush && report.command in setOf(1, 8, 33) && report.values.values.any { it is Number }) {
             if (receivedUtcMillis < (lastLivePush ?: 0)) return
             if (previousLivePush != null && receivedUtcMillis - previousLivePush > profile.staleAfterMs) {
-                gridCode = null; gridReceived = null; offGridStarted = null
-                resetMeterSequence()
+                if (!allowSnapshotBaseline) {
+                    gridCode = null; gridReceived = null; offGridStarted = null; resetMeterSequence()
+                } else {
+                    // Deliberate disconnection: retain known state, but require a new live feed.
+                    meterReceived = null; meterValue = null
+                    // A candidate from the previous bounded check can be compared with new meter activity.
+                    // Zero flow or a changed grid code still resets it, so old cached flow cannot establish return.
+                }
             }
             lastLivePush = receivedUtcMillis
             val initial = initialConnectedReply
-            if (allowSnapshotBaseline && gridCode == null && initial != null &&
+            if (allowSnapshotBaseline && (gridCode == null || gridCode == profile.offGridCode && returnEvidence != null) && initial != null &&
                 receivedUtcMillis - initial.receivedAt in 1..profile.staleAfterMs) {
                 gridCode = profile.connectedCode; gridReceived = initial.receivedAt
             }
             initialConnectedReply = null
+            pendingMeterReply?.let { (value, received) ->
+                if (allowSnapshotBaseline && receivedUtcMillis - received in 0..profile.staleAfterMs) {
+                    observeMeter(value, received, false, true)
+                }
+            }
+            pendingMeterReply = null
         }
         // A request reply alone cannot prove that the inverter is still reporting.
         val live = lastLivePush?.let { receivedUtcMillis - it in 0..profile.staleAfterMs } == true
@@ -65,7 +88,7 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
             val code = report.values["sysGridSta"] as? Long ?: return
             if (receivedUtcMillis < (gridReceived ?: 0)) return
             val previousExpired = previousLivePush?.let { receivedUtcMillis - it > profile.staleAfterMs } == true
-            if (code != gridCode || previousExpired) {
+            if (code != gridCode || previousExpired && !allowSnapshotBaseline) {
                 resetMeterSequence()
                 offGridStarted = if (code == profile.offGridCode) receivedUtcMillis else null
             }
@@ -74,6 +97,11 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
             gridReceived = receivedUtcMillis
         } else if (report.command == 1) {
             val value = (report.values[profile.meterKey] as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: return
+            observeMeter(value, receivedUtcMillis, fromDevicePush, live)
+        }
+    }
+
+    private fun observeMeter(value: Double, receivedUtcMillis: Long, fromDevicePush: Boolean, live: Boolean) {
             if (receivedUtcMillis <= (meterReceived ?: 0)) return
             meterReceived = receivedUtcMillis
             meterValue = value
@@ -98,7 +126,6 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
                     returnEvidence = returnEvidence ?: receivedUtcMillis
                 }
             }
-        }
     }
 
     fun snapshot(nowUtcMillis: Long): Snapshot {

@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.os.BatteryManager
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
@@ -19,7 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -170,7 +171,7 @@ internal fun DashboardScreen(
                 Text(settings.deviceName, color = colors.onSurfaceVariant, fontSize = 14.sp)
             }
 
-            Card(
+            OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.surface)
             ) {
@@ -200,7 +201,7 @@ internal fun DashboardScreen(
                 }
             }
 
-            Card(
+            OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.surface)
             ) {
@@ -233,7 +234,7 @@ internal fun DashboardScreen(
                     if (assistedActive && assistedSettings.ignoreUnchanged) " These readings are temporarily excluded until they change." else "")
             }
 
-            Card(
+            OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.surface)
             ) {
@@ -268,7 +269,7 @@ internal fun DashboardScreen(
                     if (audibleAlarmActive) {
                         OutlinedButton(
                             onClick = onDismissAudibleAlarm,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
                         ) { Text("Dismiss audible alarm") }
                     }
                     StatusRow(
@@ -285,39 +286,31 @@ internal fun DashboardScreen(
                         val incident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
                             setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
                         StatusRow("EcoFlow checks", samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds), colors.onSurfaceVariant, onOpenEcoFlowSchedule)
-                        OutlinedButton(onClick = {
-                            assistancePaused = !assistancePaused
-                            sourceStore.setPowerOceanAssistancePaused(assistancePaused)
-                            com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.refreshScheduledAlerts(context)
-                            checkFeedback = if (assistancePaused) "EcoFlow assistance paused; charger monitoring continues." else "EcoFlow assistance resumed."
-                        }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (assistancePaused) "Resume EcoFlow assistance" else "Pause EcoFlow assistance")
-                        }
-                        if (assistancePaused) Text("EcoFlow checks are paused. Your account stays saved; charger monitoring continues.", style = MaterialTheme.typography.bodySmall)
                         val check = powerSourceStatus?.check
-                        val phase = check?.phase(checkClock)
                         val manualNotStarted = manualCheckAt > 0 && (check?.requestedAtEpochMs ?: 0) < manualCheckAt
                         val awaitingManualStart = manualNotStarted && checkClock - manualCheckAt < 45_000
-                        val checking = awaitingManualStart || phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.CHECKING
-                        OutlinedButton(onClick = {
-                            manualCheckAt = System.currentTimeMillis()
-                            checkFeedback = null
-                            com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.requestPowerOceanCheck(context)
-                        }, enabled = settings.monitoringEnabled && !assistancePaused && !checking, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (checking) "Checking EcoFlow…" else "Check EcoFlow now")
-                        }
-                        if (!assistancePaused && settings.monitoringEnabled) {
-                            val checkMessage = when {
-                                awaitingManualStart -> "Connecting to EcoFlow to check its readings…"
-                                manualNotStarted -> "Could not start the check within 45 seconds. Expand Connections & alerts for the connection message. Charger monitoring continues."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.CHECKING -> "Asking EcoFlow to update its readings. This can take up to 45 seconds."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.GRID_VERIFIED -> "EcoFlow readings received. Grid status verified for this check."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.LIVE_RECEIVED -> "EcoFlow device updates are arriving. Waiting for a usable grid code; charger monitoring continues."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.TIMED_OUT -> "EcoFlow did not send a current update within 45 seconds. Charger monitoring continues."
-                                else -> "Waiting for the first EcoFlow check."
+                        val checking = awaitingManualStart || check?.active == true
+                        CompactActions {
+                            OutlinedButton(onClick = {
+                                manualCheckAt = System.currentTimeMillis()
+                                checkFeedback = null
+                                com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.requestPowerOceanCheck(context)
+                            }, enabled = settings.monitoringEnabled && !assistancePaused && !checking) {
+                                Text(if (checking) "Checking…" else "Check now")
                             }
-                            Text(checkMessage, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                            check?.let { PowerSourceCheckDetails(it, "EcoFlow readings") }
+                            OutlinedButton(onClick = {
+                                assistancePaused = !assistancePaused
+                                sourceStore.setPowerOceanAssistancePaused(assistancePaused)
+                                com.flossypickle.poweroutagemonitor.monitoring.MonitoringService.refreshScheduledAlerts(context)
+                                checkFeedback = if (assistancePaused) "EcoFlow paused; charger monitoring continues." else "EcoFlow resumed."
+                            }) { Text(if (assistancePaused) "Resume EcoFlow" else "Pause EcoFlow") }
+                        }
+                        if (awaitingManualStart) Text("Starting your EcoFlow check…", style = MaterialTheme.typography.bodySmall)
+                        else if (manualNotStarted) Text("Check could not start. Open Connections & alerts for the connection message.",
+                            color = colors.error, style = MaterialTheme.typography.bodySmall)
+                        check?.let {
+                            PowerSourceCheckSummary(it, paused = assistancePaused, enabled = settings.monitoringEnabled)
+                            PowerSourceCheckDetails(it, "EcoFlow readings")
                         }
                         checkFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
                     }
@@ -410,7 +403,7 @@ internal fun DashboardScreen(
 
 @Composable
 private fun WarningCard(warning: String) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {

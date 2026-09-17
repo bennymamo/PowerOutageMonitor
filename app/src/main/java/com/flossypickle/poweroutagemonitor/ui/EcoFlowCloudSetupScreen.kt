@@ -193,7 +193,7 @@ internal fun EcoFlowCloudSetupScreen(
                         context.startActivity(Intent(Intent.ACTION_VIEW, DEVELOPER_URL.toUri()))
                     }.onFailure { feedback = "No browser is available to open EcoFlow Developer." }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
             ) { Text("Open EcoFlow Developer") }
         }
         }
@@ -247,7 +247,7 @@ internal fun EcoFlowCloudSetupScreen(
                         feedback = "EcoFlow credentials saved securely."
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 enabled = !loading && accessKey.isNotBlank() && secretKey.isNotBlank()
             ) { Text("Save credentials") }
         }
@@ -276,7 +276,7 @@ internal fun EcoFlowCloudSetupScreen(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier,
                 enabled = !loading && config.hasCredentials && accessKey.isBlank() && secretKey.isBlank()
             ) {
                 if (loading) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
@@ -289,15 +289,17 @@ internal fun EcoFlowCloudSetupScreen(
                 Text(config.selectedDeviceName ?: "Selected EcoFlow device", fontWeight = FontWeight.Medium)
                 Text("Read its data without changing inverter settings or your outage detector.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Button(
-                    onClick = { inspectDevice(EcoFlowCloudClient.Device(serial, config.selectedDeviceName ?: "EcoFlow device", online = false)) },
-                    enabled = !loading && config.hasCredentials,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Open device dashboard") }
-                OutlinedButton(onClick = { inspectDevice(EcoFlowCloudClient.Device(serial,
-                    config.selectedDeviceName ?: "EcoFlow device", online = false), requestedFields = true) },
-                    enabled = !loading && config.hasCredentials, modifier = Modifier.fillMaxWidth()) {
-                    Text("Request PowerOcean readings")
+                CompactActions {
+                    Button(
+                        onClick = { inspectDevice(EcoFlowCloudClient.Device(serial, config.selectedDeviceName ?: "EcoFlow device", online = false)) },
+                        enabled = !loading && config.hasCredentials,
+                        modifier = Modifier
+                    ) { Text("Open device dashboard") }
+                    OutlinedButton(onClick = { inspectDevice(EcoFlowCloudClient.Device(serial,
+                        config.selectedDeviceName ?: "EcoFlow device", online = false), requestedFields = true) },
+                        enabled = !loading && config.hasCredentials, modifier = Modifier) {
+                        Text("Request PowerOcean readings")
+                    }
                 }
             }
         }
@@ -313,16 +315,18 @@ internal fun EcoFlowCloudSetupScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
-                    Button(
-                        onClick = {
-                            inspectDevice(device)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading
-                    ) { Text("Inspect read-only data") }
-                    OutlinedButton(onClick = { inspectDevice(device, requestedFields = true) },
-                        modifier = Modifier.fillMaxWidth(), enabled = !loading) {
-                        Text("Request PowerOcean readings")
+                    CompactActions {
+                        Button(
+                            onClick = {
+                                inspectDevice(device)
+                            },
+                            modifier = Modifier,
+                            enabled = !loading
+                        ) { Text("Inspect read-only data") }
+                        OutlinedButton(onClick = { inspectDevice(device, requestedFields = true) },
+                            modifier = Modifier, enabled = !loading) {
+                            Text("Request PowerOcean readings")
+                        }
                     }
                     Text("Try this documented read-only request if the all-readings inspection is denied. It requests grid phases, solar, battery and home power; it does not change inverter settings.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -334,7 +338,7 @@ internal fun EcoFlowCloudSetupScreen(
             PowerSourceSectionTitle("Latest inspection")
             SettingsCard {
                 SettingText("Displayable readings", quota.reportedValues.size.toString())
-                OutlinedButton(onClick = { dashboardOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { dashboardOpen = true }, modifier = Modifier) {
                     Text("View latest device snapshot")
                 }
             }
@@ -373,7 +377,7 @@ internal fun EcoFlowCloudSetupScreen(
                         }
                     }
                 }
-            }, enabled = !loading && config.hasCredentials, modifier = Modifier.fillMaxWidth()) {
+            }, enabled = !loading && config.hasCredentials, modifier = Modifier) {
                 Text("Check live-data access")
             }
         }
@@ -407,30 +411,32 @@ internal fun EcoFlowCloudSetupScreen(
                 if (!confirmClear) {
                     OutlinedButton(
                         onClick = { confirmClear = true },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier,
                         enabled = !loading
                     ) { Text("Remove EcoFlow Cloud credentials") }
                 } else {
                     Text("This removes the encrypted keys and selected device from this phone.")
-                    Button(
-                        onClick = {
-                            store.clear()
-                            config = store.config()
-                            devices = emptyList()
-                            selectedQuota = null
-                            dashboard = null
-                            dashboardError = null
-                            liveBrokerSummary = null
-                            confirmClear = false
-                            feedback = "EcoFlow Cloud credentials removed."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading
-                    ) { Text("Remove credentials") }
-                    OutlinedButton(
-                        onClick = { confirmClear = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Cancel") }
+                    CompactActions {
+                        Button(
+                            onClick = {
+                                store.clear()
+                                config = store.config()
+                                devices = emptyList()
+                                selectedQuota = null
+                                dashboard = null
+                                dashboardError = null
+                                liveBrokerSummary = null
+                                confirmClear = false
+                                feedback = "EcoFlow Cloud credentials removed."
+                            },
+                            modifier = Modifier,
+                            enabled = !loading
+                        ) { Text("Remove credentials") }
+                        OutlinedButton(
+                            onClick = { confirmClear = false },
+                            modifier = Modifier
+                        ) { Text("Cancel") }
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -115,18 +116,20 @@ internal fun GmailEmailSetupScreen(
             } else {
                 Text("Create a Google App Password, then enter the account, app password and recipients.")
             }
-            OutlinedButton({
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://myaccount.google.com/signinoptions/two-step-verification"))) }
-                    .onFailure { feedback = "No browser is available to open Google Account settings." }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Open Google 2-Step Verification") }
-            OutlinedButton(
-                onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(APP_PASSWORDS_URL)))
-                    }.onFailure { feedback = "No browser is available to open Google Account settings." }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Open Google App Passwords") }
+            CompactActions {
+                OutlinedButton({
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://myaccount.google.com/signinoptions/two-step-verification"))) }
+                        .onFailure { feedback = "No browser is available to open Google Account settings." }
+                }, modifier = Modifier) { Text("Open Google 2-Step Verification") }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(APP_PASSWORDS_URL)))
+                        }.onFailure { feedback = "No browser is available to open Google Account settings." }
+                    },
+                    modifier = Modifier
+                ) { Text("Open Google App Passwords") }
+            }
             if (helpLevel.isGuided) {
                 Text(
                     "If Google does not show App Passwords, first confirm that 2-Step Verification is on. Organization accounts, Advanced Protection and security-key-only accounts may not allow them.",
@@ -210,74 +213,76 @@ internal fun GmailEmailSetupScreen(
                 }
                 Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !loading)
             }
-            Button(
-                onClick = {
-                    runAsync {
-                        val validation = validateGmailInputs(account, recipientText)
-                        if (validation.error != null) {
-                            feedback = validation.error
-                            return@runAsync
+            CompactActions {
+                Button(
+                    onClick = {
+                        runAsync {
+                            val validation = validateGmailInputs(account, recipientText)
+                            if (validation.error != null) {
+                                feedback = validation.error
+                                return@runAsync
+                            }
+                            if (appPasswordInput.isNotBlank() &&
+                                !GmailSmtpProtocol.isValidAppPassword(appPasswordInput)) {
+                                feedback = "The Google App Password must contain 16 characters. Spaces are allowed."
+                                return@runAsync
+                            }
+                            val requestedEnabled = enabled
+                            withContext(Dispatchers.IO) {
+                                store.save(appPasswordInput, enabled, account, validation.recipients)
+                            }
+                            config = withContext(Dispatchers.IO) { store.config() }
+                            withContext(Dispatchers.IO) {
+                                AlertDeliveryCoordinator(context).materializePending()
+                            }
+                            onConfigurationChanged()
+                            enabled = config.enabled
+                            appPasswordInput = ""
+                            feedback = if (requestedEnabled && !config.enabled) {
+                                "Saved, but Gmail remains disabled until the account, App Password and recipient are present."
+                            } else "Gmail configuration saved."
                         }
-                        if (appPasswordInput.isNotBlank() &&
-                            !GmailSmtpProtocol.isValidAppPassword(appPasswordInput)) {
-                            feedback = "The Google App Password must contain 16 characters. Spaces are allowed."
-                            return@runAsync
-                        }
-                        val requestedEnabled = enabled
-                        withContext(Dispatchers.IO) {
-                            store.save(appPasswordInput, enabled, account, validation.recipients)
-                        }
-                        config = withContext(Dispatchers.IO) { store.config() }
-                        withContext(Dispatchers.IO) {
-                            AlertDeliveryCoordinator(context).materializePending()
-                        }
-                        onConfigurationChanged()
-                        enabled = config.enabled
-                        appPasswordInput = ""
-                        feedback = if (requestedEnabled && !config.enabled) {
-                            "Saved, but Gmail remains disabled until the account, App Password and recipient are present."
-                        } else "Gmail configuration saved."
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Save configuration") }
-            OutlinedButton(
-                onClick = {
-                    runAsync {
-                        val validation = validateGmailInputs(account, recipientText)
-                        val password = withContext(Dispatchers.IO) { passwordForOperation() }
-                        if (validation.error != null) {
-                            feedback = validation.error
-                            return@runAsync
-                        }
-                        if (password == null || !GmailSmtpProtocol.isValidAppPassword(password)) {
-                            feedback = "Enter the 16-character Google App Password first."
-                            return@runAsync
-                        }
-                        val message = AlertMessage(
-                            eventId = "gmail-test-${UUID.randomUUID()}",
-                            kind = AlertKind.TEST,
-                            title = "FP GRID MONITOR TEST",
-                            body = "SIMULATION\n\nDevice: $deviceName\nGmail alerts can reach this address."
-                        )
-                        val results = withContext(Dispatchers.IO) {
-                            validation.recipients.map { recipient ->
-                                client.send(account.trim(), password, recipient, message)
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Save configuration") }
+                OutlinedButton(
+                    onClick = {
+                        runAsync {
+                            val validation = validateGmailInputs(account, recipientText)
+                            val password = withContext(Dispatchers.IO) { passwordForOperation() }
+                            if (validation.error != null) {
+                                feedback = validation.error
+                                return@runAsync
+                            }
+                            if (password == null || !GmailSmtpProtocol.isValidAppPassword(password)) {
+                                feedback = "Enter the 16-character Google App Password first."
+                                return@runAsync
+                            }
+                            val message = AlertMessage(
+                                eventId = "gmail-test-${UUID.randomUUID()}",
+                                kind = AlertKind.TEST,
+                                title = "FP GRID MONITOR TEST",
+                                body = "SIMULATION\n\nDevice: $deviceName\nGmail alerts can reach this address."
+                            )
+                            val results = withContext(Dispatchers.IO) {
+                                validation.recipients.map { recipient ->
+                                    client.send(account.trim(), password, recipient, message)
+                                }
+                            }
+                            val sent = results.count { it is DeliveryResult.Sent }
+                            val failure = results.firstOrNull { it !is DeliveryResult.Sent }
+                            feedback = if (sent == results.size) {
+                                "Test email sent to $sent address(es)."
+                            } else {
+                                "Sent to $sent of ${results.size} addresses. ${gmailFailureText(failure)}"
                             }
                         }
-                        val sent = results.count { it is DeliveryResult.Sent }
-                        val failure = results.firstOrNull { it !is DeliveryResult.Sent }
-                        feedback = if (sent == results.size) {
-                            "Test email sent to $sent address(es)."
-                        } else {
-                            "Sent to $sent of ${results.size} addresses. ${gmailFailureText(failure)}"
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !loading
-            ) { Text("Send test email") }
+                    },
+                    modifier = Modifier,
+                    enabled = !loading
+                ) { Text("Send test email") }
+            }
         }
 
         if (loading) {
@@ -309,20 +314,22 @@ internal fun GmailEmailSetupScreen(
                 Text("This removes the stored App Password, account and all recipients.",
                     color = MaterialTheme.colorScheme.error)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        runAsync {
-                            withContext(Dispatchers.IO) { store.clear() }
-                            config = store.config()
-                            enabled = false
-                            account = ""
-                            appPasswordInput = ""
-                            recipientText = ""
-                            confirmRemove = false
-                            feedback = "Gmail configuration removed."
-                            onConfigurationChanged()
-                        }
-                    }) { Text("Remove") }
-                    TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    CompactActions {
+                        Button(onClick = {
+                            runAsync {
+                                withContext(Dispatchers.IO) { store.clear() }
+                                config = store.config()
+                                enabled = false
+                                account = ""
+                                appPasswordInput = ""
+                                recipientText = ""
+                                confirmRemove = false
+                                feedback = "Gmail configuration removed."
+                                onConfigurationChanged()
+                            }
+                        }) { Text("Remove") }
+                        TextButton(onClick = { confirmRemove = false }) { Text("Cancel") }
+                    }
                 }
             }
         }
@@ -354,7 +361,7 @@ private fun GmailCard(
     containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {

@@ -30,15 +30,17 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         continuous: Boolean = false, readIntervalSeconds: Int = 60,
         readSchedule: (() -> PowerOceanReadSchedule)? = null,
         liveCheck: PowerOceanLiveCheck = PowerOceanLiveCheck(),
+        singleCheck: Boolean = false, cyclePolicy: PowerOceanCheckCyclePolicy = PowerOceanCheckCyclePolicy(),
+        sharedGridInspection: PowerOceanGridInspection? = null,
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
-        require(inspectionSeconds in setOf(45, 300, 900))
+        require(inspectionSeconds in setOf(45, 300, 900) || singleCheck && inspectionSeconds in 30..300)
         require(readIntervalSeconds in 60..3600)
-        val gridInspection = PowerOceanGridInspection(correlationProfile)
+        val gridInspection = sharedGridInspection ?: PowerOceanGridInspection(correlationProfile)
         // Private, bounded development capture for comparing utility loss and restoration.
         // Record only predefined decoded numeric/boolean fields; never raw payloads or account data.
         val validationTrace = context?.takeIf {
             it.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-        }?.takeUnless { continuous }?.let { java.io.File(it.cacheDir, "powerocean-grid-validation.jsonl") }
+        }?.takeUnless { continuous || singleCheck }?.let { java.io.File(it.cacheDir, "powerocean-grid-validation.jsonl") }
         runCatching { validationTrace?.writeText(JSONObject().put("inspectionStartedUtcMillis", System.currentTimeMillis()).toString() + "\n") }
         val queue = ConcurrentLinkedQueue<Packet>()
         val client = runCatching {
@@ -92,13 +94,14 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 try { client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1) }
                 catch (failure: MqttException) { if (failure.reasonCode != 128) throw failure }
             }
-            val deadline = if (continuous) Long.MAX_VALUE else SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
+            val deadline = if (continuous && !singleCheck) Long.MAX_VALUE else SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
             val sampling = PowerOceanSamplingSchedule()
             var nextLiveRequest = 0L
             stage = "requesting and receiving readings"
             while (SystemClock.elapsedRealtime() < deadline && !disconnected.get()) {
                 ensureActive()
                 val schedule = readSchedule?.invoke() ?: PowerOceanReadSchedule(readIntervalSeconds, false, 0, false)
+                if (singleCheck && schedule.paused) break
                 val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
                 if (readDue) liveCheck.begin(System.currentTimeMillis())
                 if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest)) {
@@ -121,7 +124,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     receivedPacket.reports.forEach {
                         reports[it.command] = receivedPacket; changed = true
                         gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush,
-                            allowSnapshotBaseline = continuous && !schedule.incident)
+                            allowSnapshotBaseline = singleCheck || continuous && !schedule.incident)
                         liveCheck.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
                     }
                     runCatching {
@@ -165,8 +168,13 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     )
                     if (snapshot.sections.isNotEmpty()) lastSnapshot = snapshot
                 }
-                // Keep source health and auxiliary charger state current even during quiet periods.
-                if (SystemClock.elapsedRealtime() >= nextUiUpdate) {
+                val enough = singleCheck && cyclePolicy.enough(liveCheck.status(),
+                    gridInspection.snapshot().let {
+                        it.lastCode != null && it.meterValue != null && it.correlation?.currentMeterValue != null && it.correlation.state != PowerOceanGridCorrelation.State.UNKNOWN &&
+                            (it.correlation?.state != PowerOceanGridCorrelation.State.INVERTER_OFF_GRID || it.correlation?.currentMeterValue == 0.0)
+                    })
+                // Publish the final packet before closing, even inside the display throttle window.
+                if (enough || SystemClock.elapsedRealtime() >= nextUiUpdate) {
                     chargerPowered = runCatching {
                         com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot.from(context?.registerReceiver(
                             null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)))?.externallyPowered
@@ -184,6 +192,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     }
                     nextUiUpdate = SystemClock.elapsedRealtime() + 1000
                 }
+                if (enough) break
                 delay(250)
             }
             when { disconnected.get() -> "The push connection disconnected. No outage was inferred."

@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -72,7 +73,7 @@ internal fun SourceDetailsScreen(
             Text(snapshot.deviceName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         }
         item {
-            Card(
+            OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(20.dp)
             ) {
@@ -97,7 +98,7 @@ internal fun SourceDetailsScreen(
             }
         }
         item {
-            Button(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onRefresh, enabled = !refreshing, modifier = Modifier) {
                 if (refreshing) CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary,
                     strokeWidth = 2.dp, modifier = Modifier.padding(end = 12.dp).size(20.dp))
                 Text(if (refreshing) "Reading device…" else refreshLabel)
@@ -107,7 +108,7 @@ internal fun SourceDetailsScreen(
             items(snapshot.summary.chunked(2), key = { row -> "summary:${row.first().key}" }) { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     row.forEach { reading ->
-                        Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(20.dp),
+                        OutlinedCard(border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.weight(1f), shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(reading.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -161,7 +162,11 @@ internal fun SourceDetailsScreen(
         item {
             Text("These readings do not change your selected outage detector.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            snapshot.acquisitionNote?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+            snapshot.acquisitionNote?.let { note ->
+                ExpandableSettingsSection("Reading information", "Connection method and data limitations") {
+                    Text(note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                }
+            }
             Text("Power-flow signs are shown as reported by the device. Import/export and charging direction need validation for your equipment.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             if (snapshot.omittedValues > 0) {

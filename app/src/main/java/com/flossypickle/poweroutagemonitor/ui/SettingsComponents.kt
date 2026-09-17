@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,10 +33,11 @@ import androidx.compose.ui.unit.sp
 /** Shared visual building blocks used by focused Settings feature pages. */
 @Composable
 internal fun SettingsCategoryCard(title: String, summary: String, onClick: () -> Unit) {
-    Card(
+    OutlinedCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -53,9 +55,10 @@ internal fun SettingsCategoryCard(title: String, summary: String, onClick: () ->
 
 @Composable
 internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
+    OutlinedCard(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             Modifier.fillMaxWidth().padding(16.dp),
@@ -139,7 +142,7 @@ internal fun DelayOptions(
                 ?.let { onSelect(it * 1_000L) }
         },
         enabled = parsedSeconds != null && parsedSeconds in 0L..86_400L,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
     ) { Text("Save custom delay") }
 }
 
