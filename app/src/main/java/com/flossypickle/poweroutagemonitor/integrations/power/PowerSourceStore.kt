@@ -103,7 +103,7 @@ internal class PowerSourceStore(context: Context) {
         val edit = preferences.edit().putBoolean("account_charger_first", settings.enabled)
             .putInt("account_normal_seconds", settings.normalSeconds).putInt("account_outage_seconds", settings.outageSeconds)
             .putBoolean("account_warn_unchanged", settings.warnOnUnchanged).putBoolean("account_ignore_unchanged", settings.ignoreUnchanged)
-        if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
+        if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
         check(edit.commit()) { "Unable to save charger-first settings" }
     }
 
@@ -113,11 +113,12 @@ internal class PowerSourceStore(context: Context) {
     }
 
     fun assistedChargerLossStartedAt() = preferences.getLong("account_charger_loss_started", 0)
+    fun assistedEcoFlowOutageStartedAt() = preferences.getLong("account_ecoflow_outage_started", 0)
     fun assistedChargerLossRecovered() = preferences.getBoolean("account_charger_loss_recovered", false)
-    fun recordAssistedChargerState(lossStartedAt: Long, recovered: Boolean) {
-        if (lossStartedAt == assistedChargerLossStartedAt() && recovered == assistedChargerLossRecovered()) return
+    fun recordAssistedChargerState(lossStartedAt: Long, recovered: Boolean, ecoFlowOutageStartedAt: Long = 0) {
+        if (lossStartedAt == assistedChargerLossStartedAt() && recovered == assistedChargerLossRecovered() && ecoFlowOutageStartedAt == assistedEcoFlowOutageStartedAt()) return
         check(preferences.edit().putLong("account_charger_loss_started", lossStartedAt)
-            .putBoolean("account_charger_loss_recovered", recovered).commit())
+            .putBoolean("account_charger_loss_recovered", recovered).putLong("account_ecoflow_outage_started", ecoFlowOutageStartedAt).commit())
     }
 
     fun ecoFlowConfig() = EcoFlowConfig(
@@ -154,7 +155,7 @@ internal class PowerSourceStore(context: Context) {
             .remove("account_charger_loss_started")
             .remove("account_assistance_paused").remove("account_data_warning_episode").remove("account_data_warning_sent")
             .remove("status_data_stalled")
-            .remove("account_charger_loss_recovered")
+            .remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
             .remove(KEY_STATUS_SOURCE)
             .remove(KEY_STATUS_AVAILABILITY)
             .remove(KEY_STATUS_OBSERVED_AT)

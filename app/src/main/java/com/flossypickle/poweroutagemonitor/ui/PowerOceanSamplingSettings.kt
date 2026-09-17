@@ -12,9 +12,9 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOcean
 @Composable
 internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, onChange: (PowerOceanAssistedSettings) -> Unit) {
     SettingsCard {
-        SettingSwitch("Charger-first assistance", "Charger alerts work offline. EcoFlow assists with confirmation and recovery at separate normal/outage intervals.", settings.enabled,
+        SettingSwitch("Charger-first assistance", "Charger alerts work offline. Verified EcoFlow grid/meter loss also counts as an outage if backup power keeps the charger on. Each source can detect loss independently.", settings.enabled,
             { onChange(settings.copy(enabled = it)) })
-        if (settings.enabled) Text("Requires a charger that loses power with the grid. EcoFlow cannot recover an outage using a report received before that charger loss.", style = MaterialTheme.typography.bodySmall)
+        if (settings.enabled) Text("A charger that loses grid power gives the earliest local alert. If backup power keeps it on, EcoFlow can still detect an outage at its next check. A powered charger cannot clear an EcoFlow-detected outage.", style = MaterialTheme.typography.bodySmall)
     }
     ExpandableSettingsSection("Stuck-reading safeguards", "Warning after three identical checks") {
         Text("Power readings are compared between checks, ignoring request IDs and timestamps. A steady load can legitimately produce identical values. Changing power values clears the warning.", style = MaterialTheme.typography.bodySmall)
@@ -29,7 +29,7 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
         }
         ExpandableSettingsSection("Outage EcoFlow checks", samplingSummary(settings.outageSeconds)) {
             SamplingIntervalEditor(settings.outageSeconds, 60) { onChange(settings.copy(outageSeconds = it)) }
-            Text("Starts when charger power is lost. Continues until the charger reconnects and restoration finishes, even if EcoFlow has already reported grid recovery.", style = MaterialTheme.typography.bodySmall)
+            Text("Starts when charger power is lost or EcoFlow reports a possible outage. Continues until the charger reconnects and restoration finishes, even if EcoFlow has already reported grid recovery.", style = MaterialTheme.typography.bodySmall)
         }
         ExpandableSettingsSection("Traffic and live data", "One session; fewer requests; unofficial access") {
             Text("Sessions and broker credentials are reused; changing intervals does not log in again. Normal requests default to hourly and outage requests to once a minute. Manual-only stops scheduled reading requests for that phase; use Check EcoFlow now on Status. A secure connection can still receive device pushes and send keepalives.")

@@ -9,7 +9,7 @@ internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
 }
 
 internal data class PowerOceanReadSchedule(val intervalSeconds: Int?, val incident: Boolean,
-    val manualRevision: Long, val liveOnEachRead: Boolean, val paused: Boolean = false) {
+    val manualRevision: Long, val liveOnEachRead: Boolean, val paused: Boolean = false, val incidentDetectedDuringCheck: Boolean = false) {
     fun needsLiveActivation(continuousEnabled: Boolean, readDue: Boolean, periodicDue: Boolean): Boolean =
         !paused && if (liveOnEachRead) readDue else continuousEnabled && periodicDue
 }
@@ -24,7 +24,10 @@ internal class PowerOceanSamplingSchedule {
     fun due(schedule: PowerOceanReadSchedule, now: Long): Boolean {
         require(schedule.intervalSeconds == null || schedule.intervalSeconds in 5..86_400)
         val before = previous
-        if (before == null || before.paused && !schedule.paused || before.incident != schedule.incident) nextRead = now
+        if (before != null && !before.incident && schedule.incident && schedule.incidentDetectedDuringCheck && lastRead != null) {
+            // The check that detected EcoFlow loss is already the first incident check.
+            nextRead = schedule.intervalSeconds?.let { lastRead!! + it * 1000L } ?: Long.MAX_VALUE
+        } else if (before == null || before.paused && !schedule.paused || before.incident != schedule.incident) nextRead = now
         else if (before.intervalSeconds != schedule.intervalSeconds) {
             nextRead = lastRead?.let { it + (schedule.intervalSeconds ?: 86_400) * 1000L } ?: now
         }

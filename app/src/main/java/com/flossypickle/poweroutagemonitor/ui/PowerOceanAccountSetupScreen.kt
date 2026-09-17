@@ -417,7 +417,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                                 if (requestedGeneration != generation) return@launch
                                 val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, true, inspectionSeconds,
                                     correlationProfile = if (useTestedGridCorrelation) PowerOceanGridCorrelation.Profile() else null,
-                                    requireChargerConfirmation = requireChargerConfirmation, readIntervalSeconds = current.connection.refreshSeconds.coerceAtLeast(60)) { update ->
+                                    requireChargerConfirmation = requireChargerConfirmation && !assistedSettings.enabled, readIntervalSeconds = current.connection.refreshSeconds.coerceAtLeast(60)) { update ->
                                     if (requestedGeneration == generation) {
                                         snapshot = update.snapshot; dashboardOpen = true
                                         pushStatus = "Push packets: ${update.packets} · unsupported: ${update.unsupported} · retained: ${update.retained}"

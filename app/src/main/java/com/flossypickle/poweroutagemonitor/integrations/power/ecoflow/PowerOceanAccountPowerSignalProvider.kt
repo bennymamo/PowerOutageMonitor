@@ -19,8 +19,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         manualRevision.incrementAndGet()
         return true
     }
-    private fun incident() = chargerPowered == false || com.flossypickle.poweroutagemonitor.storage.MonitorStore(appContext).state().phase in
-        setOf(com.flossypickle.poweroutagemonitor.OutageEngine.Phase.OUTAGE, com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_RESTORE)
+    private fun incident() = chargerPowered == false || PowerSourceStore(appContext).assistedEcoFlowOutageStartedAt() > 0 || com.flossypickle.poweroutagemonitor.storage.MonitorStore(appContext).state().phase in
+        setOf(com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_OUTAGE, com.flossypickle.poweroutagemonitor.OutageEngine.Phase.OUTAGE, com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_RESTORE)
 
 
     @Synchronized
@@ -89,7 +89,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                 val settings = store.powerOceanAssistedSettings()
                                 val active = incident()
                                 val seconds = if (settings.enabled) { if (active) settings.outageSeconds else settings.normalSeconds } else account.refreshSeconds.coerceAtLeast(60)
-                                PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), settings.enabled, settings.enabled && store.powerOceanAssistancePaused())
+                                PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), settings.enabled, settings.enabled && store.powerOceanAssistancePaused(),
+                                    settings.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
                             }, liveCheck = liveCheck) { update ->
                             val result = update.confirmation ?: return@inspect
                             val detail = when (result.reason) {

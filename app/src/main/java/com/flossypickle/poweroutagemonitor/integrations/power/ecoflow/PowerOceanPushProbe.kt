@@ -175,7 +175,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     displaySnapshot.let { currentSnapshot ->
                         val comparison = gridInspection.snapshot()
                         val confirmation = comparison.correlation?.let {
-                            PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation, liveCheck.status().hasCurrentReport(System.currentTimeMillis()))
+                            PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation && !schedule.liveOnEachRead, liveCheck.status().hasCurrentReport(System.currentTimeMillis()))
                         }
                         withContext(Dispatchers.Main) {
                             onUpdate(Update(currentSnapshot, packets, unsupported, retained, comparison, chargerPowered, confirmation, liveCheck.status()))

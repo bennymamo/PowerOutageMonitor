@@ -114,7 +114,7 @@ internal fun PowerSourceSettingsContent(
         }
     }
     } else SettingsCard {
-        Text("Charger-first assistance is selected. Local charger alerts continue offline; EcoFlow helps identify grid recovery.")
+        Text("Charger-first assistance is selected. Charger loss or verified EcoFlow grid/meter loss can detect an outage independently. A powered backup charger cannot veto an EcoFlow outage.")
         val assisted = store.powerOceanAssistedSettings()
         Text("Normal checks: ${samplingSummary(assisted.normalSeconds)}. Outage checks: ${samplingSummary(assisted.outageSeconds)}.", style = MaterialTheme.typography.bodySmall)
     }

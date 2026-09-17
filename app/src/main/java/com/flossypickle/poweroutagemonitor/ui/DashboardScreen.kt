@@ -282,8 +282,8 @@ internal fun DashboardScreen(
                         onOpenPowerSources
                     )
                     if (assistedActive) {
-                        val incident = snapshot?.externallyPowered == false || monitorState.phase in
-                            setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
+                        val incident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
+                            setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
                         StatusRow("EcoFlow checks", samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds), colors.onSurfaceVariant, onOpenEcoFlowSchedule)
                         OutlinedButton(onClick = {
                             assistancePaused = !assistancePaused

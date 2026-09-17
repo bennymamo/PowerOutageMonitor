@@ -280,8 +280,8 @@ internal class MonitoringService : Service() {
         val phase = MonitorStore(this).state().phase
         val result = ChargerFirstPolicy.evaluate(charger, primary, lossAt,
             phase in setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE),
-            store.assistedChargerLossRecovered(), now)
-        store.recordAssistedChargerState(lossAt, result.recovered)
+            store.assistedChargerLossRecovered(), now, store.assistedEcoFlowOutageStartedAt())
+        store.recordAssistedChargerState(lossAt, result.recovered, result.ecoFlowOutageStartedAt)
         return primary.copy(availability = result.availability, observedAtEpochMs = now,
             detail = result.detail, recoveryPending = result.recoveryPending)
     }
