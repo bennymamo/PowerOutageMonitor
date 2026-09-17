@@ -37,7 +37,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertSto
 import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
 import com.flossypickle.poweroutagemonitor.configuration.BackupDocument
 
-private enum class SettingsSection(val title: String) {
+internal enum class SettingsSection(val title: String) {
     HOME("Settings"),
     MONITORING("Monitoring"),
     MESSAGES("Alerts & sound"),
@@ -89,9 +89,14 @@ internal fun SettingsScreen(
     onOpenTestMode: () -> Unit,
     onOpenTelegram: () -> Unit,
     onOpenSms: () -> Unit,
-    onOpenEmail: () -> Unit
+    onOpenEmail: () -> Unit,
+    requestedSection: SettingsSection? = null,
+    onSectionOpened: () -> Unit = {}
 ) {
     var section by rememberSaveable { mutableStateOf(SettingsSection.HOME) }
+    LaunchedEffect(requestedSection) {
+        requestedSection?.let { section = it; onSectionOpened() }
+    }
 
     BackHandler(enabled = section != SettingsSection.HOME) {
         section = parentSection(section)

@@ -2,7 +2,8 @@ package com.flossypickle.poweroutagemonitor.integrations.power.ecoflow
 
 /** Per-request live receipt and comparisons across checks; never a measurement timestamp guarantee. */
 internal class PowerOceanLiveCheck {
-    data class Status(val requestedAt: Long?, val lastDevicePushAt: Long?, val unchangedChecks: Int, val comparedPower: Boolean = false) {
+    data class Status(val requestedAt: Long?, val lastDevicePushAt: Long?, val unchangedChecks: Int, val comparedPower: Boolean = false,
+        val powerValues: Map<String, Double> = emptyMap()) {
         fun hasCurrentReport(now: Long) = requestedAt != null && lastDevicePushAt != null &&
             lastDevicePushAt > requestedAt && now - lastDevicePushAt in 0..90_000
         val possiblyStalled get() = unchangedChecks >= 2
@@ -34,5 +35,5 @@ internal class PowerOceanLiveCheck {
         else if (!comparedThisCheck) unchangedChecks = if (comparable) unchangedChecks + 1 else 0
         previousPower = powers; comparedThisCheck = true
     }
-    fun status() = Status(requestedAt, lastPushAt, unchangedChecks, previousPower != null)
+    fun status() = Status(requestedAt, lastPushAt, unchangedChecks, previousPower != null, previousPower.orEmpty())
 }

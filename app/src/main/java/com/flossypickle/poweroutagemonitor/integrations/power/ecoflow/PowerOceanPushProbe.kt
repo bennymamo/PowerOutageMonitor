@@ -170,7 +170,9 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                         com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot.from(context?.registerReceiver(
                             null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)))?.externallyPowered
                     }.getOrNull()
-                    lastSnapshot?.let { currentSnapshot ->
+                    val displaySnapshot = lastSnapshot ?: SourceTelemetrySnapshot("PowerOcean push feed · experimental",
+                        "PowerOcean", System.currentTimeMillis(), emptyList(), emptyList())
+                    displaySnapshot.let { currentSnapshot ->
                         val comparison = gridInspection.snapshot()
                         val confirmation = comparison.correlation?.let {
                             PowerOceanLossConfirmation.evaluate(it, chargerPowered, requireChargerConfirmation, liveCheck.status().hasCurrentReport(System.currentTimeMillis()))

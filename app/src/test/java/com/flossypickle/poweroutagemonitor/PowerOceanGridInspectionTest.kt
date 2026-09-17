@@ -1,5 +1,6 @@
 package com.flossypickle.poweroutagemonitor
 
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanGridCorrelation
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanGridInspection
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanPushDecoder
 import org.junit.Assert.*
@@ -39,5 +40,30 @@ class PowerOceanGridInspectionTest {
         assertEquals(100L, original.lastReceivedUtcMillis)
     }
 
+    @Test fun requestReplyGridValueIsDisplayableButItsOriginRemainsExplicit() {
+        val inspection = PowerOceanGridInspection(PowerOceanGridCorrelation.Profile())
+        inspection.observe(report(0), 100, false, false)
+        val snapshot = inspection.snapshot(100)
+        assertEquals(0L, snapshot.lastCode); assertFalse(snapshot.lastCodeFromDevicePush)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, snapshot.correlation!!.state)
+    }
+    @Test fun meterDisplayKeepsActualReceiptAndOriginWithoutInventingMissingZero() {
+        val inspection = PowerOceanGridInspection()
+        inspection.observe(PowerOceanPushDecoder.Report(1, mapOf("meterHeartBeat[0].meterData[0]" to -50.0)), 100, false, false)
+        inspection.observe(PowerOceanPushDecoder.Report(1, emptyMap()), 200, false, true)
+        inspection.observe(PowerOceanPushDecoder.Report(1, mapOf("meterHeartBeat[0].meterData[0]" to 0.0)), 300, true, true)
+        assertEquals(-50.0, inspection.snapshot().meterValue!!, 0.0)
+        assertEquals(100L, inspection.snapshot().meterReceivedUtcMillis); assertFalse(inspection.snapshot().meterFromDevicePush)
+    }
+    @Test fun laterLiveMeterValueReplacesReplyButOlderAndInvalidReportsCannot() {
+        val inspection = PowerOceanGridInspection()
+        fun meter(value: Double) = PowerOceanPushDecoder.Report(1, mapOf("meterHeartBeat[0].meterData[0]" to value))
+        inspection.observe(meter(10.0), 100, false, false)
+        inspection.observe(meter(20.0), 200, false, true)
+        inspection.observe(meter(30.0), 150, false, false)
+        inspection.observe(meter(Double.NaN), 300, false, true)
+        assertEquals(20.0, inspection.snapshot().meterValue!!, 0.0)
+        assertEquals(200L, inspection.snapshot().meterReceivedUtcMillis); assertTrue(inspection.snapshot().meterFromDevicePush)
+    }
     private fun report(code: Long) = PowerOceanPushDecoder.Report(8, mapOf("sysGridSta" to code))
 }

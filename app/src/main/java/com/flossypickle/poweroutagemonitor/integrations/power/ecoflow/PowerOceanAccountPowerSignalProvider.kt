@@ -29,8 +29,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = owner
         worker = owner.launch {
-            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null, dataStalled: Boolean? = null) {
-                if (isActive) onSignal(PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled))
+            fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null, dataStalled: Boolean? = null, check: PowerSourceCheck? = null) {
+                if (isActive) onSignal(PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled, check))
             }
             val client = PowerOceanAccountClient()
             var session: PowerOceanAccountClient.Session? = null
@@ -102,8 +102,31 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                 PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for current grid and meter evidence."
                             }
                             val dataWarning = if (update.liveCheck?.possiblyStalled == true) " Power readings are identical across successive checks; the feed may be stalled or the load steady." else ""
+                            val check = update.liveCheck?.let { status -> status.requestedAt?.let { requested ->
+                                val labels = mapOf("sysLoadPwr" to "Home load", "sysGridPwr" to "Grid power flow",
+                                    "mpptPwr" to "Solar power", "bpPwr" to "Battery power flow")
+                                val inspection = update.gridInspection
+                                val observations = listOfNotNull(
+                                    inspection.lastCode?.let { code -> inspection.lastReceivedUtcMillis?.let { received ->
+                                        val explanation = when (code) {
+                                            0L -> "In the tested Single Phase profile, 0 means the inverter reports grid connection."
+                                            1L -> "In the tested Single Phase profile, 1 means off-grid; this can include the delay while the inverter reconnects."
+                                            else -> "This grid code is unsupported by the selected tested profile."
+                                        }
+                                        SourceReportedValue("Reported grid code", code.toString(), explanation, received, inspection.lastCodeFromDevicePush)
+                                    } },
+                                    inspection.meterValue?.let { meter -> inspection.meterReceivedUtcMillis?.let { received ->
+                                        SourceReportedValue("Meter 1 reading", meter.toString(),
+                                            if (meter == 0.0) "Zero means no reported flow. Zero alone does not prove grid loss."
+                                            else "Non-zero means reported meter activity. Changing activity can support grid return after a confirmed loss; sign/direction depends on the installation.",
+                                            received, inspection.meterFromDevicePush)
+                                    } })
+                                PowerSourceCheck(requested, status.lastDevicePushAt,
+                                    result.availability != GridAvailability.UNKNOWN,
+                                    status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations)
+                            } }
                             emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, update.gridInspection.correlation?.evidenceReceivedAtUtcMillis,
-                                update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled)
+                                update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)
                         }
                         emit(GridAvailability.UNKNOWN, failure ?: "PowerOcean feed stopped.")
                         // Authentication/topic rejection stops automatic access attempts. User reconnects explicitly.

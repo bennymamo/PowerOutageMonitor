@@ -112,6 +112,7 @@ internal fun PowerMonitorApp(
         )
     }
     val settingsPageState = rememberSaveableStateHolder()
+    var requestedSettingsSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
     var returnToChecklist by rememberSaveable { mutableStateOf(false) }
     val returnFromChecklistChild: () -> Unit = {
         if (returnToChecklist) {
@@ -183,7 +184,11 @@ internal fun PowerMonitorApp(
                 snapshot, monitorState, settings, history, lastObservationEpochMs, deliveryWarning,
                 alertChannels, systemHealth, audibleAlarmActive, selectedPowerSource,
                 powerSourceStatus, scheduledAlertSettings, scheduledAlertState, padding,
-                onMonitoringEnabledChange, onDismissAudibleAlarm
+                onMonitoringEnabledChange, onDismissAudibleAlarm,
+                onOpenPowerSources = { screen = AppScreen.POWER_SOURCES },
+                onOpenAlertChannels = { requestedSettingsSection = SettingsSection.ALERTS; screen = AppScreen.SETTINGS },
+                onOpenDiagnostics = { returnToChecklist = false; screen = AppScreen.DIAGNOSTICS },
+                onOpenEcoFlowSchedule = { screen = AppScreen.POWEROCEAN_ACCOUNT }
             )
             AppScreen.HISTORY -> HistoryScreen(
                 history, operationalHistory, monitorState, deliverySummaries, padding
@@ -235,7 +240,9 @@ internal fun PowerMonitorApp(
                 onOpenEmail = {
                     returnToChecklist = false
                     screen = AppScreen.EMAIL
-                }
+                },
+                requestedSection = requestedSettingsSection,
+                onSectionOpened = { requestedSettingsSection = null }
             ) }
             AppScreen.POWER_SOURCES -> PowerSourceSettingsScreen(
                 selectedSource = selectedPowerSource,

@@ -31,7 +31,8 @@ internal class PowerSourceStore(context: Context) {
         val observedAtEpochMs: Long,
         val detail: String?,
         val recoveryPending: Boolean = false,
-        val dataPossiblyStalled: Boolean = false
+        val dataPossiblyStalled: Boolean = false,
+        val check: PowerSourceCheck? = null
     )
 
     fun selectedSource(): Source = runCatching {
@@ -225,7 +226,8 @@ internal class PowerSourceStore(context: Context) {
         observedAtEpochMs = signal.observedAtEpochMs,
         detail = signal.detail?.take(MAX_DETAIL_LENGTH),
         recoveryPending = signal.recoveryPending,
-        dataPossiblyStalled = signal.dataPossiblyStalled ?: lastStatus()?.takeIf { it.source == source }?.dataPossiblyStalled ?: false
+        dataPossiblyStalled = signal.dataPossiblyStalled ?: lastStatus()?.takeIf { it.source == source }?.dataPossiblyStalled ?: false,
+        check = signal.check
     )
 
     private fun writeStatus(
