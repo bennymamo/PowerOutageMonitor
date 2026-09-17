@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.SystemClock
 import com.flossypickle.poweroutagemonitor.integrations.power.SourceTelemetrySnapshot
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.eclipse.paho.client.mqttv3.*
@@ -14,7 +15,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import javax.net.ssl.HttpsURLConnection
 
-/** Short, user-started inspection; optional temporary reporting request, never power controls. */
+/** Shared secure feed for manual inspections and opt-in monitoring; never power controls. */
 internal class PowerOceanPushProbe(private val context: android.content.Context? = null) {
     data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int,
         val gridInspection: PowerOceanGridInspection.Snapshot, val chargerExternallyPowered: Boolean? = null,
@@ -26,14 +27,16 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         requestLiveReporting: Boolean = false, inspectionSeconds: Int = 45,
         correlationProfile: PowerOceanGridCorrelation.Profile? = null,
         requireChargerConfirmation: Boolean = false,
+        continuous: Boolean = false, readIntervalSeconds: Int = 60,
         onUpdate: suspend (Update) -> Unit): String? = withContext(Dispatchers.IO) {
         require(inspectionSeconds in setOf(45, 300, 900))
+        require(readIntervalSeconds in 60..3600)
         val gridInspection = PowerOceanGridInspection(correlationProfile)
         // Private, bounded development capture for comparing utility loss and restoration.
         // Record only predefined decoded numeric/boolean fields; never raw payloads or account data.
         val validationTrace = context?.takeIf {
             it.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-        }?.let { java.io.File(it.cacheDir, "powerocean-grid-validation.jsonl") }
+        }?.takeUnless { continuous }?.let { java.io.File(it.cacheDir, "powerocean-grid-validation.jsonl") }
         runCatching { validationTrace?.writeText(JSONObject().put("inspectionStartedUtcMillis", System.currentTimeMillis()).toString() + "\n") }
         val queue = ConcurrentLinkedQueue<Packet>()
         val client = runCatching {
@@ -71,13 +74,14 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
             val options = MqttConnectOptions().apply {
                 userName = credentials.account; password = credentials.password.toCharArray()
                 isCleanSession = true; isAutomaticReconnect = false
-                connectionTimeout = 15; keepAliveInterval = 20
+                connectionTimeout = 15; keepAliveInterval = 60
                 mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
                 // Paho silently skips endpoint checks below API24; use explicit verification there.
                 isHttpsHostnameVerificationEnabled = Build.VERSION.SDK_INT >= 24
                 sslHostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
             }
             client.connect(options)
+            ensureActive()
             stage = "subscribing to device readings"
             client.subscribe("/app/device/property/${session.connection.serial}", 0)
             client.subscribe("/app/${session.userId}/${session.connection.serial}/thing/property/get_reply", 1)
@@ -86,11 +90,12 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 try { client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1) }
                 catch (failure: MqttException) { if (failure.reasonCode != 128) throw failure }
             }
-            val deadline = SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
+            val deadline = if (continuous) Long.MAX_VALUE else SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
             var nextRequest = 0L
             var nextLiveRequest = 0L
             stage = "requesting and receiving readings"
             while (SystemClock.elapsedRealtime() < deadline && !disconnected.get()) {
+                ensureActive()
                 if (requestLiveReporting && SystemClock.elapsedRealtime() >= nextLiveRequest) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
                         PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
@@ -98,12 +103,9 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 }
                 if (SystemClock.elapsedRealtime() >= nextRequest) {
                     // GET-only request used by the app to ask for current observations.
-                    val request = JSONObject().put("from", "Android").put("id", System.currentTimeMillis().toString())
-                        .put("moduleType", 0).put("operateType", "latestQuotas").put("params", JSONObject()).put("version", "1.0")
                     val getTopic = "/app/${session.userId}/${session.connection.serial}/thing/property/get"
-                    client.publish(getTopic, request.toString().toByteArray(Charsets.UTF_8), 1, false)
                     client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    nextRequest = SystemClock.elapsedRealtime() + 60_000
+                    nextRequest = SystemClock.elapsedRealtime() + readIntervalSeconds * 1000L
                 }
                 var packet = queue.poll()
                 var changed = false
@@ -148,9 +150,9 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     data.put("quota", quota)
                     val snapshot = PowerOceanAccountTelemetry.snapshot(data, System.currentTimeMillis()).copy(
                         sourceName = "PowerOcean push feed · experimental",
-                        acquisitionNote = "$inspectionSeconds-second account push inspection. " +
+                        acquisitionNote = (if (continuous) "Experimental background account feed. " else "$inspectionSeconds-second account push inspection. ") +
                             (if (requestLiveReporting) "Temporary live reporting is requested every 20 seconds using portal command 96/97. " else "Live-report activation is off; reading requests only. ") +
-                            "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. No grid state enters outage monitoring."
+                            "No power-control commands are sent. Sections contain each command's latest report; see receivedAgeSeconds and retainedMessage. Packet receipt is not a verified measurement timestamp. Unsupported packets are counted, not logged. Grid comparisons use only explicitly selected, installation-tested profiles."
                     )
                     if (snapshot.sections.isNotEmpty()) lastSnapshot = snapshot
                 }

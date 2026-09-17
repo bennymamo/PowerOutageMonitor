@@ -37,6 +37,10 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
         val previousLivePush = lastLivePush
         if (fromDevicePush && report.command in setOf(1, 8, 33)) {
             if (receivedUtcMillis < (lastLivePush ?: 0)) return
+            if (previousLivePush != null && receivedUtcMillis - previousLivePush > profile.staleAfterMs) {
+                gridCode = null; gridReceived = null; offGridStarted = null
+                resetMeterSequence()
+            }
             lastLivePush = receivedUtcMillis
         }
         // A request reply alone cannot prove that the inverter is still reporting.
@@ -62,12 +66,12 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
                 if (preZeroValues.size > 32) preZeroValues.removeFirst()
             }
             val started = offGridStarted ?: return
-            val gridTime = gridReceived ?: return
+            if (gridReceived == null) return
             if (gridCode != profile.offGridCode || receivedUtcMillis < started ||
                 !live) return
             if (value == 0.0) {
                 zeroFlowReceived = receivedUtcMillis
-                candidateValue = null; candidateReceived = null; returnEvidence = null
+                if (returnEvidence == null) { candidateValue = null; candidateReceived = null }
             } else if (zeroFlowReceived != null) {
                 // An old pre-outage snapshot may arrive after zero; it cannot establish return.
                 if (!fromDevicePush && value in preZeroValues) return

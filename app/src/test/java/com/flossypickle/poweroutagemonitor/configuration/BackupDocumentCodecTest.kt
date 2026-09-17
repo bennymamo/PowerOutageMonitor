@@ -42,6 +42,15 @@ class BackupDocumentCodecTest {
         }
     }
 
+    @Test
+    fun olderBackupsDefaultNewMonitoringChoicesToDisabled() {
+        val text = BackupDocumentCodec.encode(completeDocument()).toString(Charsets.UTF_8)
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") }.joinToString("\n")
+        val restored = BackupDocumentCodec.decode(old.toByteArray()).powerSources!!
+        assertEquals(false, restored.powerOceanProfileVerified)
+        assertEquals(false, restored.powerOceanRequestLiveReporting)
+    }
+
     private fun completeDocument() = BackupDocument(
         createdAtEpochMs = 1_700_000_000_000,
         appVersionName = "1.0-test",
@@ -91,7 +100,9 @@ class BackupDocumentCodecTest {
             cloudDeviceName = "PowerOcean",
             powerOceanAccount = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection(
                 "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20),
-            powerOceanRequireChargerConfirmation = true
+            powerOceanRequireChargerConfirmation = true,
+            powerOceanProfileVerified = true,
+            powerOceanRequestLiveReporting = true
         ),
         history = BackupDocument.HistoryData(
             powerEvents = listOf(EventHistoryStore.Record("outage", 100, 200, 300, 90, 89)),

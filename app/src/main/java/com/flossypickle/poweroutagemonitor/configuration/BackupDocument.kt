@@ -65,7 +65,9 @@ internal data class BackupDocument(
         val cloudSerialNumber: String?,
         val cloudDeviceName: String?,
         val powerOceanAccount: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection? = null,
-        val powerOceanRequireChargerConfirmation: Boolean = false
+        val powerOceanRequireChargerConfirmation: Boolean = false,
+        val powerOceanProfileVerified: Boolean = false,
+        val powerOceanRequestLiveReporting: Boolean = false
     )
 
     data class HistoryData(
@@ -316,6 +318,8 @@ internal object BackupDocumentCodec {
         p.putOptional("power.cloud.name", data.cloudDeviceName)
         p["power.account.present"] = (data.powerOceanAccount != null).toString()
         p["power.account.chargerConfirmation"] = data.powerOceanRequireChargerConfirmation.toString()
+        p["power.account.profileVerified"] = data.powerOceanProfileVerified.toString()
+        p["power.account.liveReporting"] = data.powerOceanRequestLiveReporting.toString()
         data.powerOceanAccount?.let {
             p["power.account.email"] = it.email
             p["power.account.password"] = it.password
@@ -353,7 +357,9 @@ internal object BackupDocumentCodec {
                     p.required("power.account.model"), p.required("power.account.region"), p.int("power.account.refresh")
                 ).also { require(it.isValid) { "Invalid PowerOcean account data in backup." } }
             } else null,
-            powerOceanRequireChargerConfirmation = p.containsKey("power.account.chargerConfirmation") && p.boolean("power.account.chargerConfirmation")
+            powerOceanRequireChargerConfirmation = p.containsKey("power.account.chargerConfirmation") && p.boolean("power.account.chargerConfirmation"),
+            powerOceanProfileVerified = p.containsKey("power.account.profileVerified") && p.boolean("power.account.profileVerified"),
+            powerOceanRequestLiveReporting = p.containsKey("power.account.liveReporting") && p.boolean("power.account.liveReporting")
         )
     }
 

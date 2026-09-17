@@ -71,7 +71,8 @@ internal object ScheduledAlertMessageFactory {
 
     private fun sourceName(source: PowerSourceStore.Source) = when (source) {
         PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger"
-        PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow PowerOcean"
+        PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow local"
+        PowerSourceStore.Source.ECOFLOW_ACCOUNT -> "PowerOcean account (experimental)"
     }
 
     private fun gridStatus(state: OutageEngine.State, sourceReadable: Boolean): String = when {

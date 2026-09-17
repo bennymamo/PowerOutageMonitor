@@ -19,10 +19,10 @@ internal class PowerOceanAccountClient(
         catch (known: UnsupportedResponse) { throw known }
         catch (_: Exception) { throw UnsupportedResponse(message) }
     data class Connection(val email: String, val password: String, val serial: String,
-        val model: String = "86", val region: String = "eu", val refreshSeconds: Int = 30) {
+        val model: String = "86", val region: String = "eu", val refreshSeconds: Int = 60) {
         val isValid get() = email.length in 3..254 && email.contains('@') && email.none(Char::isWhitespace) &&
             password.length in 1..300 && serial.matches(Regex("[A-Za-z0-9_-]{4,100}")) &&
-            model in setOf("83", "85", "86", "87") && region in setOf("eu", "us") && refreshSeconds in 10..60
+            model in setOf("83", "85", "86", "87") && region in setOf("eu", "us") && refreshSeconds in 10..3600
         override fun toString() = "PowerOcean account connection (private details redacted)"
     }
 
@@ -156,7 +156,7 @@ internal class PowerOceanAccountClient(
                     Base64.encodeToString(account.password.toByteArray(Charsets.UTF_8), Base64.NO_WRAP), session?.token.orEmpty(), session?.userId.orEmpty())
                 val message = EcoFlowCloudError.describe(root?.optString("code"), root?.optString("message"), status, privateValues)
                 EcoFlowCloudClient.Result.Failure(message + if (status == 401 || status == 403) " Reconnect your account." else "",
-                    status == 429 || status >= 500)
+                    status >= 500)
             }
         } catch (known: UnsupportedResponse) {
             EcoFlowCloudClient.Result.Failure(known.message ?: "Unsupported live-feed connection response.", false)

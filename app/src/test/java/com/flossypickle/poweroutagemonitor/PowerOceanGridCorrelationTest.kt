@@ -104,6 +104,25 @@ class PowerOceanGridCorrelationTest {
         assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, comparison.snapshot(180_000).state)
     }
 
+    @Test fun liveActivityAfterAnExpiredGapCannotReviveAnOldGridCode() {
+        val comparison = PowerOceanGridCorrelation(profile)
+        comparison.observe(grid(0), 1_000, false, true)
+        comparison.observe(PowerOceanPushDecoder.Report(33, mapOf("sysLoadPwr" to 700f)), 100_000, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, comparison.snapshot(100_000).state)
+        comparison.observe(grid(0), 101_000, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, comparison.snapshot(101_000).state)
+    }
+
+    @Test fun zeroNetFlowAfterReturnDoesNotInventASecondOutage() {
+        val comparison = PowerOceanGridCorrelation(profile)
+        comparison.observe(grid(1), 1_000, false, true)
+        comparison.observe(meter(0f), 2_000, false, true)
+        comparison.observe(meter(-800f), 3_000, false, true)
+        comparison.observe(meter(-790f), 6_000, false, true)
+        comparison.observe(meter(0f), 7_000, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.GRID_RETURN_LIKELY, comparison.snapshot(7_000).state)
+    }
+
     private fun grid(code: Long) = PowerOceanPushDecoder.Report(8, mapOf("sysGridSta" to code))
     private fun meter(value: Float) = PowerOceanPushDecoder.Report(1, mapOf(profile.meterKey to value))
 }

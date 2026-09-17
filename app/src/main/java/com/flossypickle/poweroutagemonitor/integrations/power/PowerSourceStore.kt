@@ -6,12 +6,13 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowMod
 
 /** Device-protected source configuration and the latest normalized source reading. */
 internal class PowerSourceStore(context: Context) {
+    private val appContext = context.applicationContext
     private val storageContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         context.createDeviceProtectedStorageContext()
     } else context.applicationContext
     private val preferences = storageContext.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    enum class Source { ANDROID_CHARGER, ECOFLOW_MODBUS }
+    enum class Source { ANDROID_CHARGER, ECOFLOW_MODBUS, ECOFLOW_ACCOUNT }
 
     data class EcoFlowConfig(
         val host: String = "",
@@ -28,7 +29,8 @@ internal class PowerSourceStore(context: Context) {
         val source: Source,
         val availability: GridAvailability,
         val observedAtEpochMs: Long,
-        val detail: String?
+        val detail: String?,
+        val recoveryPending: Boolean = false
     )
 
     fun selectedSource(): Source = runCatching {
@@ -42,6 +44,35 @@ internal class PowerSourceStore(context: Context) {
             "Unable to save charger confirmation setting"
         }
     }
+
+    fun powerOceanRequestsLiveReporting(): Boolean = preferences.getBoolean(KEY_POWEROCEAN_LIVE_REPORTING, false)
+
+    fun setPowerOceanLiveReporting(enabled: Boolean) {
+        check(preferences.edit().putBoolean(KEY_POWEROCEAN_LIVE_REPORTING, enabled).commit())
+    }
+
+    fun powerOceanProfileVerified(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection?): Boolean =
+        connection != null && connection.isValid && connection.model == "86" &&
+            preferences.getString(KEY_POWEROCEAN_PROFILE, null) == powerOceanKey(connection)
+
+    fun setPowerOceanProfileVerified(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection, verified: Boolean) {
+        require(connection.isValid && connection.model == "86")
+        val editor = preferences.edit().remove(KEY_POWEROCEAN_TEST_TIME)
+        if (verified) editor.putString(KEY_POWEROCEAN_PROFILE, powerOceanKey(connection)) else editor.remove(KEY_POWEROCEAN_PROFILE)
+        check(editor.commit()) { "Unable to save PowerOcean profile" }
+    }
+
+    fun recordPowerOceanLiveTest(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection) {
+        if (powerOceanProfileVerified(connection)) preferences.edit().putLong(KEY_POWEROCEAN_TEST_TIME, System.currentTimeMillis()).apply()
+    }
+
+    fun powerOceanReadyToActivate(): Boolean =
+        powerOceanProfileVerified(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountStore(appContext).connection()) &&
+            System.currentTimeMillis() - preferences.getLong(KEY_POWEROCEAN_TEST_TIME, 0) in 0..90_000
+
+    private fun powerOceanKey(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest("single-phase-v1|${connection.serial}|${connection.model}|${connection.region}".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
 
     fun ecoFlowConfig() = EcoFlowConfig(
         host = preferences.getString(KEY_ECOFLOW_HOST, "").orEmpty(),
@@ -71,6 +102,8 @@ internal class PowerSourceStore(context: Context) {
             .putInt(KEY_ECOFLOW_PORT, config.port)
             .putInt(KEY_ECOFLOW_UNIT, config.unitId)
             .remove(KEY_ECOFLOW_TESTED_CONFIG)
+            .remove(KEY_POWEROCEAN_PROFILE)
+            .remove(KEY_POWEROCEAN_TEST_TIME)
             .remove(KEY_STATUS_SOURCE)
             .remove(KEY_STATUS_AVAILABILITY)
             .remove(KEY_STATUS_OBSERVED_AT)
@@ -100,6 +133,7 @@ internal class PowerSourceStore(context: Context) {
 
     fun select(source: Source): Boolean {
         if (source == Source.ECOFLOW_MODBUS && !ecoFlowReadyToActivate()) return false
+        if (source == Source.ECOFLOW_ACCOUNT && !powerOceanReadyToActivate()) return false
         check(preferences.edit().putString(KEY_SELECTED_SOURCE, source.name).commit()) {
             "Unable to save power source"
         }
@@ -109,6 +143,7 @@ internal class PowerSourceStore(context: Context) {
     fun recordSignal(signal: PowerSignal, persist: Boolean = true) {
         val source = when (signal.providerId) {
             ECOFLOW_PROVIDER_ID -> Source.ECOFLOW_MODBUS
+            POWEROCEAN_PROVIDER_ID -> Source.ECOFLOW_ACCOUNT
             else -> Source.ANDROID_CHARGER
         }
         PowerSourceRuntime.status = statusFrom(source, signal)
@@ -128,7 +163,8 @@ internal class PowerSourceStore(context: Context) {
             source = source,
             availability = availability,
             observedAtEpochMs = preferences.getLong(KEY_STATUS_OBSERVED_AT, 0),
-            detail = preferences.getString(KEY_STATUS_DETAIL, null)
+            detail = preferences.getString(KEY_STATUS_DETAIL, null),
+            recoveryPending = preferences.getBoolean(KEY_STATUS_RECOVERY_PENDING, false)
         )
     }
 
@@ -136,7 +172,8 @@ internal class PowerSourceStore(context: Context) {
         source = source,
         availability = signal.availability,
         observedAtEpochMs = signal.observedAtEpochMs,
-        detail = signal.detail?.take(MAX_DETAIL_LENGTH)
+        detail = signal.detail?.take(MAX_DETAIL_LENGTH),
+        recoveryPending = signal.recoveryPending
     )
 
     private fun writeStatus(
@@ -148,12 +185,18 @@ internal class PowerSourceStore(context: Context) {
         .putString(KEY_STATUS_AVAILABILITY, signal.availability.name)
         .putLong(KEY_STATUS_OBSERVED_AT, signal.observedAtEpochMs)
         .putString(KEY_STATUS_DETAIL, signal.detail?.take(MAX_DETAIL_LENGTH))
+        .putBoolean(KEY_STATUS_RECOVERY_PENDING, signal.recoveryPending)
 
     companion object {
         const val ECOFLOW_PROVIDER_ID = "ecoflow_modbus"
-        private const val KEY_POWEROCEAN_CHARGER_CONFIRMATION = "powerocean_charger_confirmation"
+        const val POWEROCEAN_PROVIDER_ID = "ecoflow_powerocean_account"
+        private const val KEY_POWEROCEAN_LIVE_REPORTING = "powerocean_live_reporting"
         private const val FILE_NAME = "power_sources"
         private const val KEY_SELECTED_SOURCE = "selected_source"
+        private const val KEY_POWEROCEAN_CHARGER_CONFIRMATION = "powerocean_charger_confirmation"
+        private const val KEY_POWEROCEAN_PROFILE = "powerocean_verified_profile"
+        private const val KEY_POWEROCEAN_TEST_TIME = "powerocean_live_test_time"
+        private const val KEY_STATUS_RECOVERY_PENDING = "status_recovery_pending"
         private const val KEY_ECOFLOW_HOST = "ecoflow_host"
         private const val KEY_ECOFLOW_PORT = "ecoflow_port"
         private const val KEY_ECOFLOW_UNIT = "ecoflow_unit"

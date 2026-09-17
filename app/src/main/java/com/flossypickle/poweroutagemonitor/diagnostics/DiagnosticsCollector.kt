@@ -154,6 +154,7 @@ internal class DiagnosticsCollector(private val context: Context) {
         notificationsAllowed = health.notificationsAllowed,
         configuredPowerProviders = when (powerSourceStore.selectedSource()) {
             PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger (active)"
+            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> "PowerOcean account (experimental) · " + (powerSourceStatus?.availability?.name?.lowercase() ?: "unknown")
             PowerSourceStore.Source.ECOFLOW_MODBUS -> buildString {
                 append("EcoFlow PowerOcean (active)")
                 if (Build.VERSION.SDK_INT >= 37 && context.checkSelfPermission(

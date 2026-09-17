@@ -5,7 +5,8 @@ internal data class PowerSignal(
     val availability: GridAvailability,
     val observedAtEpochMs: Long,
     val providerId: String,
-    val detail: String? = null
+    val detail: String? = null,
+    val recoveryPending: Boolean = false
 )
 
 internal enum class GridAvailability { AVAILABLE, UNAVAILABLE, UNKNOWN }
