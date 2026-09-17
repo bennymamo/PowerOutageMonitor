@@ -20,6 +20,7 @@ internal enum class AlertKind {
 }
 
 internal sealed interface DeliveryResult {
+    data class Skipped(val reason: String) : DeliveryResult
     data class Sent(val providerMessageId: String? = null) : DeliveryResult
     data class RetryableFailure(val reason: String) : DeliveryResult
     data class PermanentFailure(val reason: String) : DeliveryResult

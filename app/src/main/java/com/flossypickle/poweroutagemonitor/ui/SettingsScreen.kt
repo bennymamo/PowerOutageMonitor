@@ -46,6 +46,7 @@ internal enum class SettingsSection(val title: String) {
     SETUP("Setup & testing"),
     ALERTS("Alert channels"),
     AUDIBLE("Audible alarm"),
+    TELEGRAM_REMOTE("Telegram remote control"),
     BATTERY_ALERTS("Battery alerts"),
     SCHEDULED_UPDATES("Scheduled updates"),
     DEVICE("Device"),
@@ -155,6 +156,7 @@ internal fun SettingsScreen(
                 }
             }
             SettingsSection.MESSAGES -> {
+                SettingsCategoryCard("Telegram remote control", "Trusted chats, commands and quiet time") { section = SettingsSection.TELEGRAM_REMOTE }
                 SettingsCategoryCard(
                     "Alert channels",
                     when {
@@ -214,6 +216,8 @@ internal fun SettingsScreen(
                 onOpenSms = onOpenSms,
                 onOpenEmail = onOpenEmail
             )
+
+            SettingsSection.TELEGRAM_REMOTE -> TelegramRemoteSettingsContent(onOpenTelegram)
 
             SettingsSection.AUDIBLE -> AudibleAlarmSettingsContent(
                 audibleSettings = audibleSettings,
@@ -308,7 +312,7 @@ private fun parentSection(section: SettingsSection): SettingsSection = when (sec
     SettingsSection.HISTORY -> SettingsSection.DATA_BACKUP
     SettingsSection.OUTAGE, SettingsSection.RESTORATION, SettingsSection.BATTERY_ALERTS,
     SettingsSection.SCHEDULED_UPDATES, SettingsSection.RELIABILITY -> SettingsSection.MONITORING
-    SettingsSection.ALERTS, SettingsSection.AUDIBLE -> SettingsSection.MESSAGES
+    SettingsSection.ALERTS, SettingsSection.AUDIBLE, SettingsSection.TELEGRAM_REMOTE -> SettingsSection.MESSAGES
     SettingsSection.DEVICE, SettingsSection.APPEARANCE, SettingsSection.HELP -> SettingsSection.PERSONAL
     SettingsSection.SETUP, SettingsSection.SAFETY, SettingsSection.ABOUT -> SettingsSection.SUPPORT
     else -> SettingsSection.HOME

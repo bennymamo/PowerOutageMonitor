@@ -2,7 +2,7 @@ package com.flossypickle.poweroutagemonitor.integrations.alerts
 
 /** Pure delivery-state rules shared by every future alert provider. */
 internal object AlertQueueEngine {
-    enum class Status { PENDING, IN_FLIGHT, RETRYING, SENT, FAILED }
+    enum class Status { PENDING, IN_FLIGHT, RETRYING, SENT, FAILED, SKIPPED }
 
     data class Item(
         val id: String,
@@ -33,7 +33,7 @@ internal object AlertQueueEngine {
         val timeDue = when (item.status) {
             Status.PENDING, Status.RETRYING -> item.nextAttemptAtEpochMs <= nowEpochMs
             Status.IN_FLIGHT -> (item.leaseUntilEpochMs ?: Long.MAX_VALUE) <= nowEpochMs
-            Status.SENT, Status.FAILED -> false
+            Status.SENT, Status.FAILED, Status.SKIPPED -> false
         }
         timeDue && !hasUnfinishedPredecessor(items, item)
     }
@@ -66,7 +66,7 @@ internal object AlertQueueEngine {
     fun nextRunnableAt(item: Item): Long? = when (item.status) {
         Status.PENDING, Status.RETRYING -> item.nextAttemptAtEpochMs
         Status.IN_FLIGHT -> item.leaseUntilEpochMs
-        Status.SENT, Status.FAILED -> null
+        Status.SENT, Status.FAILED, Status.SKIPPED -> null
     }
 
     fun markInFlight(item: Item, nowEpochMs: Long): Item = item.copy(
@@ -77,6 +77,8 @@ internal object AlertQueueEngine {
     )
 
     fun complete(item: Item, result: DeliveryResult, nowEpochMs: Long): Item = when (result) {
+        is DeliveryResult.Skipped -> item.copy(status = Status.SKIPPED, nextAttemptAtEpochMs = Long.MAX_VALUE,
+            leaseUntilEpochMs = null, lastError = result.reason.take(MAX_ERROR_LENGTH))
         is DeliveryResult.Sent -> item.copy(
             status = Status.SENT,
             nextAttemptAtEpochMs = Long.MAX_VALUE,
@@ -116,7 +118,7 @@ internal object AlertQueueEngine {
 
     private const val DELIVERY_LEASE_MS = 5 * 60_000L
     private const val MAX_ERROR_LENGTH = 500
-    private val terminalStatuses = setOf(Status.SENT, Status.FAILED)
+    private val terminalStatuses = setOf(Status.SENT, Status.FAILED, Status.SKIPPED)
     private val RETRY_DELAYS_MS = longArrayOf(
         60_000L,
         5 * 60_000L,

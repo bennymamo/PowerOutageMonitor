@@ -145,6 +145,10 @@ internal class OperationalHistoryStore(context: Context) {
         )
     }
 
+    fun recordRemoteCommand(command: String, maxRecords: Int) {
+        append(Record("REMOTE_COMMAND", System.currentTimeMillis(), "Telegram control: /$command"), maxRecords)
+    }
+
     fun read(): List<Record> = synchronized(LOCK) { readLocked() }
 
     fun trimTo(maxRecords: Int) = synchronized(LOCK) {

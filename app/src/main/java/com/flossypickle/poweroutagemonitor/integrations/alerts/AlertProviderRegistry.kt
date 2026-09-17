@@ -76,7 +76,10 @@ internal class AlertProviderRegistry(private val context: Context) {
                 val token = telegram.botToken() ?: return null
                 val destination = config.destinations
                     .firstOrNull { it.chatId == destinationId } ?: return null
-                if (config.enabled) TelegramAlertProvider(token, destination) else null
+                if (config.enabled) TelegramAlertProvider(token, destination, remoteEnabled =
+                    com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(context).settings().let {
+                        it.enabled && destination.chatId in it.trustedChatIds
+                    }) else null
             }
             GmailSmtpConfigStore.PROVIDER_ID -> {
                 val config = gmail.config()

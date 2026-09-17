@@ -102,7 +102,7 @@ internal class BackupManager(context: Context) {
             BackupScheduler(appContext).apply(BackupScheduleStore(appContext).settings())
         }
 
-        if (BackupCategory.ALERTS in categories) restoreAlerts(requireNotNull(document.alerts))
+        if (BackupCategory.ALERTS in categories) restoreAlerts(requireNotNull(document.alerts), resumeMonitoring)
         if (BackupCategory.POWER_SOURCES in categories) {
             restorePowerSources(requireNotNull(document.powerSources))
         }
@@ -189,11 +189,15 @@ internal class BackupManager(context: Context) {
             gmailAppPassword = gmail.appPassword(),
             resend = resend.config(),
             resendApiKey = resend.apiKey(),
-            sms = sms.config()
+            sms = sms.config(),
+            telegramRemote = com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(appContext).settings()
         )
     }
 
-    private fun restoreAlerts(data: BackupDocument.AlertsData) {
+    private fun restoreAlerts(data: BackupDocument.AlertsData, resumeMonitoring: Boolean) {
+        com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(appContext).apply {
+            save(data.telegramRemote.copy(enabled = data.telegramRemote.enabled && resumeMonitoring)); resetCheckpoint()
+        }
         TelegramConfigStore(appContext).apply {
             clear()
             save(data.telegramToken, data.telegram.enabled, data.telegram.botDisplayName,

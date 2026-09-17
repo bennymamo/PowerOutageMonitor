@@ -20,6 +20,7 @@ EcoFlow is optional. The ordinary charger monitor needs no EcoFlow equipment, ac
 - Charger-based detection, configurable outage/restoration delays and brief-interruption logging.
 - A Status dashboard with a master switch, compact battery bar and expandable connection information.
 - Telegram, Gmail, device SMS and optional Resend alerts; multiple recipients and enabled channels work together in parallel.
+- Optional trusted-chat Telegram remote control, with status, sound acknowledgment, quiet time and monitoring commands.
 - An optional dismissible audible alarm, built-in beep or Android alarm tone.
 - Grid-event history and app/monitoring start, stop, reboot and unexpected-interruption records.
 - Optional low-battery warnings, source-unavailable warnings, heartbeats and long-outage updates.
@@ -42,7 +43,7 @@ For updates, install the new APK over the existing app to preserve configuration
 
 The welcome flow introduces charger detection, names the monitor, checks charging behavior, sets timing and covers battery safety. Guided users then get a checklist for alert tests and background readiness. You can return to it through **Settings → Help & app → Setup & testing**.
 
-The Status switch controls monitoring globally. Turning it off stops monitoring and its ongoing notification. The app waits for a first charger connection before arming ordinary charger detection.
+The Status switch controls monitoring globally. Turning it off stops power monitoring and alarms. Its ongoing notification disappears unless optional Telegram remote control remains enabled. The app waits for a first charger connection before arming ordinary charger detection.
 
 | Status | Meaning |
 | --- | --- |
@@ -108,6 +109,37 @@ Choose **Resend** from **Configure email** and follow the steps to verify a send
 
 </details>
 
+### Optional Telegram remote control
+
+For a monitoring phone you rarely reach, open **Settings → Alerts & sound → Telegram remote control**. It is off by default.
+
+1. Set up Telegram alerts, open a private chat with your bot and send `/start`. Save that private chat in Telegram setup.
+2. Follow **Next**, select the private chat allowed to control the phone, and enable remote control. Groups can receive alerts but cannot control monitoring.
+3. Keep **Long polling** selected, or choose a 2–60 second polling interval. Set your default quiet time and optional EcoFlow check warnings.
+4. **Save**, then **Install menu**. Open your bot and send `/status`; the bot's command menu lists the available actions.
+
+| Command | What it does |
+| --- | --- |
+| `/status` | Grid, monitoring, charger, battery, alarm and EcoFlow check/readings information. |
+| `/check_ecoflow` | Start a configured EcoFlow check now; use `/status` shortly afterward for its result. |
+| `/stop_sound` | Acknowledge the current audible alarm and stop its repeats. |
+| `/quiet` or `/quiet 30` | Skip automatic Telegram alerts for the default time or 30 minutes. |
+| `/unquiet` | Resume automatic Telegram alerts. Quiet-period messages are not replayed. |
+| `/monitor_on`, `/monitor_off` | Enable/disable power monitoring. Remote control remains available. |
+| `/charger_on`, `/charger_off` | Enable charger watching, or use ready EcoFlow monitoring alone. |
+| `/ecoflow_on`, `/ecoflow_off` | Resume configured EcoFlow, or pause it while charger watching continues. |
+| `/help` | List commands and their effects. |
+
+Monitoring and remote control share **one small ongoing notification**, showing **Monitoring active** or **Monitoring inactive**. Disable both to remove it. Monitoring off stops power checks and alarms. Quiet affects automatic Telegram alerts only: command replies, other alert channels and sound continue. Skipped deliveries are recorded in delivery history.
+
+Long polling returns when a command arrives, with an idle request lasting up to 25 seconds. No webhook server or router port forwarding is needed. Unlock the phone once after a reboot so protected credentials become available. To find a new Telegram chat later, disable remote control and save before sending a fresh `/start` and using Find chats; then allow that chat and re-enable control. Use **one command receiver per bot**; another receiver or webhook can conflict. Android can delay background networking, so check Diagnostics and battery restrictions. Commands require internet even when other alerts use SMS.
+
+Only explicitly trusted private senders can act. Forwarded/edited messages and stale commands cannot control the phone. Queued commands are discarded after initial enable or restore, and handled commands are not replayed. Protect the bot token and your Telegram account. Remote controls cannot change credentials, backups or inverter electrical settings.
+
+Outage/restoration alerts include the charger state and available grid/meter observations with their receipt times. A charger-based fallback is identified when EcoFlow could not verify grid loss. Trusted Telegram chats also receive short command hints.
+
+EcoFlow check warnings notify enabled alert channels once when a completed check fails or lacks current grid evidence, and when a later completed check recovers. Intentional time between checks does not trigger this warning.
+
 ### Audible alarm and scheduled messages
 
 Open **Settings → Alerts & sound → Audible alarm**. Choose the built-in beep or **Choose Android alarm sound**, then **Play 5-second test**. Available custom sounds depend on the phone's picker. Expand **Repeats and timing** or **Battery and volume** to adjust repeats, optional exact timing, loudness and battery cutoff.
@@ -154,7 +186,7 @@ In charger-first mode, charger loss can alert independently if EcoFlow is unreac
 
 Expand **Check duration & updates** to change the listening limit and extra-report count. Short intervals can leave little time disconnected. Status shows last/next check; expand **EcoFlow readings** for device receipt time, update counts, data health, grid code and meter explanations.
 
-Changing device power values support apparent freshness even when the grid code stays unchanged. A received reply alone does not prove a new transition. Identical power readings across three checks can mean a steady load or a stalled feed: the dashboard warns, an optional warning goes through enabled channels, and **Stuck-reading safeguards** can temporarily ignore that evidence until it changes.
+Changing device power values support apparent freshness even when the grid code stays unchanged. Fresh nonzero device meter reports can also confirm an unchanged connected grid code while home loads stay steady. A received reply alone does not prove a new transition. Identical power readings across three checks can mean a steady load or a stalled feed: the dashboard warns, an optional warning goes through enabled channels, and **Stuck-reading safeguards** can temporarily ignore that evidence until it changes.
 
 This is an **experimental, unofficial account interface**. It reads data and requests temporary reporting; it does not change charging, reserve or output settings. EcoFlow has not confirmed usage limits or approved this access. Low activity cannot guarantee account acceptance. The app cannot guarantee a manufacturer measurement timestamp or that every value is freshly measured.
 
@@ -169,15 +201,15 @@ The source and alert interfaces are designed for future modules. Huawei, Tesla, 
 
 ### Backup and restore
 
-Open **Settings → Data & recovery**. A `.fpgrid` backup can include settings, alert channels and credentials, power sources, history, live monitoring state and pending deliveries. You select sections separately for backup and restore. The creating app version is recorded.
+Open **Settings → Data & recovery**. A `.fpgrid` backup can include settings, alert channels and credentials, power sources, history, live monitoring state and pending deliveries. You select sections separately for backup and restore. The creating app version is recorded. Alert-channel backups include trusted Telegram control settings and quiet choices; pending remote commands are never transferred.
 
-**Create backup:** choose included data, enter/confirm a password of at least ten characters, then choose where to save. Keep the password in your password manager and a copy of the archive away from the phone.
+**Create backup:** choose included data, enter/confirm a password of at least ten characters, then choose where to save. Use **Show/Hide** to check each password field. Password keyboards are requested with suggestions disabled and, on Android 8 or newer, no personalized learning; the keyboard ultimately decides whether to honor these requests. Keep the password in your password manager and a copy of the archive away from the phone.
 
 **Automatic backups:** choose a destination folder, expand **Frequency & copies**, **Included data** and **Backup password**, enable backups and **Save automatic backup plan**. Run **Create an automatic backup now** and verify its result. A cloud app can sync the chosen folder if it supports Android folder access; FP Grid Monitor does not need your cloud login. If cloud folders are unavailable, use a local folder and your own sync/copy arrangement.
 
 **Restore:** turn monitoring off, open **Restore backup**, enter the password and **Choose backup to unlock**. On a new installation, use **Restore an existing backup** on the welcome screen. When **Ready to restore** appears, review version/data, select sections and **Restore selected data**. Include app settings to recover completed setup. Only choose **Resume monitoring after restore** if the old device is offline, to avoid duplicate pending alerts.
 
-After restore, reconnect Android permissions, backup-folder access and custom sound access; these device grants cannot transfer. Review Diagnostics and send provider tests before relying on the replacement device. History receives a **Backup restored** marker.
+Remote control remains off after restore unless you choose to resume monitoring; otherwise enable it again after the old receiver is offline. After restore, reconnect Android permissions, backup-folder access and custom sound access; these device grants cannot transfer. Review Diagnostics and send provider tests before relying on the replacement device. History receives a **Backup restored** marker.
 
 The archive uses password-strengthening and authenticated **AES-256-GCM** encryption. It is not a password-protected ZIP and cannot be opened by an unzip tool. Forgotten passwords cannot be recovered. The advanced backup editor lets you view/edit the unlocked structured document and save a separately encrypted, validated copy; it can expose credentials, so keep that screen private.
 
@@ -188,6 +220,7 @@ The archive uses password-strengthening and authenticated **AES-256-GCM** encryp
 | Waiting for first connection | Connect the watched charger once to arm charger detection. |
 | Backup keeps the charger powered | Use a socket that loses grid power, or an installation-tested optional grid source. |
 | Telegram finds no chats | Send a fresh `/start` to your bot, then tap Find chats. Check the saved token and internet. |
+| Telegram commands do not arrive | Check trusted private chat, saved/enabled remote control and its Receiver status; use one receiver per bot. |
 | Messages missing | Check saved/enabled channels and recipients, send their tests and inspect Diagnostics. |
 | Notification hidden | Allow FP Grid Monitor notifications in Android settings. |
 | Monitoring restarts unexpectedly | Check History and Diagnostics, then follow battery/background guidance. |

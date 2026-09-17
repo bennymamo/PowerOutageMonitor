@@ -47,7 +47,9 @@ internal class MonitoringCoordinator(private val context: Context) {
                     message.copy(title = "GRID RETURN LIKELY · ECOFLOW RECONNECTING",
                         body = message.body + "\n\nMeter activity suggests the utility supply has returned. EcoFlow has not yet confirmed grid reconnection.")
                 } else message
-                alerts.persistForEnabledProviders(qualified)
+                val sources = PowerSourceStore(context)
+                alerts.persistForEnabledProviders(com.flossypickle.poweroutagemonitor.integrations.alerts.AlertEvidenceDetails.append(
+                    qualified, sources.selectedSource(), sources.lastStatus(), snapshot))
             }
         recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)

@@ -19,7 +19,7 @@ internal class BootReceiver : BroadcastReceiver() {
         cause?.let { OperationalHistoryStore(context).expectAppRestart(it) }
         runCatching { AlertDeliveryCoordinator(context).materializePending() }
             .onFailure { Log.e(TAG, "Unable to resume pending alerts after ${intent?.action}", it) }
-        if (!MonitorStore(context).settings().monitoringEnabled) return
+        if (!MonitoringService.shouldHost(context)) return
         runCatching { MonitoringService.start(context, cause) }
             .onFailure { Log.e(TAG, "Unable to resume monitoring after ${intent?.action}", it) }
     }

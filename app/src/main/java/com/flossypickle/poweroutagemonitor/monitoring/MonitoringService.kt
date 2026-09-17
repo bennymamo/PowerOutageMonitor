@@ -34,6 +34,11 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ChargerFirstPolicy
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowModbusPowerSignalProvider
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteController
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteActions
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 
 /** Event-driven foreground service. It performs no polling while power state is stable. */
 internal class MonitoringService : Service() {
@@ -53,6 +58,7 @@ internal class MonitoringService : Service() {
     private var lastEcoFlowUiRefreshAt = 0L
     private val deadlineCheck = Runnable { reconcileSelectedPower() }
     private var historyStartRecorded = false
+    private lateinit var remoteControl: TelegramRemoteController
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -65,9 +71,14 @@ internal class MonitoringService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
+        isRunning = MonitorStore(this).settings().monitoringEnabled
         coordinator = MonitoringCoordinator(this)
         audibleAlarm = AudibleAlarmCoordinator(this)
+        remoteControl = TelegramRemoteController(this, { command ->
+            val task = FutureTask { TelegramRemoteActions(this).execute(command) }
+            handler.post(task)
+            try { task.get(15, TimeUnit.SECONDS) } finally { task.cancel(false) }
+        })
         activeSource = PowerSourceStore(this).selectedSource()
         createNotificationChannel()
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
@@ -75,6 +86,16 @@ internal class MonitoringService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        remoteControl.refresh()
+        isRunning = MonitorStore(this).settings().monitoringEnabled
+        if (!isRunning) {
+            suspendPowerMonitoring()
+            if (!TelegramRemoteStore(this).settings().enabled) {
+                stopSelf(); return START_NOT_STICKY
+            }
+            refreshNotification()
+            return START_STICKY
+        }
         if (!historyStartRecorded) {
             val cause = when (intent?.action) {
                 ACTION_RESUME_AFTER_UPDATE -> OperationalHistoryStore.RestartCause.APP_UPDATE
@@ -84,10 +105,6 @@ internal class MonitoringService : Service() {
             val historyLimit = MonitorStore(this).settings().historyLimit
             OperationalHistoryStore(this).recordMonitoringStarted(historyLimit, cause)
             historyStartRecorded = true
-        }
-        if (!MonitorStore(this).settings().monitoringEnabled) {
-            stopSelf()
-            return START_NOT_STICKY
         }
         when (intent?.action) {
             ACTION_AUDIBLE_TICK -> {
@@ -116,6 +133,7 @@ internal class MonitoringService : Service() {
     }
 
     override fun onDestroy() {
+        remoteControl.stop()
         isRunning = false
         handler.removeCallbacks(deadlineCheck)
         sourceGeneration++
@@ -145,6 +163,20 @@ internal class MonitoringService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun suspendPowerMonitoring() {
+        handler.removeCallbacks(deadlineCheck)
+        sourceGeneration++
+        ecoFlowProvider?.stop(); ecoFlowProvider = null; latestPrimarySignal = null
+        lastEcoFlowAvailability = null; ecoFlowHadUnknown = false; releaseEcoFlowLocks()
+        DeadlineScheduler(this).cancel()
+        com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertCoordinator(this).stop()
+        audibleAlarm.stop()
+        if (historyStartRecorded) {
+            OperationalHistoryStore(this).recordMonitoringStopped(MonitorStore(this).settings().historyLimit, userDisabled = true)
+            historyStartRecorded = false
+        }
+    }
+
     private fun registerBatteryReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
@@ -170,6 +202,7 @@ internal class MonitoringService : Service() {
     }
 
     private fun reconcileSelectedPower() {
+        if (!MonitorStore(this).settings().monitoringEnabled) return
         val selected = PowerSourceStore(this).selectedSource()
         if (selected != activeSource ||
             selected != PowerSourceStore.Source.ANDROID_CHARGER && ecoFlowProvider == null
@@ -227,6 +260,7 @@ internal class MonitoringService : Service() {
 
     private fun onBatterySnapshot(snapshot: PowerSnapshot) {
         latestBatterySnapshot = snapshot
+        if (!MonitorStore(this).settings().monitoringEnabled) return
         (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.updateCharger(snapshot.externallyPowered)
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
             processEcoFlow(latestPrimarySignal ?: PowerSignal(GridAvailability.UNKNOWN, System.currentTimeMillis(), PowerSourceStore.POWEROCEAN_PROVIDER_ID))
@@ -291,10 +325,12 @@ internal class MonitoringService : Service() {
     }
 
     private fun processEcoFlow(primary: PowerSignal) {
+        if (!MonitorStore(this).settings().monitoringEnabled) return
         latestPrimarySignal = primary
         val sourceStore = PowerSourceStore(this)
         val assisted = sourceStore.powerOceanAssistedSettings()
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
+            com.flossypickle.poweroutagemonitor.integrations.alerts.SourceCheckWarningCoordinator(this).process(primary.check)
             com.flossypickle.poweroutagemonitor.integrations.alerts.SourceDataWarningCoordinator(this)
                 .process(primary.dataPossiblyStalled, assisted.warnOnUnchanged)
         }
@@ -430,7 +466,8 @@ internal class MonitoringService : Service() {
                     it.availability == GridAvailability.UNKNOWN ||
                     System.currentTimeMillis() - it.observedAtEpochMs !in 0..ECOFLOW_STALE_AFTER_MS
             } != false
-        val title = if (ecoFlowUnknown) {
+        val monitoringEnabled = MonitorStore(this).settings().monitoringEnabled
+        val gridTitle = if (ecoFlowUnknown) {
             "Monitoring · EcoFlow reading unavailable"
         } else when (state.phase) {
             OutageEngine.Phase.WAITING -> "Monitoring · waiting for power"
@@ -439,6 +476,7 @@ internal class MonitoringService : Service() {
             OutageEngine.Phase.OUTAGE -> "Power outage confirmed"
             OutageEngine.Phase.PENDING_RESTORE -> "Checking power restoration"
         }
+        val title = if (monitoringEnabled) "Monitoring active" else "Monitoring inactive"
         val battery = snapshot?.batteryPercent?.let { " · Battery $it%" }.orEmpty()
         val openApp = PendingIntent.getActivity(
             this,
@@ -455,13 +493,13 @@ internal class MonitoringService : Service() {
         builder
             .setSmallIcon(R.drawable.ic_monitoring_notification)
             .setContentTitle(title)
-            .setContentText("${MonitorStore(this).settings().deviceName}$battery")
+            .setContentText(if (monitoringEnabled) "$gridTitle$battery" else "Telegram remote control enabled")
             .setContentIntent(openApp)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-        if (audibleAlarm.isActive(state, snapshot)) {
+        if (monitoringEnabled && audibleAlarm.isActive(state, snapshot)) {
             val dismiss = AudibleAlarmNotification.stopSoundIntent(this)
             builder.addAction(
                 Notification.Action.Builder(
@@ -519,7 +557,7 @@ internal class MonitoringService : Service() {
         }
 
         fun refreshNotification(context: Context) {
-            if (!MonitorStore(context).settings().monitoringEnabled) return
+            if (!shouldHost(context)) return
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, MonitoringService::class.java)
@@ -557,6 +595,14 @@ internal class MonitoringService : Service() {
         }
 
         fun refreshScheduledAlerts(context: Context) = handleScheduledAlert(context)
+
+        fun shouldHost(context: Context): Boolean = MonitorStore(context).settings().monitoringEnabled ||
+            TelegramRemoteStore(context).settings().enabled
+
+        fun syncHosting(context: Context) {
+            if (shouldHost(context)) start(context)
+            else context.stopService(Intent(context, MonitoringService::class.java))
+        }
 
         private const val ACTION_AUDIBLE_TICK =
             "com.flossypickle.poweroutagemonitor.SERVICE_AUDIBLE_TICK"

@@ -11,6 +11,7 @@ import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpCo
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramConfigStore
+import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudClient
 import com.flossypickle.poweroutagemonitor.monitoring.PowerSnapshot
@@ -55,7 +56,8 @@ internal data class BackupDocument(
         val gmailAppPassword: String?,
         val resend: ResendEmailConfigStore.Config,
         val resendApiKey: String?,
-        val sms: SmsConfigStore.Config
+        val sms: SmsConfigStore.Config,
+        val telegramRemote: TelegramRemoteStore.Settings = TelegramRemoteStore.Settings()
     )
 
     data class PowerSourcesData(
@@ -262,6 +264,14 @@ internal object BackupDocumentCodec {
     }
 
     private fun writeAlerts(p: Properties, data: BackupDocument.AlertsData) {
+        val remote = data.telegramRemote
+        p["alerts.remote.enabled"] = remote.enabled.toString()
+        p.writeStrings("alerts.remote.trusted", remote.trustedChatIds.sorted())
+        p["alerts.remote.longPoll"] = remote.longPolling.toString()
+        p["alerts.remote.pollSeconds"] = remote.pollSeconds.toString()
+        p["alerts.remote.quietMinutes"] = remote.quietMinutes.toString()
+        p["alerts.remote.quietUntil"] = remote.quietUntilEpochMs.toString()
+        p["alerts.remote.checkWarnings"] = remote.checkWarnings.toString()
         p["alerts.telegram.enabled"] = data.telegram.enabled.toString()
         p.putOptional("alerts.telegram.name", data.telegram.botDisplayName)
         p.putOptional("alerts.telegram.token", data.telegramToken)
@@ -290,6 +300,11 @@ internal object BackupDocumentCodec {
             },
             hasToken = p.optional("alerts.telegram.token") != null
         ),
+        telegramRemote = if (p.containsKey("alerts.remote.enabled")) TelegramRemoteStore.Settings(
+            p.boolean("alerts.remote.enabled"), p.readStrings("alerts.remote.trusted").toSet(),
+            p.boolean("alerts.remote.longPoll"), p.int("alerts.remote.pollSeconds"),
+            p.int("alerts.remote.quietMinutes"), p.boolean("alerts.remote.checkWarnings"),
+            p.long("alerts.remote.quietUntil")) else TelegramRemoteStore.Settings(),
         telegramToken = p.optional("alerts.telegram.token"),
         gmail = GmailSmtpConfigStore.Config(
             enabled = p.boolean("alerts.gmail.enabled"),

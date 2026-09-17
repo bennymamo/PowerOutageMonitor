@@ -178,7 +178,7 @@ class MainActivity : ComponentActivity() {
         systemHealthMonitor.start()
         refreshStoredState()
         AlertDeliveryCoordinator(this).materializePending()
-        if (MonitorStore(this).settings().monitoringEnabled) startMonitoringService()
+        if (MonitoringService.shouldHost(this)) startMonitoringService()
     }
 
     override fun onStop() {
@@ -258,13 +258,13 @@ class MainActivity : ComponentActivity() {
             DeadlineScheduler(this).cancel()
             ScheduledAlertCoordinator(this).stop()
             AudibleAlarmCoordinator(this).stop()
-            stopService(Intent(this, MonitoringService::class.java))
+            MonitoringService.syncHosting(this)
         }
         refreshStoredState()
     }
 
     private fun startMonitoringService() {
-        if (MonitorStore(this).settings().monitoringEnabled) MonitoringService.start(this)
+        if (MonitoringService.shouldHost(this)) MonitoringService.start(this)
     }
 
     private fun updateSettings(
@@ -387,6 +387,7 @@ class MainActivity : ComponentActivity() {
         }
         return runCatching {
             BackupManager(this).restore(document, categories, resumeMonitoring)
+            MonitoringService.syncHosting(this)
             refreshStoredState()
             if (resumeMonitoring && MonitorStore(this).settings().monitoringEnabled) {
                 setMonitoringEnabled(true)
@@ -398,6 +399,7 @@ class MainActivity : ComponentActivity() {
         AlertDeliveryCoordinator(this).enqueueTest(message)
 
     private fun alertConfigurationChanged() {
+        MonitoringService.syncHosting(this)
         AlertDeliveryCoordinator(this).materializePending()
         if (MonitorStore(this).settings().monitoringEnabled) {
             MonitoringService.refreshScheduledAlerts(this)

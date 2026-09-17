@@ -127,6 +127,7 @@ private sealed interface TimelineEntry {
 private fun OperationalCard(record: OperationalHistoryStore.Record) {
     var expanded by rememberSaveable(record.kind, record.timestampEpochMs) { mutableStateOf(false) }
     val title = when (record.kind) {
+        "REMOTE_COMMAND" -> "Telegram control"
         OperationalHistoryStore.KIND_APP_OPENED -> "App opened"
         OperationalHistoryStore.KIND_APP_RECOVERED -> "Unrecorded app interruption"
         OperationalHistoryStore.KIND_APP_UPDATED -> "App reopened after update"

@@ -42,8 +42,10 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
                         message = message,
                         createdAtEpochMs = System.currentTimeMillis()
                     )
-                    queue.enqueue(item)
-                    AlertDeliveryScheduler(context).scheduleNow(item.id)
+                    val quiet = destination.providerId == "telegram" && message.kind != AlertKind.TEST &&
+                        com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(context).isQuiet()
+                    queue.enqueue(if (quiet) AlertQueueEngine.complete(item, DeliveryResult.Skipped("Automatic Telegram alerts are quiet"), System.currentTimeMillis()) else item)
+                    if (!quiet) AlertDeliveryScheduler(context).scheduleNow(item.id)
                 }
                 pending.remove(message)
             }

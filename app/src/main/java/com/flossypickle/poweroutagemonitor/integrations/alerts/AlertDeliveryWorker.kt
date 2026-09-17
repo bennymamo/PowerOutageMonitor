@@ -25,7 +25,10 @@ internal class AlertDeliveryWorker(
         }
 
         val result = runCatching {
-            AlertProviderRegistry(applicationContext)
+            if (claimed.providerId == "telegram" && claimed.message.kind != AlertKind.TEST &&
+                com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(applicationContext).isQuiet()) {
+                DeliveryResult.Skipped("Automatic Telegram alerts are quiet")
+            } else AlertProviderRegistry(applicationContext)
                 .resolve(claimed.providerId, claimed.destinationId)
                 ?.send(claimed.message)
                 ?: DeliveryResult.PermanentFailure("Alert channel is disabled or incomplete")

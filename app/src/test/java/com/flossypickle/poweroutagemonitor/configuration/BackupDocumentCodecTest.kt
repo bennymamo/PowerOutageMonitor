@@ -20,6 +20,19 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class BackupDocumentCodecTest {
+    @Test fun remoteChoicesRoundTripAndOldBackupsCannotEnableControl() {
+        val original = completeDocument()
+        val config = com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore.Settings(
+            true, setOf("1234"), false, 2, 30, false, 1_700_000_010_000)
+        val configured = original.copy(alerts = original.alerts!!.copy(telegramRemote = config))
+        val text = BackupDocumentCodec.encode(configured).toString(Charsets.UTF_8)
+        assertEquals(configured, BackupDocumentCodec.decode(text.toByteArray()))
+        val old = text.lineSequence().filterNot { it.startsWith("alerts.remote.") }.joinToString("\n")
+        assertEquals(false, BackupDocumentCodec.decode(old.toByteArray()).alerts!!.telegramRemote.enabled)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("alerts.remote.pollSeconds=2", "alerts.remote.pollSeconds=1").toByteArray())
+        }
+    }
     @Test
     fun allCategoriesAndSecretsRoundTrip() {
         val original = completeDocument()

@@ -152,7 +152,7 @@ internal class AlertQueueStore(context: Context) {
 
     companion object {
         private const val MAX_TERMINAL_RECORDS = 200
-        private val terminalStates = setOf(AlertQueueEngine.Status.SENT, AlertQueueEngine.Status.FAILED)
+        private val terminalStates = setOf(AlertQueueEngine.Status.SENT, AlertQueueEngine.Status.FAILED, AlertQueueEngine.Status.SKIPPED)
         private val lock = Any()
     }
 }

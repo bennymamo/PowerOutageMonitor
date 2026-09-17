@@ -420,7 +420,7 @@ internal fun DataBackupSettingsContent(
             ) {
                 SettingSwitch(
                     title = "Resume monitoring after restore",
-                    explanation = "Starts the restored live monitor and continues its saved pending alerts.",
+                    explanation = "Starts monitoring, saved Telegram remote control, and pending alerts.",
                     checked = resumeMonitoring,
                     onCheckedChange = { resumeMonitoring = it }
                 )
@@ -541,19 +541,12 @@ private fun RadioChoice(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun PasswordField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { if (it.length <= 200) onChange(it) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation()
-    )
+    PrivatePasswordField(label, value, onChange)
 }
 
 private fun categoryDescription(category: BackupCategory) = when (category) {
     BackupCategory.SETTINGS -> "Names, timing, appearance, alarms, and scheduled-update choices."
-    BackupCategory.ALERTS -> "Telegram, Gmail, Resend and SMS setup, including keys and recipients."
+    BackupCategory.ALERTS -> "Alert setup, keys, recipients and trusted Telegram remote-control choices."
     BackupCategory.POWER_SOURCES -> "Local and cloud EcoFlow setup, including cloud API keys."
     BackupCategory.HISTORY -> "Recorded outages, interruptions, app starts and monitoring activity."
     BackupCategory.ACTIVE_STATE -> "Current outage state, pending messages, retry state and alarm state."

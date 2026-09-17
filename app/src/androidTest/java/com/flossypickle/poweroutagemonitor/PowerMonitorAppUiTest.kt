@@ -114,7 +114,7 @@ class PowerMonitorAppUiTest {
         capture("status-dark")
         val groups = linkedMapOf(
             "Monitoring" to listOf("Outage timing", "Restoration", "Battery alerts", "Scheduled updates", "Reliability"),
-            "Alerts & sound" to listOf("Alert channels", "Audible alarm"),
+            "Alerts & sound" to listOf("Alert channels", "Audible alarm", "Telegram remote control"),
             "Data & recovery" to listOf("History", "Create encrypted backup", "Automatic backups", "Restore backup"),
             "Appearance & device" to listOf("Device", "Appearance", "Help & guidance"),
             "Help & app" to listOf("Setup & testing", "Safety & privacy", "About"))
@@ -123,6 +123,11 @@ class PowerMonitorAppUiTest {
             for (page in pages) {
                 click(page); title(if (page == "Create encrypted backup") "Create backup" else page); capture(page)
                 when (page) {
+                    "Telegram remote control" -> {
+                        repeat(3) { click("Next"); capture("remote-step-${it + 2}") }
+                        click("Commands"); capture("remote-commands"); click("Commands")
+                        click("How it works"); capture("remote-help")
+                    }
                     "Scheduled updates" -> for (label in listOf("Source unavailable", "Monitor heartbeat", "Long outage updates")) {
                         click(label); capture(label); click(label)
                     }

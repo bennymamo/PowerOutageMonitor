@@ -7,13 +7,15 @@ internal object AlertDeliverySummary {
         val sent: Int,
         val pending: Int,
         val retrying: Int,
-        val failed: Int
+        val failed: Int,
+        val skipped: Int = 0
     ) {
         fun label(): String = buildList {
             if (sent > 0) add("$sent sent")
             if (pending > 0) add("$pending queued")
             if (retrying > 0) add("$retrying retrying")
             if (failed > 0) add("$failed failed")
+            if (skipped > 0) add("$skipped skipped")
         }.joinToString(" · ").ifEmpty { "No alert attempts" }
     }
 
@@ -28,7 +30,8 @@ internal object AlertDeliverySummary {
                         it.status == AlertQueueEngine.Status.IN_FLIGHT
                 },
                 retrying = deliveries.count { it.status == AlertQueueEngine.Status.RETRYING },
-                failed = deliveries.count { it.status == AlertQueueEngine.Status.FAILED }
+                failed = deliveries.count { it.status == AlertQueueEngine.Status.FAILED },
+                skipped = deliveries.count { it.status == AlertQueueEngine.Status.SKIPPED }
             )
         }
 }
