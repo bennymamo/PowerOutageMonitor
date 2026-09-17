@@ -7,14 +7,20 @@ internal object PowerOceanLossConfirmation {
     enum class Reason { UNKNOWN, WAITING_FOR_LIVE_DATA, CONNECTED, RETURN_PENDING, ECOFLOW_AND_METER, CHARGER_CORROBORATED, WAITING_FOR_CHARGER }
     data class Result(val availability: GridAvailability, val reason: Reason)
 
-    /** Fresh changing feed supports an unchanged connected code without altering its observation time. */
+    /** A new meter push or changing feed supports an unchanged code without altering its observation time. */
     fun evidenceReceivedAt(grid: PowerOceanGridCorrelation.Snapshot, live: PowerOceanLiveCheck.Status?,
-        now: Long, minimumPowerReports: Int, connectedCodeFromDevicePush: Boolean = true): Long? =
-        if (grid.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED && grid.currentMeterValue != null && grid.currentMeterValue != 0.0 &&
-            live != null && live.hasCurrentReport(now) && live.valuesChanged && live.powerUpdates >= minimumPowerReports)
-            live.lastDevicePushAt
-        else if (grid.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED && !connectedCodeFromDevicePush) null
-        else grid.evidenceReceivedAtUtcMillis
+        now: Long, minimumPowerReports: Int, connectedCodeFromDevicePush: Boolean = true,
+        liveMeterReceivedAt: Long? = null): Long? {
+        if (grid.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED && grid.currentMeterValue != null &&
+            grid.currentMeterValue != 0.0 && live != null && live.hasCurrentReport(now)) {
+            // Genuine fresh non-zero meter activity remains valid when household watts are steady.
+            if (liveMeterReceivedAt != null && live.requestedAt != null && liveMeterReceivedAt > live.requestedAt &&
+                liveMeterReceivedAt <= now && now - liveMeterReceivedAt <= 90_000) return liveMeterReceivedAt
+            if (live.valuesChanged && live.powerUpdates >= minimumPowerReports) return live.lastDevicePushAt
+        }
+        return if (grid.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED && !connectedCodeFromDevicePush) null
+            else grid.evidenceReceivedAtUtcMillis
+    }
 
     fun evaluate(grid: PowerOceanGridCorrelation.Snapshot, chargerExternallyPowered: Boolean?, requireCharger: Boolean, liveDataVerified: Boolean = true): Result =
         if (!liveDataVerified) Result(GridAvailability.UNKNOWN, Reason.WAITING_FOR_LIVE_DATA) else when (grid.state) {

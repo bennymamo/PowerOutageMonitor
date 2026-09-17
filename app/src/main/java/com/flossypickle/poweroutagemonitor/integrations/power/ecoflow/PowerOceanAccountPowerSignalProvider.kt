@@ -181,7 +181,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                             } }
                             val evidenceAt = update.gridInspection.correlation?.let { grid ->
                                 PowerOceanLossConfirmation.evidenceReceivedAt(grid, update.liveCheck,
-                                    System.currentTimeMillis(), assisted.extraPowerUpdates + 1, update.gridInspection.lastCodeFromDevicePush)
+                                    System.currentTimeMillis(), assisted.extraPowerUpdates + 1, update.gridInspection.lastCodeFromDevicePush,
+                                    update.gridInspection.meterReceivedUtcMillis.takeIf { update.gridInspection.meterFromDevicePush })
                             }
                             emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, evidenceAt,
                                 update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)

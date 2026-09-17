@@ -66,4 +66,15 @@ class PowerOceanLossConfirmationTest {
         assertNull(PowerOceanLossConfirmation.evidenceReceivedAt(grid, null, 3000, 3, false))
     }
 
+    @Test fun genuineNewMeterActivitySupportsConnectedGridEvenWithSteadyHouseholdWatts() {
+        val grid = snapshot(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, 5.0)
+            .copy(evidenceReceivedAtUtcMillis = 500)
+        val live = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanLiveCheck.Status(
+            1000, 3000, 0, powerUpdates = 3, valuesChanged = false)
+        assertEquals(2900L, PowerOceanLossConfirmation.evidenceReceivedAt(grid, live, 3000, 3, false, 2900))
+        assertNull(PowerOceanLossConfirmation.evidenceReceivedAt(grid, live, 3000, 3, false, 500))
+        assertNull(PowerOceanLossConfirmation.evidenceReceivedAt(grid, live, 3000, 3, false, 4000))
+        assertNull(PowerOceanLossConfirmation.evidenceReceivedAt(grid.copy(currentMeterValue = 0.0), live, 3000, 3, false, 2900))
+    }
+
 }
