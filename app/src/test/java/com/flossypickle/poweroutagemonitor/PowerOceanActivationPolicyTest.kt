@@ -20,4 +20,14 @@ class PowerOceanActivationPolicyTest {
         assertEquals(Policy.Stage.READY, Policy.evaluate(true, true, true, 1000, 91000))
         assertEquals(Policy.Stage.LIVE_TEST_REQUIRED, Policy.evaluate(true, true, true, 1000, 91001))
     }
+    @Test fun previousSuccessfulTestSkipsTheLiveCheckExpiry() {
+        assertEquals(Policy.Stage.READY, Policy.evaluate(true, true, true, 0, 100000, previousTestAccepted = true))
+        assertEquals(Policy.Stage.READY, Policy.evaluate(true, true, true, 1000, 100000, previousTestAccepted = true))
+    }
+    @Test fun previousTestDoesNotBypassAccountModelOrPhysicalProfileRequirements() {
+        assertEquals(Policy.Stage.ACCOUNT_REQUIRED, Policy.evaluate(false, true, true, 0, 100000, true))
+        assertEquals(Policy.Stage.UNSUPPORTED_MODEL, Policy.evaluate(true, false, true, 0, 100000, true))
+        assertEquals(Policy.Stage.PROFILE_REQUIRED, Policy.evaluate(true, true, false, 0, 100000, true))
+    }
+
 }

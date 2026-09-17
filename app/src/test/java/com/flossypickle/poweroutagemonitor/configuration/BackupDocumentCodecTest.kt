@@ -45,9 +45,10 @@ class BackupDocumentCodecTest {
     @Test
     fun olderBackupsDefaultNewMonitoringChoicesToDisabled() {
         val text = BackupDocumentCodec.encode(completeDocument()).toString(Charsets.UTF_8)
-        val old = text.lineSequence().filterNot { it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") || it.startsWith("power.account.chargerFirst=") || it.startsWith("power.account.normalSeconds=") || it.startsWith("power.account.outageSeconds=") }.joinToString("\n")
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.previousTest=") || it.startsWith("power.account.profileVerified=") || it.startsWith("power.account.liveReporting=") || it.startsWith("power.account.chargerFirst=") || it.startsWith("power.account.normalSeconds=") || it.startsWith("power.account.outageSeconds=") }.joinToString("\n")
         val restored = BackupDocumentCodec.decode(old.toByteArray()).powerSources!!
         assertEquals(false, restored.powerOceanProfileVerified)
+        assertEquals(false, restored.powerOceanUsePreviousTest)
         assertEquals(false, restored.powerOceanRequestLiveReporting)
         assertEquals(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(), restored.powerOceanAssisted)
     }
@@ -63,6 +64,13 @@ class BackupDocumentCodecTest {
             assertThrows(IllegalArgumentException::class.java) {
                 BackupDocumentCodec.decode(text.replace("power.account.normalSeconds=0", "power.account.normalSeconds=$bad").toByteArray())
             }
+        }
+    }
+
+    @Test fun previousTestOverrideCannotRestoreAnUnverifiedProfile() {
+        val text = BackupDocumentCodec.encode(completeDocument()).toString(Charsets.UTF_8)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("power.account.profileVerified=true", "power.account.profileVerified=false").toByteArray())
         }
     }
 
@@ -117,6 +125,7 @@ class BackupDocumentCodecTest {
                 "owner@example.com", "account-password", "EXAMPLE-SERIAL", refreshSeconds = 20),
             powerOceanRequireChargerConfirmation = true,
             powerOceanProfileVerified = true,
+            powerOceanUsePreviousTest = true,
             powerOceanRequestLiveReporting = true,
             powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(true, 3600, 60)
         ),

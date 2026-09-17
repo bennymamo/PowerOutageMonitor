@@ -57,9 +57,19 @@ internal class PowerSourceStore(context: Context) {
 
     fun setPowerOceanProfileVerified(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection, verified: Boolean) {
         require(connection.isValid && connection.model == "86")
-        val editor = preferences.edit().remove(KEY_POWEROCEAN_TEST_TIME)
+        val editor = preferences.edit().remove(KEY_POWEROCEAN_TEST_TIME).remove(KEY_POWEROCEAN_PREVIOUS_TEST)
         if (verified) editor.putString(KEY_POWEROCEAN_PROFILE, powerOceanKey(connection)) else editor.remove(KEY_POWEROCEAN_PROFILE)
         check(editor.commit()) { "Unable to save PowerOcean profile" }
+    }
+
+    fun powerOceanUsesPreviousTest(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection?): Boolean =
+        powerOceanProfileVerified(connection) && preferences.getString(KEY_POWEROCEAN_PREVIOUS_TEST, null) == connection?.let(::powerOceanKey)
+
+    fun setPowerOceanUsePreviousTest(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection, enabled: Boolean) {
+        if (enabled) require(powerOceanProfileVerified(connection)) { "Confirm the tested grid profile first" }
+        val editor = preferences.edit()
+        if (enabled) editor.putString(KEY_POWEROCEAN_PREVIOUS_TEST, powerOceanKey(connection)) else editor.remove(KEY_POWEROCEAN_PREVIOUS_TEST)
+        check(editor.commit()) { "Unable to save previous-test choice" }
     }
 
     fun recordPowerOceanLiveTest(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection) {
@@ -71,7 +81,7 @@ internal class PowerSourceStore(context: Context) {
         now: Long = System.currentTimeMillis()
     ) = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanActivationPolicy.evaluate(
         connection?.isValid == true, connection?.model == "86", powerOceanProfileVerified(connection),
-        preferences.getLong(KEY_POWEROCEAN_TEST_TIME, 0), now)
+        preferences.getLong(KEY_POWEROCEAN_TEST_TIME, 0), now, powerOceanUsesPreviousTest(connection))
 
     fun powerOceanReadyToActivate(): Boolean = powerOceanActivationStage(
         com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountStore(appContext).connection()
@@ -130,6 +140,7 @@ internal class PowerSourceStore(context: Context) {
             .putInt(KEY_ECOFLOW_UNIT, config.unitId)
             .remove(KEY_ECOFLOW_TESTED_CONFIG)
             .remove(KEY_POWEROCEAN_PROFILE)
+            .remove(KEY_POWEROCEAN_PREVIOUS_TEST)
             .remove(KEY_POWEROCEAN_TEST_TIME)
             .remove("account_charger_loss_started")
             .remove("account_charger_loss_recovered")
@@ -224,6 +235,7 @@ internal class PowerSourceStore(context: Context) {
         private const val KEY_SELECTED_SOURCE = "selected_source"
         private const val KEY_POWEROCEAN_CHARGER_CONFIRMATION = "powerocean_charger_confirmation"
         private const val KEY_POWEROCEAN_PROFILE = "powerocean_verified_profile"
+        private const val KEY_POWEROCEAN_PREVIOUS_TEST = "powerocean_previous_successful_test"
         private const val KEY_POWEROCEAN_TEST_TIME = "powerocean_live_test_time"
         private const val KEY_STATUS_RECOVERY_PENDING = "status_recovery_pending"
         private const val KEY_ECOFLOW_HOST = "ecoflow_host"

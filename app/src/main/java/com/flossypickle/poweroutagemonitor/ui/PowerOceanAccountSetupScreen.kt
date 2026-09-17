@@ -64,8 +64,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var pushError by remember { mutableStateOf<String?>(null) }
     var pushFeedback by remember { mutableStateOf<String?>(null) }
     var inspectionSeconds by remember { mutableStateOf(45) }
+    var usePreviousTest by remember(saved) { mutableStateOf(sourceStore.powerOceanUsesPreviousTest(saved)) }
     var useTestedGridCorrelation by remember(saved) { mutableStateOf(sourceStore.powerOceanProfileVerified(saved)) }
     var confirmGridCorrelation by remember { mutableStateOf(false) }
+    var confirmPreviousTest by remember { mutableStateOf(false) }
     val setupSteps = listOf("Before you begin", "Account login", "Your equipment", "Save and connect", "Verify and monitor")
     var setupStep by rememberSaveable { mutableStateOf(if (saved != null) 4 else 0) }
     var selectedSource by remember { mutableStateOf(sourceStore.selectedSource()) }
@@ -320,13 +322,21 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     else -> when (activationStage) {
                         PowerOceanActivationPolicy.Stage.ACCOUNT_REQUIRED -> "Save a valid account in Save and connect first."
                         PowerOceanActivationPolicy.Stage.UNSUPPORTED_MODEL -> "Background grid monitoring currently supports only a tested Single Phase installation."
-                        PowerOceanActivationPolicy.Stage.PROFILE_REQUIRED -> "Next: confirm Use my tested grid/meter comparison in Live-feed test below."
-                        PowerOceanActivationPolicy.Stage.LIVE_TEST_REQUIRED -> "Next: run a 45-second inspection in Live-feed test below, then return here. A successful connection alone may contain cached readings."
-                        PowerOceanActivationPolicy.Stage.READY -> "Ready to activate. Use the button within 90 seconds of the latest live grid evidence."
+                        PowerOceanActivationPolicy.Stage.PROFILE_REQUIRED -> "Next: confirm your previous tested profile below, or use Live-feed test for a first-time check."
+                        PowerOceanActivationPolicy.Stage.LIVE_TEST_REQUIRED -> "Next: run a 45-second live check below, or use your previous successful test if this installation was already tested."
+                        PowerOceanActivationPolicy.Stage.READY -> if (usePreviousTest) "Ready to activate using your previous successful test. No repeat grid cut or setup inspection is needed." else "Ready to activate. Use the button within 90 seconds of the latest live grid evidence."
                     }
                 }
                 Text(nextStep, color = if (!unsaved && !loading && activationStage == PowerOceanActivationPolicy.Stage.READY) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                if (activationStage == PowerOceanActivationPolicy.Stage.LIVE_TEST_REQUIRED && session == null) {
+                if (sourceStore.powerOceanProfileVerified(saved)) {
+                    SettingSwitch("Use my previous successful test", "Skip the setup live check for this same tested installation. EcoFlow decisions still need current live reports.", usePreviousTest, {
+                        saved?.let { account -> sourceStore.setPowerOceanUsePreviousTest(account, it) }
+                        usePreviousTest = it
+                    })
+                } else if (saved?.model == "86" && !unsaved) {
+                    OutlinedButton({ confirmPreviousTest = true; confirmGridCorrelation = true }, enabled = !loading) { Text("I already tested this installation") }
+                }
+                if (!usePreviousTest && activationStage == PowerOceanActivationPolicy.Stage.LIVE_TEST_REQUIRED && session == null) {
                     Text("Use Connect and inspect live feed below. It connects your saved account if needed.", style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -338,11 +348,11 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 if (sourceStore.select(com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore.Source.ECOFLOW_ACCOUNT)) {
                     selectedSource = sourceStore.selectedSource(); onPowerSourceChanged()
                     feedback = "PowerOcean selected. Use the Status master switch to start or stop monitoring."
-                } else error = "Verify the profile and run a fresh live inspection before selecting this source."
+                } else error = "Check the activation requirements above. Use your previous successful test or complete a new live check."
             }, enabled = !loading && !unsaved && activationStage == PowerOceanActivationPolicy.Stage.READY, modifier = Modifier.fillMaxWidth()) { Text(if (assistedSettings.enabled) "Use charger + EcoFlow assistance" else "Use PowerOcean for monitoring") }
             Text("Unofficial access is opt-in. Low traffic is not a guarantee against account restrictions. Missing or stale evidence stays Unknown.", style = MaterialTheme.typography.bodySmall)
         }
-        ExpandableSettingsSection("Live-feed test", "Inspect saved account and fresh grid evidence", initiallyExpanded = !accountActive && activationStage != PowerOceanActivationPolicy.Stage.READY) {
+        ExpandableSettingsSection("Live-feed test", "Inspect saved account and fresh grid evidence", initiallyExpanded = !accountActive && !assistedSettings.enabled && activationStage != PowerOceanActivationPolicy.Stage.READY) {
         PowerSourceSectionTitle("Live push inspection")
         SettingsCard {
             Text("Try the faster account feed", fontWeight = FontWeight.Medium)
@@ -353,22 +363,22 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 FilterChip(inspectionSeconds == 300, { inspectionSeconds = 300 }, label = { Text("5 minutes") }, enabled = !loading && !accountActive)
             }
             FilterChip(inspectionSeconds == 900, { inspectionSeconds = 900 }, label = { Text("15 minutes · grid test") }, enabled = !loading && !accountActive)
-            Text("Use 45 seconds to check access, 5 minutes for a short comparison, or 15 minutes for a grid test with time to walk to the switch and wait for reconnection. These are manual inspections, not background outage monitoring.", style = MaterialTheme.typography.bodySmall)
+            Text("45 seconds checks the live connection; no grid cut is needed. Unchanged values are normal at a steady load. Longer inspections are optional for a controlled outage test.", style = MaterialTheme.typography.bodySmall)
             if (assistedSettings.enabled) {
                 Text("Live reporting is automatic", fontWeight = FontWeight.Medium)
                 Text("Each charger-first check activates the live feed. This inspection also requests live reporting; EcoFlow's app can stay closed.", style = MaterialTheme.typography.bodySmall)
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Request live reporting", modifier = Modifier.weight(1f))
+                    Text("Continuous background live reporting", modifier = Modifier.weight(1f))
                     Switch(requestLiveReporting, { requestLiveReporting = it; sourceStore.setPowerOceanLiveReporting(it) }, enabled = !loading && !accountActive)
                 }
             }
-            Text("Enable if readings only update when EcoFlow's app is open. Continuous mode and inspections request temporary live reporting every 20 seconds. Charger-first mode always requests it once per scheduled or manual check. Turning monitoring off stops requests. No charging, reserve or output controls are sent. This unofficial protocol still needs checking on your model.", style = MaterialTheme.typography.bodySmall)
+            Text("Live inspections always request reporting every 20 seconds during the test. Charger-first monitoring requests it once per check. The continuous-background option applies only outside charger-first mode. No power-control commands are sent.", style = MaterialTheme.typography.bodySmall)
             Text("Stops when you leave the dashboard or put the app in the background. If no readings arrive, the result explains what remains to investigate.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Use my tested grid/meter comparison", modifier = Modifier.weight(1f))
                 Switch(useTestedGridCorrelation, {
-                    if (it) confirmGridCorrelation = true else { useTestedGridCorrelation = false; saved?.let { account -> sourceStore.setPowerOceanProfileVerified(account, false) } }
+                    if (it) { confirmPreviousTest = false; confirmGridCorrelation = true } else { useTestedGridCorrelation = false; usePreviousTest = false; saved?.let { account -> sourceStore.setPowerOceanProfileVerified(account, false) } }
                 }, enabled = !loading && !accountActive && !unsaved && saved?.model == "86")
             }
             Text("Optional Single Phase inspection profile: code 0 means connected, code 1 means off-grid, and AC meter 1 loses power with the utility grid. Enable only after physically checking these facts on your installation. After verification and a fresh live-feed test, you can explicitly select this source for monitoring.", style = MaterialTheme.typography.bodySmall)
@@ -399,7 +409,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                             is EcoFlowCloudClient.Result.Success -> {
                                 pushFeedback = "Inspecting push feed…"
                                 if (requestedGeneration != generation) return@launch
-                                val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, requestLiveReporting || assistedSettings.enabled, inspectionSeconds,
+                                val inspectionError = PowerOceanPushProbe(context.applicationContext).inspect(current, result.value, true, inspectionSeconds,
                                     correlationProfile = if (useTestedGridCorrelation) PowerOceanGridCorrelation.Profile() else null,
                                     requireChargerConfirmation = requireChargerConfirmation, readIntervalSeconds = current.connection.refreshSeconds.coerceAtLeast(60)) { update ->
                                     if (requestedGeneration == generation) {
@@ -445,8 +455,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     }
     if (confirmGridCorrelation) AlertDialog(onDismissRequest = { confirmGridCorrelation = false },
         title = { Text("Have you tested this installation?") },
-        text = { Text("Use this comparison only if a controlled grid cut showed code 0 before the cut, code 1 while off-grid, code 0 after reconnection, and AC meter 1 losing power with the grid. A UPS-powered meter or different codes need a different profile. Zero meter flow alone cannot confirm an outage.") },
-        confirmButton = { TextButton({ useTestedGridCorrelation = true; saved?.let { sourceStore.setPowerOceanProfileVerified(it, true) }; confirmGridCorrelation = false }) { Text("I verified this") } },
+        text = { Text("Confirm an earlier test of this same installation; you do not need to repeat the grid cut. Use this comparison only if that test showed code 0 before the cut, code 1 while off-grid, code 0 after reconnection, and AC meter 1 losing power with the grid. A UPS-powered meter or different codes need a different profile. Zero meter flow alone cannot confirm an outage.") },
+        confirmButton = { TextButton({ useTestedGridCorrelation = true; saved?.let { account -> sourceStore.setPowerOceanProfileVerified(account, true); sourceStore.setPowerOceanUsePreviousTest(account, confirmPreviousTest) }; usePreviousTest = confirmPreviousTest; confirmGridCorrelation = false; confirmPreviousTest = false }) { Text("I verified this") } },
         dismissButton = { TextButton({ confirmGridCorrelation = false }) { Text("Cancel") } })
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("Remove PowerOcean account?") },
         text = { Text("Removes the saved connection from this phone. Existing encrypted backups may still contain it.") },

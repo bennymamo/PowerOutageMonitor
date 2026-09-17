@@ -227,7 +227,8 @@ internal class BackupManager(context: Context) {
             powerOceanRequireChargerConfirmation = local.powerOceanRequiresChargerConfirmation(),
             powerOceanProfileVerified = local.powerOceanProfileVerified(PowerOceanAccountStore(appContext).connection()),
             powerOceanRequestLiveReporting = local.powerOceanRequestsLiveReporting(),
-            powerOceanAssisted = local.powerOceanAssistedSettings()
+            powerOceanAssisted = local.powerOceanAssistedSettings(),
+            powerOceanUsePreviousTest = local.powerOceanUsesPreviousTest(PowerOceanAccountStore(appContext).connection())
         )
     }
 
@@ -240,7 +241,10 @@ internal class BackupManager(context: Context) {
             setPowerOceanChargerConfirmation(data.powerOceanRequireChargerConfirmation)
             setPowerOceanLiveReporting(data.powerOceanRequestLiveReporting)
             setPowerOceanAssistedSettings(data.powerOceanAssisted)
-            if (account?.model == "86") setPowerOceanProfileVerified(account, data.powerOceanProfileVerified)
+            if (account?.model == "86") {
+                setPowerOceanProfileVerified(account, data.powerOceanProfileVerified)
+                setPowerOceanUsePreviousTest(account, data.powerOceanUsePreviousTest)
+            }
         }
         EcoFlowCloudConfigStore(appContext).apply {
             clear()

@@ -68,8 +68,11 @@ internal data class BackupDocument(
         val powerOceanRequireChargerConfirmation: Boolean = false,
         val powerOceanProfileVerified: Boolean = false,
         val powerOceanRequestLiveReporting: Boolean = false,
-        val powerOceanAssisted: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings()
-    )
+        val powerOceanAssisted: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(),
+        val powerOceanUsePreviousTest: Boolean = false
+    ) {
+        init { require(!powerOceanUsePreviousTest || (powerOceanProfileVerified && powerOceanAccount?.isValid == true && powerOceanAccount.model == "86")) { "Previous-test choice requires a valid verified Single Phase account" } }
+    }
 
     data class HistoryData(
         val powerEvents: List<EventHistoryStore.Record>,
@@ -320,6 +323,7 @@ internal object BackupDocumentCodec {
         p["power.account.present"] = (data.powerOceanAccount != null).toString()
         p["power.account.chargerConfirmation"] = data.powerOceanRequireChargerConfirmation.toString()
         p["power.account.profileVerified"] = data.powerOceanProfileVerified.toString()
+        p["power.account.previousTest"] = data.powerOceanUsePreviousTest.toString()
         p["power.account.liveReporting"] = data.powerOceanRequestLiveReporting.toString()
         p["power.account.chargerFirst"] = data.powerOceanAssisted.enabled.toString()
         p["power.account.normalSeconds"] = data.powerOceanAssisted.normalSeconds.toString()
@@ -362,6 +366,7 @@ internal object BackupDocumentCodec {
                 ).also { require(it.isValid) { "Invalid PowerOcean account data in backup." } }
             } else null,
             powerOceanRequireChargerConfirmation = p.containsKey("power.account.chargerConfirmation") && p.boolean("power.account.chargerConfirmation"),
+            powerOceanUsePreviousTest = p.containsKey("power.account.previousTest") && p.boolean("power.account.previousTest"),
             powerOceanProfileVerified = p.containsKey("power.account.profileVerified") && p.boolean("power.account.profileVerified"),
             powerOceanRequestLiveReporting = p.containsKey("power.account.liveReporting") && p.boolean("power.account.liveReporting"),
             powerOceanAssisted = com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings(
