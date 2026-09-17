@@ -312,7 +312,7 @@ internal fun DashboardScreen(
                                 manualNotStarted -> "Could not start the check within 45 seconds. Expand Connections & alerts for the connection message. Charger monitoring continues."
                                 phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.CHECKING -> "Asking EcoFlow to update its readings. This can take up to 45 seconds."
                                 phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.GRID_VERIFIED -> "EcoFlow readings received. Grid status verified for this check."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.LIVE_RECEIVED -> "EcoFlow readings received. Current grid status is not yet verified; charger monitoring continues."
+                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.LIVE_RECEIVED -> "EcoFlow device updates are arriving. Waiting for a usable grid code; charger monitoring continues."
                                 phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.TIMED_OUT -> "EcoFlow did not send a current update within 45 seconds. Charger monitoring continues."
                                 else -> "Waiting for the first EcoFlow check."
                             }

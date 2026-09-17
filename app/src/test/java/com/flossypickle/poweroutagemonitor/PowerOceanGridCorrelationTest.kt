@@ -136,6 +136,64 @@ class PowerOceanGridCorrelationTest {
         assertNull(comparison.snapshot(180_000).evidenceReceivedAtUtcMillis)
     }
 
+    @Test fun connectedSnapshotNeedsANewerDeviceUpdateBeforeItCanBeUsed() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1_000, false, false, allowSnapshotBaseline = true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(1_001).state)
+        c.observe(power(700f), 2_000, false, true, allowSnapshotBaseline = true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, c.snapshot(2_000).state)
+        assertEquals(1_000L, c.snapshot(2_000).evidenceReceivedAtUtcMillis)
+    }
+
+    @Test fun unchangedGridCodeIsCarriedWhileNewDeviceReadingsContinue() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1_000, false, false, true)
+        c.observe(power(700f), 2_000, false, true, true)
+        c.observe(power(720f), 80_000, false, true, true)
+        c.observe(power(740f), 150_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_CONNECTED, c.snapshot(151_000).state)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(241_000).state)
+    }
+
+    @Test fun cachedConnectedReplyCannotOverwriteADeviceReportedOutage() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(1), 1_000, false, true, true)
+        c.observe(meter(0f), 2_000, false, true, true)
+        c.observe(grid(0), 3_000, false, false, true)
+        c.observe(power(720f), 4_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_OFF_GRID, c.snapshot(4_000).state)
+    }
+
+    @Test fun incidentOrManualInspectionCannotBootstrapFromASnapshot() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1_000, false, false, true)
+        c.observe(power(700f), 2_000, false, true, allowSnapshotBaseline = false)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(2_000).state)
+        c.observe(grid(0), 3_000, false, false)
+        c.observe(power(720f), 4_000, false, true)
+        assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(4_000).state)
+    }
+
+    @Test fun retainedExpiredUnsupportedAndOffGridSnapshotsCannotBootstrap() {
+        for ((code, retained, pushAt) in listOf(Triple(0L, true, 2_000L), Triple(0L, false, 100_000L),
+            Triple(99L, false, 2_000L), Triple(1L, false, 2_000L))) {
+            val c = PowerOceanGridCorrelation(profile)
+            c.observe(grid(code), 1_000, retained, false, true)
+            c.observe(power(700f), pushAt, false, true, true)
+            assertEquals(PowerOceanGridCorrelation.State.UNKNOWN, c.snapshot(pushAt).state)
+        }
+    }
+
+    @Test fun actualGridChangeOverridesTheInitialConnectedSnapshot() {
+        val c = PowerOceanGridCorrelation(profile)
+        c.observe(grid(0), 1_000, false, false, true)
+        c.observe(grid(1), 2_000, false, true, true)
+        c.observe(meter(0f), 3_000, false, true, true)
+        assertEquals(PowerOceanGridCorrelation.State.INVERTER_OFF_GRID, c.snapshot(3_000).state)
+    }
+
+    private fun power(watts: Float) = PowerOceanPushDecoder.Report(33, mapOf("sysLoadPwr" to watts))
+
     private fun grid(code: Long) = PowerOceanPushDecoder.Report(8, mapOf("sysGridSta" to code))
     private fun meter(value: Float) = PowerOceanPushDecoder.Report(1, mapOf(profile.meterKey to value))
 }

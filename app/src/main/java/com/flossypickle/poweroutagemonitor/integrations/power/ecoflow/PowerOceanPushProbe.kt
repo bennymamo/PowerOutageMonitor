@@ -120,7 +120,8 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     if (receivedPacket.json != null) { latestJson = receivedPacket; changed = true }
                     receivedPacket.reports.forEach {
                         reports[it.command] = receivedPacket; changed = true
-                        gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
+                        gridInspection.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush,
+                            allowSnapshotBaseline = continuous && !schedule.incident)
                         liveCheck.observe(it, receivedPacket.receivedUtcMillis, receivedPacket.retained, receivedPacket.fromDevicePush)
                     }
                     runCatching {

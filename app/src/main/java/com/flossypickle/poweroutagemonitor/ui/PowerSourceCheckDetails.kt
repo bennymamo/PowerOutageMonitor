@@ -16,21 +16,25 @@ internal fun PowerSourceCheckDetails(check: PowerSourceCheck, title: String) {
     val summary = "Grid code: ${grid?.value ?: "not received"} · Meter 1: ${meter?.value ?: "not received"}"
     fun time(received: Long) = DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(received))
     ExpandableSettingsSection(title, summary) {
-        Text("Every check asks EcoFlow to update its readings. EcoFlow can also return older saved readings, so receiving a reply now does not prove every value was measured now.",
+        Text("The schedule controls when we request readings. EcoFlow can send additional updates while connected. An unchanged grid code is kept while new device readings arrive; a gap in the feed makes grid evidence Unknown. Receipt times below are phone times, not equipment measurement times.",
             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         listOf("Reported grid code", "Meter 1 reading").forEach { label ->
             val value = check.observations.firstOrNull { it.label == label }
             StatusRow(label, value?.value ?: "Not received", colors.onSurfaceVariant)
             value?.let {
                 Text(it.explanation, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                val origin = if (it.fromDevicePush) "Device update" else "EcoFlow reply; may be an older saved reading"
+                val origin = when {
+                    it.fromDevicePush -> "Device update"
+                    it.supportedByLiveFeed -> "Last reported code; device feed updating"
+                    else -> "EcoFlow reply; not confirmed by current device updates"
+                }
                 val age = if (it.receivedAtEpochMs < check.requestedAtEpochMs) " · from an earlier check" else ""
                 Text("Received ${time(it.receivedAtEpochMs)} · $origin$age", style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant)
             }
         }
-        StatusRow("Check started", time(check.requestedAtEpochMs), colors.onSurfaceVariant)
-        check.liveReportAtEpochMs?.let { StatusRow("Device update received", time(it), colors.onSurfaceVariant) }
+        StatusRow("Last check requested", time(check.requestedAtEpochMs), colors.onSurfaceVariant)
+        check.liveReportAtEpochMs?.let { StatusRow("Last device update received", time(it), colors.onSurfaceVariant) }
         if (check.readings.isNotEmpty()) {
             Text("Last reported power values · EcoFlow does not supply a verified measurement time",
                 style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)

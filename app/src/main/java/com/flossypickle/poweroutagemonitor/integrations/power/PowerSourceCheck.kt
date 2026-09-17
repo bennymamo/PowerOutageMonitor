@@ -14,4 +14,4 @@ internal data class PowerSourceCheck(val requestedAtEpochMs: Long, val liveRepor
 }
 
 internal data class SourceReportedValue(val label: String, val value: String, val explanation: String,
-    val receivedAtEpochMs: Long, val fromDevicePush: Boolean)
+    val receivedAtEpochMs: Long, val fromDevicePush: Boolean, val supportedByLiveFeed: Boolean = false)

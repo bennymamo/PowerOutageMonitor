@@ -114,7 +114,9 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                             1L -> "In the tested Single Phase profile, 1 means off-grid; this can include the delay while the inverter reconnects."
                                             else -> "This grid code is unsupported by the selected tested profile."
                                         }
-                                        SourceReportedValue("Reported grid code", code.toString(), explanation, received, inspection.lastCodeFromDevicePush)
+                                        SourceReportedValue("Reported grid code", code.toString(), explanation, received, inspection.lastCodeFromDevicePush,
+                                            supportedByLiveFeed = code == 0L && inspection.correlation?.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED &&
+                                                status.hasCurrentReport(System.currentTimeMillis()))
                                     } },
                                     inspection.meterValue?.let { meter -> inspection.meterReceivedUtcMillis?.let { received ->
                                         SourceReportedValue("Meter 1 reading", meter.toString(),
