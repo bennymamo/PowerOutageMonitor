@@ -98,8 +98,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                                 PowerOceanLossConfirmation.Reason.ECOFLOW_AND_METER -> "EcoFlow off-grid; meter reports zero flow."
                                 PowerOceanLossConfirmation.Reason.CHARGER_CORROBORATED -> "Grid and charger loss evidence agree."
                                 PowerOceanLossConfirmation.Reason.WAITING_FOR_CHARGER -> "Waiting for charger-loss confirmation."
-                                PowerOceanLossConfirmation.Reason.WAITING_FOR_LIVE_DATA -> "Waiting for new live device reports for this check; cached replies are insufficient."
-                                PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for current grid and meter evidence."
+                                PowerOceanLossConfirmation.Reason.WAITING_FOR_LIVE_DATA -> "Waiting for EcoFlow to send updated readings; older saved readings cannot verify this check."
+                                PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for updated grid and meter readings."
                             }
                             val dataWarning = if (update.liveCheck?.possiblyStalled == true) " Power readings are identical across successive checks; the feed may be stalled or the load steady." else ""
                             val check = update.liveCheck?.let { status -> status.requestedAt?.let { requested ->

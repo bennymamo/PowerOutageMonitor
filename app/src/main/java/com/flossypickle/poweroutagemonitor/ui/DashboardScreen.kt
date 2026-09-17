@@ -281,17 +281,6 @@ internal fun DashboardScreen(
                         colors.primary,
                         onOpenPowerSources
                     )
-                    if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
-                        if (chargerCorroboration && !assistedActive) StatusRow("Outage confirmation", "Grid source + charger loss", colors.onSurfaceVariant)
-                        StatusRow(
-                            "Source reading",
-                            sourceReading?.detail ?: "Unavailable or stale",
-                            if (sourceReading?.availability == GridAvailability.UNKNOWN || sourceReading == null) {
-                                Color(0xFFF0C580)
-                            } else colors.onSurfaceVariant,
-                            onOpenPowerSources
-                        )
-                    }
                     if (assistedActive) {
                         val incident = snapshot?.externallyPowered == false || monitorState.phase in
                             setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
@@ -304,7 +293,7 @@ internal fun DashboardScreen(
                         }, modifier = Modifier.fillMaxWidth()) {
                             Text(if (assistancePaused) "Resume EcoFlow assistance" else "Pause EcoFlow assistance")
                         }
-                        if (assistancePaused) Text("Scheduled EcoFlow requests are paused. Your saved account and current session are kept. Charger monitoring continues.", style = MaterialTheme.typography.bodySmall)
+                        if (assistancePaused) Text("EcoFlow checks are paused. Your account stays saved; charger monitoring continues.", style = MaterialTheme.typography.bodySmall)
                         val check = powerSourceStatus?.check
                         val phase = check?.phase(checkClock)
                         val manualNotStarted = manualCheckAt > 0 && (check?.requestedAtEpochMs ?: 0) < manualCheckAt
@@ -319,37 +308,16 @@ internal fun DashboardScreen(
                         }
                         if (!assistancePaused && settings.monitoringEnabled) {
                             val checkMessage = when {
-                                awaitingManualStart -> "Check queued; waiting for the current EcoFlow connection."
-                                manualNotStarted -> "Check not started within 45 seconds. Check the source connection message above. Charger watching continues."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.CHECKING -> "Request sent. Waiting up to 45 seconds for new live device reports."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.GRID_VERIFIED -> "New live reports received; grid evidence verified for this check."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.LIVE_RECEIVED -> "New live reports received, but current grid/meter evidence is incomplete. Charger watching continues."
-                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.TIMED_OUT -> "No new live report within 45 seconds. Cached replies do not verify a check. Charger watching continues."
+                                awaitingManualStart -> "Connecting to EcoFlow to check its readings…"
+                                manualNotStarted -> "Could not start the check within 45 seconds. Expand Connections & alerts for the connection message. Charger monitoring continues."
+                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.CHECKING -> "Asking EcoFlow to update its readings. This can take up to 45 seconds."
+                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.GRID_VERIFIED -> "EcoFlow readings received. Grid status verified for this check."
+                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.LIVE_RECEIVED -> "EcoFlow readings received. Current grid status is not yet verified; charger monitoring continues."
+                                phase == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck.Phase.TIMED_OUT -> "EcoFlow did not send a current update within 45 seconds. Charger monitoring continues."
                                 else -> "Waiting for the first EcoFlow check."
                             }
                             Text(checkMessage, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                            if (check != null) {
-                                listOf("Reported grid code", "Meter 1 reading").forEach { label ->
-                                    val value = check.observations.firstOrNull { it.label == label }
-                                    StatusRow(label, value?.value ?: "Not received", colors.onSurfaceVariant)
-                                    value?.let {
-                                        Text(it.explanation, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                                        val origin = if (it.fromDevicePush) "Live device push" else "Request reply · may be cached"
-                                        val ageNote = if (it.receivedAtEpochMs < check.requestedAtEpochMs) " · before this check" else ""
-                                        Text("Received ${DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(it.receivedAtEpochMs))} · $origin$ageNote",
-                                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                            check?.let { currentCheck -> ExpandableSettingsSection("EcoFlow check details", "Report times and reported power") {
-                                val it = currentCheck
-                                StatusRow("Last check requested", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(it.requestedAtEpochMs)), colors.onSurfaceVariant)
-                                it.liveReportAtEpochMs?.let { received -> StatusRow("Live report received", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(received)), colors.onSurfaceVariant) }
-                                if (it.readings.isNotEmpty()) {
-                                    Text("Last reported power values · receipt is not a verified measurement time", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                                    it.readings.forEach { reading -> StatusRow(reading.label, "${reading.value} ${reading.unit}", colors.onSurfaceVariant) }
-                                }
-                            } }
+                            check?.let { PowerSourceCheckDetails(it, "EcoFlow readings") }
                         }
                         checkFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
                     }
@@ -363,6 +331,18 @@ internal fun DashboardScreen(
                             else -> "Timer starting"
                         }
                         StatusRow("Source-loss alert", sourceAlertText, Color(0xFFF0C580))
+                    }
+                    ExpandableSettingsSection("Connections & alerts", "$alertChannels · Internet ${if (systemHealth.internetAvailable) "available" else "unavailable"}") {
+                    if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
+                        if (chargerCorroboration && !assistedActive) StatusRow("Outage confirmation", "Grid source + charger loss", colors.onSurfaceVariant)
+                        StatusRow(
+                            "Source reading",
+                            sourceReading?.detail ?: "Unavailable or stale",
+                            if (sourceReading?.availability == GridAvailability.UNKNOWN || sourceReading == null) {
+                                Color(0xFFF0C580)
+                            } else colors.onSurfaceVariant,
+                            onOpenPowerSources
+                        )
                     }
                     StatusRow(
                         "Internet",
@@ -383,6 +363,7 @@ internal fun DashboardScreen(
                                 .format(Date(lastGridReadingEpochMs)),
                             colors.onSurfaceVariant
                         )
+                    }
                     }
                 }
             }
@@ -453,7 +434,7 @@ private fun ReadingTile(label: String, value: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun StatusRow(label: String, value: String, valueColor: Color, onClick: (() -> Unit)? = null) {
+internal fun StatusRow(label: String, value: String, valueColor: Color, onClick: (() -> Unit)? = null) {
     val modifier = if (onClick != null) Modifier.fillMaxWidth().heightIn(min = 48.dp)
         .clickable(role = Role.Button, onClickLabel = "Open $label settings", onClick = onClick)
         else Modifier.fillMaxWidth()
