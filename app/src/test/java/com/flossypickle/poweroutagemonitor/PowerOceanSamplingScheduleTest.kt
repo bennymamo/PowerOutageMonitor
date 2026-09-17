@@ -76,4 +76,12 @@ class PowerOceanSamplingScheduleTest {
         assertTrue(PowerOceanAssistedSettings.valid(0)); assertTrue(PowerOceanAssistedSettings.valid(5)); assertTrue(PowerOceanAssistedSettings.valid(86_400))
         assertFalse(PowerOceanAssistedSettings.valid(1)); assertFalse(PowerOceanAssistedSettings.valid(-1)); assertFalse(PowerOceanAssistedSettings.valid(86_401))
     }
+    @Test fun temporaryReportingIsRenewedOnlyInsideTheBoundedCollectionWindow() {
+        val schedule = s(3600)
+        assertTrue(schedule.needsLiveActivation(false, false, true, boundedWindow = true))
+        assertFalse(schedule.needsLiveActivation(false, false, false, boundedWindow = true))
+        assertFalse(schedule.needsLiveActivation(false, false, true, boundedWindow = false))
+        assertFalse(schedule.copy(paused = true).needsLiveActivation(true, true, true, boundedWindow = true))
+    }
+
 }

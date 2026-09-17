@@ -11,8 +11,8 @@ internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
 
 internal data class PowerOceanReadSchedule(val intervalSeconds: Int?, val incident: Boolean,
     val manualRevision: Long, val liveOnEachRead: Boolean, val paused: Boolean = false, val incidentDetectedDuringCheck: Boolean = false) {
-    fun needsLiveActivation(continuousEnabled: Boolean, readDue: Boolean, periodicDue: Boolean): Boolean =
-        !paused && if (liveOnEachRead) readDue else continuousEnabled && periodicDue
+    fun needsLiveActivation(continuousEnabled: Boolean, readDue: Boolean, periodicDue: Boolean, boundedWindow: Boolean = false): Boolean =
+        !paused && if (liveOnEachRead) readDue || boundedWindow && periodicDue else continuousEnabled && periodicDue
 }
 
 /** Monotonic clock avoids wall-clock jumps affecting request frequency. */

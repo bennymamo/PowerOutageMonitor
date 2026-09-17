@@ -58,16 +58,19 @@ internal class PowerOceanAccountClient(
     }
 
     fun pushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> {
+        // PowerOcean live activation uses the portal's secure WebSocket connection.
+        // The mobile TLS route can return quotas without waking the live energy stream.
+        val portalResult = portalPushCredentials(session)
+        if (portalResult is EcoFlowCloudClient.Result.Success ||
+            portalResult is EcoFlowCloudClient.Result.Failure && portalResult.retryable) return portalResult
         val appResult = request(URL("https://${session.loginHost}/iot-auth/app/certification"), session.connection, session = session) { root ->
             requireResponse(session.userId.isNotEmpty(), "Live-feed setup failed: account login did not include the user ID required for MQTT.")
             val details = responseStep("Mobile-app live access did not return connection details in the expected format.") { root.getJSONObject("data") }
             parsePushDetails(details, appTransport = true)
         }
-        if (appResult is EcoFlowCloudClient.Result.Success || (appResult is EcoFlowCloudClient.Result.Failure && appResult.retryable)) return appResult
-        val portalResult = portalPushCredentials(session)
-        return if (portalResult is EcoFlowCloudClient.Result.Failure) EcoFlowCloudClient.Result.Failure(
-            "Mobile-app route: ${(appResult as EcoFlowCloudClient.Result.Failure).message} Portal route: ${portalResult.message}", portalResult.retryable
-        ) else portalResult
+        return if (appResult is EcoFlowCloudClient.Result.Failure) EcoFlowCloudClient.Result.Failure(
+            "Portal route: ${(portalResult as EcoFlowCloudClient.Result.Failure).message} Mobile-app route: ${appResult.message}", appResult.retryable
+        ) else appResult
     }
 
     private fun portalPushCredentials(session: Session): EcoFlowCloudClient.Result<PushCredentials> = request(

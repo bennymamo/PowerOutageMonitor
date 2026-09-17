@@ -148,7 +148,7 @@ In charger-first mode, charger loss can alert independently if EcoFlow is unreac
 **How scheduled checks work:**
 
 - Normally, open a connection **once an hour**; during an outage, default to **once a minute**. Both schedules are configurable, including manual-only.
-- Request live reporting and readings once, then collect the first power report and **two extra reports**. End early if values change and usable grid/meter evidence is available; otherwise listen for up to **two minutes**.
+- Send one reading request and activate live reporting, then collect the first power report and **two extra reports**. End early if values change and usable grid/meter evidence is available; otherwise listen for up to **two minutes**. Renew temporary live reporting every 20 seconds only while that check is collecting data.
 - **Close the connection** after the check. Reuse saved login/broker access on later checks rather than log in each time. Checks never overlap; elapsed schedule slots are skipped.
 - Use **Check now** on Status for a manual check. **Pause EcoFlow** closes/suspends EcoFlow checks while charger monitoring continues.
 

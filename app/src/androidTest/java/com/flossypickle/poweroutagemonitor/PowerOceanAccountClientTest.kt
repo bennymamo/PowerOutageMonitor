@@ -18,6 +18,7 @@ class PowerOceanAccountClientTest {
         var requestedPath = ""
         val client = PowerOceanAccountClient { url ->
             requestedPath = url.path
+            if (url.path.contains("enterprise-development")) return@PowerOceanAccountClient Fixture(url, """{"code":"1006","message":"Fixture portal denied"}""")
             Fixture(url, """{"code":"0","data":{"url":"mqtt-e.ecoflow.com","port":"8883","protocol":"mqtts","certificateAccount":"owner.account@example.com","certificatePassword":"fake-password"}}""")
         }
         val account = PowerOceanAccountClient.Connection("owner@example.com", "private-password", "EXAMPLE-SERIAL")
@@ -32,12 +33,15 @@ class PowerOceanAccountClientTest {
         // Independent Python cryptography AES-CFB128 vector, containing fake credentials only.
         val encoded = "lxfRB9M5TgxfgQVIgG0lcO2ZAGLZxzTcPb7zKw1mSpvmcNt07eSEMNjwMB8ry8ztoF5Qop6FkYStsFyxaLcyN3ECHE8qhOFH5ohvAudQaSFs4tbCtTpem4Rq181HnUfDzpu1YY/vim3h98L7ypgLuAm777pAfnNe746bl0SuIHpE5Odu94/wZVznnwQX7bNK"
         val response = JSONObject().put("code", "0").put("data", encoded).toString()
-        val client = PowerOceanAccountClient { url -> Fixture(url, response) }
+        val paths = mutableListOf<String>()
+        val client = PowerOceanAccountClient { url -> paths.add(url.path); Fixture(url, response) }
         val account = PowerOceanAccountClient.Connection("owner@example.com", "private-password", "EXAMPLE-SERIAL")
         val session = PowerOceanAccountClient.Session("example-private-token", account, "12345", "api-e.ecoflow.com")
         val result = client.pushCredentials(session)
         assertTrue("Expected decoded fake credentials, got $result", result is EcoFlowCloudClient.Result.Success)
+        assertEquals(listOf("/iot-auth/enterprise-development/user/certification"), paths)
         val connection = (result as EcoFlowCloudClient.Result.Success).value
+        assertEquals("wss", connection.transport)
         assertEquals("mqtt-e.ecoflow.com", connection.host)
         assertEquals(8084, connection.port)
         assertEquals("/mqtt", connection.path)

@@ -104,10 +104,10 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 if (singleCheck && schedule.paused) break
                 val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
                 if (readDue) liveCheck.begin(System.currentTimeMillis())
-                if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest)) {
+                if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest, boundedWindow = singleCheck)) {
                     client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
                         PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
-                    if (!schedule.liveOnEachRead) nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
+                    nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
                 }
                 if (readDue) {
                     // GET-only request used by the app to ask for current observations.
