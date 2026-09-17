@@ -41,16 +41,17 @@ internal fun SetupFlowSection(index: Int, step: Int, guided: Boolean, title: Str
 
 @Composable
 internal fun SetupFlowFooter(steps: List<String>, step: Int, guided: Boolean, busy: Boolean,
-    onStep: (Int) -> Unit, onFinish: () -> Unit, finishEnabled: Boolean = true) {
+    onStep: (Int) -> Unit, onFinish: () -> Unit, finishEnabled: Boolean = true, nextEnabled: Boolean = true) {
     if (!guided) return
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (step > 0) OutlinedButton({ onStep(step - 1) }, enabled = !busy,
             modifier = Modifier.weight(1f)) { Text("Previous") }
         Button({ if (step < steps.lastIndex) onStep(step + 1) else onFinish() },
-            enabled = !busy && (step < steps.lastIndex || finishEnabled), modifier = Modifier.weight(1f)) {
+            enabled = !busy && (if (step < steps.lastIndex) nextEnabled else finishEnabled), modifier = Modifier.weight(1f)) {
             Text(if (step < steps.lastIndex) "Next" else "Finish")
         }
     }
+    if (step < steps.lastIndex && !nextEnabled) Text("Complete the fields above to continue.", style = MaterialTheme.typography.bodySmall)
     if (step == steps.lastIndex && !finishEnabled) Text("Save your configuration before finishing.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

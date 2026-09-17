@@ -20,8 +20,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,11 +98,20 @@ internal fun PowerSourceSettingsContent(
 
     SetupGuidanceCaption(helpLevel)
     Text(
-        "Choose one module to decide whether the electricity grid is online. Only the selected module runs. Device battery information remains available with every choice.",
+        "Choose the main grid source. You can also require charger loss to corroborate an outage; grid recovery does not wait for the charger. Battery readings remain available.",
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    PowerSourceSectionTitle("Built in")
+    var chargerConfirmation by remember { mutableStateOf(store.powerOceanRequiresChargerConfirmation()) }
+    SettingsCard {
+        SettingSwitch("Also require charger loss", "For integration sources: both grid loss and charger loss must agree before an outage. Recovery uses the grid source alone.", chargerConfirmation, {
+            store.setPowerOceanChargerConfirmation(it); chargerConfirmation = it; onPowerSourceChanged()
+        })
+        if (chargerConfirmation && selectedSource != PowerSourceStore.Source.ANDROID_CHARGER) {
+            Text("Active evidence: grid integration + phone charger", color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    PowerSourceSectionTitle("Main grid source")
     SettingsCard {
         SourceHeading(
             title = "Phone or tablet charger",
@@ -124,11 +135,12 @@ internal fun PowerSourceSettingsContent(
 
     PowerSourceSectionTitle("EcoFlow modules")
     SettingsCard {
-        SourceHeading(title = "PowerOcean account", status = "EXPERIMENTAL")
+        SourceHeading(title = "PowerOcean account", status = if (selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) "ACTIVE · EXPERIMENTAL" else "EXPERIMENTAL")
         Text("For homes powered through PowerOcean battery backup. Reads EcoFlow's account service with your normal login, without developer keys or installer access.",
             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         OutlinedButton(onClick = onOpenPowerOceanAccount, modifier = Modifier.fillMaxWidth()) { Text("Set up PowerOcean account") }
     }
+    ExpandableSettingsSection("Other EcoFlow connections", "Local Modbus or approved Developer API") {
     SettingsCard {
         SourceHeading(
             title = "Local PowerOcean connection",
@@ -158,13 +170,13 @@ internal fun PowerSourceSettingsContent(
         }
     }
 
-    PowerSourceSectionTitle("How to choose")
-    SettingsCard {
+    }
+    ExpandableSettingsSection("Which source should I choose?", "Simple charger detection or an optional integration") {
         SettingText("Simplest", "Android charger")
         SettingText("Most private", "EcoFlow local connection")
         SettingText("No installer", "EcoFlow Cloud")
         Text(
-            "EcoFlow Cloud stays in preview until a real PowerOcean test proves that its readings remain fresh with the EcoFlow app and portal closed.",
+            "Developer Cloud is a read-only preview. Account monitoring is experimental and requires verified grid behavior, fresh live data and an explicit opt-in. Manufacturer restrictions may apply.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
@@ -195,7 +207,8 @@ internal fun EcoFlowLocalSetupScreen(
             selectedSource = selectedSource,
             sourceStatus = sourceStatus,
             helpLevel = helpLevel,
-            onPowerSourceChanged = onPowerSourceChanged
+            onPowerSourceChanged = onPowerSourceChanged,
+            onFinish = onBack
         )
     }
 }
@@ -205,7 +218,8 @@ private fun EcoFlowLocalSettingsContent(
     selectedSource: PowerSourceStore.Source,
     sourceStatus: PowerSourceStore.Status?,
     helpLevel: MonitorStore.HelpLevel,
-    onPowerSourceChanged: () -> Unit
+    onPowerSourceChanged: () -> Unit,
+    onFinish: () -> Unit
 ) {
     val context = LocalContext.current
     val store = remember(context) { PowerSourceStore(context) }
@@ -232,6 +246,8 @@ private fun EcoFlowLocalSettingsContent(
     }
     val editingAllowed = selectedSource != PowerSourceStore.Source.ECOFLOW_MODBUS
     val ready = store.ecoFlowReadyToActivate()
+    val setupSteps = listOf("Prepare your network", "Inverter address", "Save, test and select")
+    var setupStep by rememberSaveable { mutableStateOf(if (ready) 2 else 0) }
 
     SetupGuidanceCaption(helpLevel)
     Text(
@@ -239,8 +255,7 @@ private fun EcoFlowLocalSettingsContent(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    PowerSourceSectionTitle("Android charger")
-    SettingsCard {
+    ExpandableSettingsSection("Switch back to the charger", "Stop using the integration before editing its address") {
         SourceHeading(
             title = "Phone or tablet charger",
             status = if (selectedSource == PowerSourceStore.Source.ANDROID_CHARGER) "ACTIVE" else "AVAILABLE"
@@ -262,10 +277,12 @@ private fun EcoFlowLocalSettingsContent(
         }
     }
 
-    NetworkBackupGuidance()
+    ExpandableSettingsSection("Keep the network powered", "Router, Wi-Fi and adapters need backup power") { NetworkBackupGuidance() }
 
+    SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, testing) { setupStep = it }
     PowerSourceSectionTitle("EcoFlow PowerOcean")
     SettingsCard {
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Prepare your network") {
         SourceHeading(
             title = "Local inverter connection",
             status = if (selectedSource == PowerSourceStore.Source.ECOFLOW_MODBUS) "ACTIVE" else "OPTIONAL"
@@ -294,6 +311,7 @@ private fun EcoFlowLocalSettingsContent(
                 fontSize = 12.sp
             )
         }
+        }
         if (!editingAllowed) {
             Text(
                 "EcoFlow is active. Switch to Android charger before changing its connection settings.",
@@ -301,6 +319,7 @@ private fun EcoFlowLocalSettingsContent(
                 fontWeight = FontWeight.Medium
             )
         }
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Inverter address") {
         if (Build.VERSION.SDK_INT >= 37 && !localNetworkAllowed) {
             Text(
                 if (helpLevel.isGuided) {
@@ -346,6 +365,8 @@ private fun EcoFlowLocalSettingsContent(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
         }
+        }
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Save, test and select") {
         if (editingAllowed) {
             OutlinedButton(
                 onClick = {
@@ -430,6 +451,7 @@ private fun EcoFlowLocalSettingsContent(
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Use EcoFlow PowerOcean") }
         }
+        }
     }
 
     feedback?.let {
@@ -442,8 +464,8 @@ private fun EcoFlowLocalSettingsContent(
         )
     }
 
-    PowerSourceSectionTitle("Reliability")
-    SettingsCard {
+    SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, testing, { setupStep = it }, onFinish, finishEnabled = ready)
+    ExpandableSettingsSection("Reliability and verification", "Before relying on this source") {
         Text(
             "EcoFlow readings stay inside your local network and are checked every 5 seconds. A timeout, old value, invalid number, or disagreement between inverter mode and voltage becomes Unknown. Unknown readings cannot confirm an outage.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,

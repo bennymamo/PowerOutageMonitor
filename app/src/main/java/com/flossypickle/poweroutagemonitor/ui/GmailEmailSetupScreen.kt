@@ -115,6 +115,10 @@ internal fun GmailEmailSetupScreen(
             } else {
                 Text("Create a Google App Password, then enter the account, app password and recipients.")
             }
+            OutlinedButton({
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://myaccount.google.com/signinoptions/two-step-verification"))) }
+                    .onFailure { feedback = "No browser is available to open Google Account settings." }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Open Google 2-Step Verification") }
             OutlinedButton(
                 onClick = {
                     runCatching {
@@ -287,7 +291,7 @@ internal fun GmailEmailSetupScreen(
             }
         }
         }
-        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasAppPassword)
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasAppPassword && appPasswordInput.isBlank() && enabled == config.enabled && account.trim() == config.account && validateGmailInputs(account, recipientText).recipients == config.recipients, nextEnabled = when (setupStep) { 1 -> GmailSmtpProtocol.isValidAccount(account.trim()) && (config.hasAppPassword || GmailSmtpProtocol.isValidAppPassword(appPasswordInput)); 2 -> validateGmailInputs(account, recipientText).error == null; else -> true })
 
         ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         SectionTitle("Security")

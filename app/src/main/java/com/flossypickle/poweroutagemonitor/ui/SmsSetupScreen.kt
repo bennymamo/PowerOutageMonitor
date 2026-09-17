@@ -298,7 +298,7 @@ internal fun SmsSetupScreen(
             }
         }
         }
-        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.recipients.isNotEmpty())
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.recipients.isNotEmpty() && enabled == config.enabled, nextEnabled = when (setupStep) { 0 -> capability.supported && capability.permissionGranted; 1 -> validateSmsRecipients(recipientText).error == null; else -> true })
 
         ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         SmsSectionTitle("Privacy & distribution")

@@ -69,6 +69,7 @@ internal fun TelegramSetupScreen(
     }
     var enabled by remember { mutableStateOf(config.enabled) }
     var botName by remember { mutableStateOf(config.botDisplayName) }
+    var botUsername by remember { mutableStateOf<String?>(null) }
     var discovered by remember { mutableStateOf(emptyList<TelegramClient.Chat>()) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var feedbackArea by remember { mutableStateOf<TelegramFeedbackArea?>(null) }
@@ -168,6 +169,7 @@ internal fun TelegramSetupScreen(
                         when (val result = withContext(Dispatchers.IO) { client.identifyBot(token) }) {
                             is TelegramClient.ApiResult.Success -> {
                                 botName = result.value.displayName
+                                botUsername = result.value.username?.takeIf { it.matches(Regex("[A-Za-z0-9_]{5,32}")) }
                                 feedback = "Connected to ${result.value.displayName}${result.value.username?.let { " (@$it)" }.orEmpty()}."
                             }
                             is TelegramClient.ApiResult.Failure -> feedback = result.message
@@ -190,6 +192,15 @@ internal fun TelegramSetupScreen(
         Text("Recipients", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
+            Text("Open your bot, tap Start or send /start, then find and add your chat here.", style = MaterialTheme.typography.bodySmall)
+            botUsername?.let { username ->
+                OutlinedButton({
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/$username"))) }
+                        .onFailure { feedbackArea = TelegramFeedbackArea.RECIPIENTS; feedback = "No app can open your bot." }
+                }, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Open my bot") }
+            }
+            Text("${parseDestinations(destinationText).size} chat(s) selected", color = MaterialTheme.colorScheme.primary)
+            ExpandableSettingsSection("Enter chat IDs manually", "Optional advanced method") {
             OutlinedTextField(
                 value = destinationText,
                 onValueChange = { destinationText = it },
@@ -199,6 +210,7 @@ internal fun TelegramSetupScreen(
                 minLines = 3,
                 enabled = !loading
             )
+            }
             OutlinedButton(
                 onClick = {
                     runAsync(TelegramFeedbackArea.RECIPIENTS) {
@@ -325,7 +337,7 @@ internal fun TelegramSetupScreen(
             )
         }
         }
-        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasToken)
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasToken && tokenInput.isBlank() && enabled == config.enabled && parseDestinations(destinationText) == config.destinations, nextEnabled = when (setupStep) { 1 -> tokenInput.isNotBlank() || config.hasToken; 2 -> parseDestinations(destinationText).isNotEmpty(); else -> true })
 
         ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         Text("Security", style = MaterialTheme.typography.titleMedium,

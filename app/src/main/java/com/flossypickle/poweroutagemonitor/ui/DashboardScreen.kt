@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -82,6 +83,7 @@ internal fun DashboardScreen(
     onDismissAudibleAlarm: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    val chargerCorroboration = PowerSourceStore(LocalContext.current).powerOceanRequiresChargerConfirmation()
     val lastEvent = history.firstOrNull()
     var statusClock by remember(lastEvent?.restoredAtEpochMs) {
         mutableLongStateOf(System.currentTimeMillis())
@@ -103,24 +105,27 @@ internal fun DashboardScreen(
         it.source == selectedPowerSource &&
             System.currentTimeMillis() - it.observedAtEpochMs in 0..SOURCE_FRESH_MS
     }
-    val lastGridReadingEpochMs = if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
+    val lastGridReadingEpochMs = if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
         powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
     } else lastObservationEpochMs
     val effectivePowered = when (selectedPowerSource) {
         PowerSourceStore.Source.ANDROID_CHARGER -> snapshot?.externallyPowered
-        PowerSourceStore.Source.ECOFLOW_MODBUS -> when (sourceReading?.availability) {
+        PowerSourceStore.Source.ECOFLOW_MODBUS, PowerSourceStore.Source.ECOFLOW_ACCOUNT -> when (sourceReading?.availability) {
             GridAvailability.AVAILABLE -> true
             GridAvailability.UNAVAILABLE -> false
             GridAvailability.UNKNOWN, null -> null
         }
     }
-    val status = gridStatus(
+    val baseStatus = gridStatus(
         powered = effectivePowered,
         phase = monitorState.phase,
         enabled = settings.monitoringEnabled,
         recentlyRestored = recentlyRestored,
         outageDelayMs = settings.outageDelayMs
     )
+    val status = if (settings.monitoringEnabled && effectivePowered == true && sourceReading?.recoveryPending == true) {
+        baseStatus.copy(title = "Grid appears back", description = "Meter activity has resumed. Waiting for EcoFlow to reconnect to the grid.", tone = GridTone.CAUTION)
+    } else baseStatus
     val statusColor = when (status.tone) {
         GridTone.GOOD -> colors.primary
         GridTone.CAUTION -> Color(0xFFF0C580)
@@ -247,11 +252,13 @@ internal fun DashboardScreen(
                         "Grid source",
                         when (selectedPowerSource) {
                             PowerSourceStore.Source.ANDROID_CHARGER -> "Android charger"
-                            PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow PowerOcean"
+                            PowerSourceStore.Source.ECOFLOW_MODBUS -> "EcoFlow local"
+                            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> "PowerOcean account · experimental"
                         },
                         colors.primary
                     )
-                    if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_MODBUS) {
+                    if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
+                        if (chargerCorroboration) StatusRow("Outage confirmation", "Grid source + charger loss", colors.onSurfaceVariant)
                         StatusRow(
                             "Source reading",
                             sourceReading?.detail ?: "Unavailable or stale",

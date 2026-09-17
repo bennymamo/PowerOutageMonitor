@@ -67,6 +67,8 @@ internal fun AudibleAlarmSettingsContent(
             onClick = onTestAudibleAlarm,
             modifier = Modifier.fillMaxWidth()
         ) { Text("Play 5-second test") }
+    }
+    ExpandableSettingsSection("Sound", "Selected tone or built-in beep") {
         Text("Sound", fontWeight = FontWeight.Medium)
         Text(
             "An active outage alarm shows a speaker notification from FP Grid Monitor. Expand it and tap Stop sound to silence this outage; monitoring and message alerts continue.",
@@ -109,6 +111,8 @@ internal fun AudibleAlarmSettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
+    }
+    ExpandableSettingsSection("Repeats and timing", "How often the alarm sounds") {
         Text("Repeat interval", fontWeight = FontWeight.Medium)
         AUDIBLE_REPEAT_INTERVALS.forEach { (value, label) ->
             Row(
@@ -165,6 +169,8 @@ internal fun AudibleAlarmSettingsContent(
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Allow exact alarms") }
         }
+    }
+    ExpandableSettingsSection("Battery and volume", "Battery cutoff and loudness") {
         Text("Protect the device battery", fontWeight = FontWeight.Medium)
         Text(
             "Stop sounding for the current outage when the battery reaches this level.",
@@ -201,6 +207,7 @@ internal fun AudibleAlarmSettingsContent(
             fontSize = 12.sp
         )
     }
+
 }
 
 private val AUDIBLE_REPEAT_INTERVALS = listOf(

@@ -37,7 +37,7 @@ internal fun ScheduledUpdatesSettingsContent(
     onChange: (ScheduledAlertStore.Settings) -> Unit
 ) {
     var expandedEditor by rememberSaveable { mutableStateOf<String?>(null) }
-    SettingsCard {
+    ExpandableSettingsSection("Source unavailable", if (settings.sourceUnavailableEnabled) "Enabled · tap to adjust" else "Off · tap to configure") {
         SettingSwitch(
             title = "Power source unavailable",
             explanation = "Notify contacts when the selected grid source cannot provide a trustworthy reading for long enough.",
@@ -67,7 +67,7 @@ internal fun ScheduledUpdatesSettingsContent(
         }
     }
 
-    SettingsCard {
+    ExpandableSettingsSection("Monitor heartbeat", if (settings.heartbeatEnabled) "Enabled · tap to adjust" else "Off · tap to configure") {
         SettingSwitch(
             title = "Monitor heartbeat",
             explanation = "Send a periodic message proving that the app and at least one alert route are still working.",
@@ -97,7 +97,7 @@ internal fun ScheduledUpdatesSettingsContent(
         }
     }
 
-    SettingsCard {
+    ExpandableSettingsSection("Long outage updates", if (settings.outageUpdatesEnabled) "Enabled · tap to adjust" else "Off · tap to configure") {
         SettingSwitch(
             title = "Long-outage updates",
             explanation = "While a confirmed outage remains open, periodically tell contacts that it is still active.",

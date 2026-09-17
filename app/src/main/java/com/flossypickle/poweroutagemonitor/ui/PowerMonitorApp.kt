@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -110,6 +111,7 @@ internal fun PowerMonitorApp(
             if (checklistAfterGuidedSetup) AppScreen.SETUP_CHECKLIST else AppScreen.STATUS
         )
     }
+    val settingsPageState = rememberSaveableStateHolder()
     var returnToChecklist by rememberSaveable { mutableStateOf(false) }
     val returnFromChecklistChild: () -> Unit = {
         if (returnToChecklist) {
@@ -186,7 +188,7 @@ internal fun PowerMonitorApp(
             AppScreen.HISTORY -> HistoryScreen(
                 history, operationalHistory, monitorState, deliverySummaries, padding
             )
-            AppScreen.SETTINGS -> SettingsScreen(
+            AppScreen.SETTINGS -> settingsPageState.SaveableStateProvider("settings") { SettingsScreen(
                 settings,
                 padding,
                 onSettingsChange,
@@ -234,7 +236,7 @@ internal fun PowerMonitorApp(
                     returnToChecklist = false
                     screen = AppScreen.EMAIL
                 }
-            )
+            ) }
             AppScreen.POWER_SOURCES -> PowerSourceSettingsScreen(
                 selectedSource = selectedPowerSource,
                 sourceStatus = powerSourceStatus,
@@ -363,6 +365,7 @@ internal fun PowerMonitorApp(
             AppScreen.POWEROCEAN_ACCOUNT -> PowerOceanAccountSetupScreen(
                 helpLevel = settings.helpLevel,
                 padding = padding,
+                onPowerSourceChanged = onPowerSourceChanged,
                 onBack = { screen = AppScreen.POWER_SOURCES }
             )
         }

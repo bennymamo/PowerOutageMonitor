@@ -304,7 +304,7 @@ internal fun ResendEmailSetupScreen(
             }
         }
         }
-        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasApiKey)
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasApiKey && apiKeyInput.isBlank() && enabled == config.enabled && sender.trim() == config.sender && validateEmailInputs(sender, recipientText).recipients == config.recipients, nextEnabled = setupStep != 1 || ((apiKeyInput.isNotBlank() || config.hasApiKey) && ResendEmailProtocol.isValidSender(sender) && validateEmailInputs(sender, recipientText).error == null && validateEmailInputs(sender, recipientText).recipients.isNotEmpty()))
 
         ExpandableSettingsSection("Security and removal", "How your credentials are protected") {
         Text("Security", style = MaterialTheme.typography.titleMedium,

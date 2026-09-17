@@ -68,6 +68,8 @@ internal fun AlertChannelsSettingsContent(
         OutlinedButton(onClick = onOpenTelegram, modifier = Modifier.fillMaxWidth()) {
             Text("Configure Telegram")
         }
+    }
+    SettingsCard {
         SettingText("Device SMS", when {
             !smsCapability.supported -> "Unavailable on this device"
             smsConfig.enabled -> "Enabled"
@@ -82,6 +84,8 @@ internal fun AlertChannelsSettingsContent(
         OutlinedButton(onClick = onOpenSms, modifier = Modifier.fillMaxWidth()) {
             Text("Configure device SMS")
         }
+    }
+    SettingsCard {
         SettingText("Email", when {
             gmailConfig.enabled && resendConfig.enabled -> "Gmail and Resend enabled"
             gmailConfig.enabled -> "Gmail enabled"

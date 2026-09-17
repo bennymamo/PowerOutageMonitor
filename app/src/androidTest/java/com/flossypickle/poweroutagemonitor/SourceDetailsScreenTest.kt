@@ -1,6 +1,7 @@
 package com.flossypickle.poweroutagemonitor
 
 import android.graphics.Bitmap
+import android.os.Build
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
@@ -35,9 +36,12 @@ class SourceDetailsScreenTest {
             }
         }
         compose.onNodeWithText("Read-only device snapshot").assertIsDisplayed()
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val image = File(context.getExternalFilesDir("ui-check"), "source-details-dark.png")
-        image.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // Window screenshot capture needs API 26; assertions still run on Android 6.
+        if (Build.VERSION.SDK_INT >= 26) {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val image = File(context.getExternalFilesDir("ui-check"), "source-details-dark.png")
+            image.outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
         compose.onNodeWithTag("source-details-list").performScrollToNode(hasSetTextAction())
         compose.onNode(hasSetTextAction()).performTextInput("string 2")
         compose.onNodeWithTag("source-details-list").performScrollToNode(hasText("Tracker 1 · string 2 voltage"))

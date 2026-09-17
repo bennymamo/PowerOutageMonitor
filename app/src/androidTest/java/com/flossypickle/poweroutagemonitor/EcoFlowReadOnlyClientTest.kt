@@ -73,6 +73,9 @@ class EcoFlowReadOnlyClientTest {
 
     private class FixtureConnection(private val response: String) : HttpsURLConnection(URL("https://api.ecoflow.com")) {
         val sent = ByteArrayOutputStream()
+        private val headers = java.util.TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER)
+        override fun setRequestProperty(key: String, value: String) { headers[key] = value }
+        override fun getRequestProperty(key: String): String? = headers[key]
         override fun getOutputStream() = sent
         override fun getInputStream() = ByteArrayInputStream(response.toByteArray(Charsets.UTF_8))
         override fun getResponseCode() = 200

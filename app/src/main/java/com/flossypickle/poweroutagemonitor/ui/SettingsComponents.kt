@@ -38,7 +38,7 @@ internal fun SettingsCategoryCard(title: String, summary: String, onClick: () ->
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

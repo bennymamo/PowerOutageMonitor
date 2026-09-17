@@ -55,7 +55,7 @@ private enum class SettingsSection(val title: String) {
     HELP("Help & guidance"),
     RELIABILITY("Reliability"),
     HISTORY("History"),
-    DATA_BACKUP("Data & backup"),
+    DATA_BACKUP("Data & recovery"),
     BACKUP_CREATE("Create backup"),
     BACKUP_AUTOMATIC("Automatic backups"),
     BACKUP_RESTORE("Restore backup"),
@@ -107,15 +107,16 @@ internal fun SettingsScreen(
         title = section.title,
         resetScrollKey = section.name,
         padding = padding,
+        backTitle = parentSection(section).title,
         onBack = if (section == SettingsSection.HOME) null else {
             { section = parentSection(section) }
         }
     ) {
         when (section) {
             SettingsSection.HOME -> {
-                SettingsCategoryCard("Power sources", "Charger, optional integrations and confirmation") { onOpenPowerSources() }
-                SettingsCategoryCard("Monitoring", "Outage timing, restoration and keeping the app running") { section = SettingsSection.MONITORING }
-                SettingsCategoryCard("Alerts & sound", "Messages, delivery order and the local alarm") { section = SettingsSection.MESSAGES }
+                SettingsCategoryCard("Power sources", "Charger and optional grid integrations") { onOpenPowerSources() }
+                SettingsCategoryCard("Monitoring", "Timing, reminders and reliability") { section = SettingsSection.MONITORING }
+                SettingsCategoryCard("Alerts & sound", "Alert destinations and the local alarm") { section = SettingsSection.MESSAGES }
                 SettingsCategoryCard("Data & recovery", "History, encrypted backups and restore") { section = SettingsSection.DATA_BACKUP }
                 SettingsCategoryCard("Appearance & device", "Theme, device name and setup guidance") { section = SettingsSection.PERSONAL }
                 SettingsCategoryCard("Help & app", "Setup checklist, testing, safety and About") { section = SettingsSection.SUPPORT }
@@ -312,6 +313,7 @@ private fun SettingsPage(
     title: String,
     resetScrollKey: String,
     padding: PaddingValues,
+    backTitle: String,
     onBack: (() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -323,7 +325,7 @@ private fun SettingsPage(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            if (onBack != null) TextButton(onClick = onBack) { Text("‹ Settings") }
+            if (onBack != null) TextButton(onClick = onBack) { Text("‹ $backTitle") }
             Text(
                 title,
                 style = MaterialTheme.typography.headlineMedium,

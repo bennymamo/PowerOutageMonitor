@@ -19,6 +19,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +65,10 @@ internal fun EcoFlowCloudSetupScreen(
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    val setupSteps = listOf("Prepare developer access", "Save API keys", "Find and test devices")
+    var setupStep by rememberSaveable { mutableStateOf(if (config.hasCredentials) 2 else 0) }
+    val setupScroll = rememberScrollState()
+    LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
     var liveBrokerSummary by remember { mutableStateOf<String?>(null) }
 
     fun enteredCredentials(): EcoFlowCloudClient.Credentials? {
@@ -131,7 +137,7 @@ internal fun EcoFlowCloudSetupScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(padding).verticalScroll(setupScroll)
             .padding(horizontal = 20.dp, vertical = 14.dp).widthIn(max = 600.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -147,6 +153,8 @@ internal fun EcoFlowCloudSetupScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
+        SetupFlowSection(0, setupStep, helpLevel.isGuided, "Prepare developer access") {
         PowerSourceSectionTitle("What this version does")
         SettingsCard {
             Text("Read-only connection preview", fontWeight = FontWeight.Medium)
@@ -156,7 +164,7 @@ internal fun EcoFlowCloudSetupScreen(
                 fontSize = 12.sp
             )
             Text(
-                "Cloud monitoring cannot be activated yet. First we must prove that the selected PowerOcean sends fresh phase voltage while the EcoFlow app and web portal are closed. This prevents cached data from causing a false outage.",
+                "Cloud monitoring cannot be activated yet. This documented connection is a device-data preview. Monitoring needs separately verified, current grid observations; phase voltage alone can remain present during whole-house backup.",
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
@@ -187,6 +195,10 @@ internal fun EcoFlowCloudSetupScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Open EcoFlow Developer") }
+        }
+        }
+        SetupFlowSection(1, setupStep, helpLevel.isGuided, "Save API keys") {
+        SettingsCard {
             OutlinedTextField(
                 value = accessKey,
                 onValueChange = { if (it.length <= 200) accessKey = it.trim() },
@@ -238,6 +250,10 @@ internal fun EcoFlowCloudSetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !loading && accessKey.isNotBlank() && secretKey.isNotBlank()
             ) { Text("Save credentials") }
+        }
+        }
+        SetupFlowSection(2, setupStep, helpLevel.isGuided, "Find and test devices") {
+        SettingsCard {
             Button(
                 onClick = {
                     val credentials = enteredCredentials()
@@ -329,6 +345,9 @@ internal fun EcoFlowCloudSetupScreen(
                 fontWeight = FontWeight.Medium)
         }
 
+        }
+        SetupFlowFooter(setupSteps, setupStep, helpLevel.isGuided, loading, { setupStep = it }, onBack, finishEnabled = config.hasCredentials)
+        ExpandableSettingsSection("Connection help and advanced checks", "Device permissions, live-data access and credential removal") {
         PowerSourceSectionTitle("If something does not work")
         SettingsCard {
             Text("Live-data access", fontWeight = FontWeight.Medium)
@@ -414,6 +433,7 @@ internal fun EcoFlowCloudSetupScreen(
                     ) { Text("Cancel") }
                 }
             }
+        }
         }
     }
 }
