@@ -38,11 +38,11 @@ class PowerMonitorAppUiTest {
         override fun getFilesDir(): File = File(super.getFilesDir(), "ui_qa").apply { mkdirs() }
     }
 
-    private fun launch(assisted: Boolean = false, dark: Boolean = true, checking: Boolean = false, failed: Boolean = false) {
+    private fun launch(assisted: Boolean = false, dark: Boolean = true, checking: Boolean = false, failed: Boolean = false, ecoOutage: Boolean = false, chargerOn: Boolean = false) {
         qaContext.getSharedPreferences("power_sources", 0).edit().clear().commit()
         if (assisted) PowerSourceStore(qaContext).setPowerOceanAssistedSettings(PowerOceanAssistedSettings(enabled = true))
         val now = System.currentTimeMillis()
-        val settings = MonitorStore.Settings(true, checking || failed, 30_000, 30_000, true, "Sample grid monitor")
+        val settings = MonitorStore.Settings(true, checking || failed || ecoOutage, 30_000, 30_000, true, "Sample grid monitor")
         val baseCheck = PowerSourceCheck(now - 120_000, now - 60_000, true,
             observations = listOf(SourceReportedValue("Reported grid code", "0", "Connected in the tested profile.", now - 60_000, true),
                 SourceReportedValue("Meter 1 reading", "12.5", "Reported meter activity; zero alone is not an outage.", now - 60_000, true)),
@@ -55,8 +55,8 @@ class PowerMonitorAppUiTest {
         compose.setContent {
             CompositionLocalProvider(LocalContext provides qaContext) {
                 PowerOutageMonitorTheme(darkTheme = dark) {
-                    PowerMonitorApp(snapshot = PowerSnapshot(if (checking || failed) 0 else 2, 88, 2, 250),
-                        monitorState = if (checking || failed) OutageEngine.State(OutageEngine.Phase.POWERED) else OutageEngine.State(), settings = settings,
+                    PowerMonitorApp(snapshot = PowerSnapshot(if (!chargerOn && (checking || failed || ecoOutage)) 0 else 2, 88, 2, 250),
+                        monitorState = if (ecoOutage) OutageEngine.State(OutageEngine.Phase.OUTAGE) else if (checking || failed) OutageEngine.State(OutageEngine.Phase.POWERED) else OutageEngine.State(), settings = settings,
                         history = listOf(EventHistoryStore.Record("outage", now - 600_000, now - 570_000, now - 480_000, 90, 89, 240, 250)),
                         operationalHistory = listOf(OperationalHistoryStore.Record(OperationalHistoryStore.KIND_MONITORING_RECOVERED, now - 300_000, "Sample interruption detail")),
                         audibleSettings = AudibleAlarmStore.Settings(), audibleAlarmActive = false, exactAlarmAccessGranted = false,
@@ -64,8 +64,8 @@ class PowerMonitorAppUiTest {
                         hasSentTestAlert = false, systemHealth = SystemHealthSnapshot(internetAvailable = true),
                         selectedPowerSource = if (assisted) PowerSourceStore.Source.ECOFLOW_ACCOUNT else PowerSourceStore.Source.ANDROID_CHARGER,
                         powerSourceStatus = if (assisted) PowerSourceStore.Status(PowerSourceStore.Source.ECOFLOW_ACCOUNT,
-                            if (failed) GridAvailability.UNKNOWN else GridAvailability.AVAILABLE, now,
-                            "Sample grid reading", check = check) else null,
+                            if (ecoOutage) GridAvailability.UNAVAILABLE else if (failed || checking) GridAvailability.UNKNOWN else GridAvailability.AVAILABLE, if (checking) now - 16_000 else now,
+                            "Sample grid reading", check = check, evidenceReceivedAtEpochMs = now - 60_000) else null,
                         scheduledAlertSettings = ScheduledAlertStore.Settings(), scheduledAlertState = ScheduledAlertStore.State(), deliverySummaries = emptyMap(),
                         onMonitoringEnabledChange = {}, onSettingsChange = { _, _, _, _ -> }, onCompleteSetup = { _, _, _, _ -> },
                         onRetryFailedDeliveries = {}, onClearDeliveryRecords = {}, onHistoryLimitChange = {}, onThemeModeChange = {},
@@ -185,7 +185,29 @@ class PowerMonitorAppUiTest {
         launch(assisted = true, checking = true)
         compose.onNodeWithText("GRID POWER ONLINE").assertExists()
         compose.onNode(hasText("Checking EcoFlow now.", substring = true)).assertExists()
+        compose.onNodeWithContentDescription("Charger has no power. EcoFlow reports grid power online.").assertExists()
+        val sourceText = compose.onNodeWithText("Charger + EcoFlow assistance").fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].first { it.text == "Charger + EcoFlow assistance" }
+        org.junit.Assert.assertNotEquals(sourceText.spanStyles.first().item.color, sourceText.spanStyles.last().item.color)
         capture("checking-last-confirmed-online")
+    }
+    @Test fun chargerReturnDoesNotTurnConfirmedEcoFlowOutageGreen() {
+        launch(assisted = true, ecoOutage = true, chargerOn = true)
+        compose.onNodeWithText("OUTAGE CONFIRMED").assertExists()
+        compose.onNodeWithContentDescription("Charger has power. EcoFlow reports a grid outage.").assertExists()
+        val sourceText = compose.onNodeWithText("Charger + EcoFlow assistance").fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].first { it.text == "Charger + EcoFlow assistance" }
+        org.junit.Assert.assertNotEquals(sourceText.spanStyles.first().item.color, sourceText.spanStyles.last().item.color)
+        capture("charger-online-ecoflow-outage")
+    }
+    @Test fun chargerAndEcoFlowLossAreBothRed() {
+        launch(assisted = true, ecoOutage = true)
+        compose.onNodeWithText("OUTAGE CONFIRMED").assertExists()
+        compose.onNodeWithContentDescription("Charger has no power. EcoFlow reports a grid outage.").assertExists()
+        val sourceText = compose.onNodeWithText("Charger + EcoFlow assistance").fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].first { it.text == "Charger + EcoFlow assistance" }
+        org.junit.Assert.assertEquals(sourceText.spanStyles.first().item.color, sourceText.spanStyles.last().item.color)
+        capture("charger-offline-ecoflow-outage")
     }
     @Test fun failedCheckShowsUnknownEvenIfGridWasPreviouslyOnline() {
         launch(assisted = true, failed = true)

@@ -179,7 +179,13 @@ In charger-first mode, charger loss can alert independently if EcoFlow is unreac
 
 **Notify when grid status is unknown** is on by default in the EcoFlow monitoring settings. If the charger has no power and a completed EcoFlow check fails or cannot verify the grid, enabled alert channels receive a warning asking you to confirm manually. It does not claim EcoFlow confirmed an outage. Repeated failures are grouped into one warning until a check provides valid grid evidence again. You can turn this warning off without disabling confirmed outage alerts. Telegram quiet time still applies. This choice is included in power-source backups.
 
-The last verified grid state remains valid for the currently active check interval plus one minute, measured from the trustworthy device report. The active interval follows the normal or outage schedule. Its original receipt time is retained. A check that runs beyond its configured listening limit and connection allowance cannot keep old evidence valid. Closing the connection deliberately does not create a source-failure warning. A failed, inconclusive or overdue check changes the state to Unknown. A new charger disconnection needs evidence received after that disconnection before EcoFlow can cancel the suspected outage.
+The last verified grid state remains valid for the currently active check interval plus one minute, measured from the trustworthy device report. The active interval follows the normal or outage schedule. Its original receipt time is retained.
+
+Starting a check keeps the last good grid status on the dashboard, including when charger loss triggers the check. Switching schedules does not shorten the previous reading's existing expiry deadline while the new check is collecting data; new evidence uses the current interval plus one minute. A confirmed EcoFlow outage immediately replaces the online state and follows the configured alarms and alerts. The dashboard shows the last confirmation time while checking.
+
+The source row colours the charger and EcoFlow separately: a disconnected charger is red while EcoFlow-reported grid power stays green. EcoFlow turns red when it reports a grid outage, including if a UPS keeps the charger powered. Unknown grid evidence has a separate neutral indication.
+
+A check that runs beyond its configured listening limit and connection allowance cannot keep old evidence valid. Closing the connection deliberately does not create a source-failure warning. A failed, inconclusive or overdue check changes the state to Unknown. A new charger disconnection needs evidence received after that disconnection before EcoFlow can cancel the suspected outage.
 
 **Notify when charger power returns** sends a charger update if EcoFlow already confirmed the grid was online. It does not generate a grid outage or grid restoration. You can switch it off in the same settings; this choice is also backed up.
 

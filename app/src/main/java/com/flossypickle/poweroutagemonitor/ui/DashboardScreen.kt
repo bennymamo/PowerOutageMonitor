@@ -40,6 +40,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -121,9 +127,14 @@ internal fun DashboardScreen(
     }
     val recentlyRestored = lastEvent?.kind == EventHistoryStore.KIND_CONFIRMED_OUTAGE &&
         statusClock - lastEvent.restoredAtEpochMs in 0 until RESTORED_STATUS_DURATION_MS
+    val samplingIncident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 ||
+        monitorState.phase in setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
+    val activeInterval = if (assistedActive) {
+        (if (samplingIncident) assistedSettings.outageSeconds else assistedSettings.normalSeconds).takeIf { it > 0 }
+    } else null
     val sourceReading = powerSourceStatus?.takeIf {
-        it.source == selectedPowerSource &&
-            System.currentTimeMillis() - it.observedAtEpochMs in 0..SOURCE_FRESH_MS
+        com.flossypickle.poweroutagemonitor.integrations.power.DashboardSourceReadingPolicy.isCurrent(
+            it, selectedPowerSource, System.currentTimeMillis(), activeInterval, assistedSettings.checkWindowSeconds * 1000L)
     }
     val lastGridReadingEpochMs = when (selectedPowerSource) {
         PowerSourceStore.Source.ECOFLOW_ACCOUNT -> powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.check?.let {
@@ -140,18 +151,26 @@ internal fun DashboardScreen(
             GridAvailability.UNKNOWN, null -> null
         }
     }
-    val keepLastOnline = effectivePowered == true && selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
-        sourceReading?.check?.active == true && !sourceReading.check.gridEvidenceAvailable &&
-        sourceReading.check.lastConfirmedOnlineAtEpochMs != null && monitorState.phase == OutageEngine.Phase.POWERED
+    val previousOnline = settings.monitoringEnabled && !assistancePaused &&
+        !(assistedSettings.ignoreUnchanged && powerSourceStatus?.dataPossiblyStalled == true) &&
+        monitorState.phase == OutageEngine.Phase.POWERED &&
+        com.flossypickle.poweroutagemonitor.integrations.power.DashboardSourceReadingPolicy.previousOnlineDuringCheck(
+            powerSourceStatus, System.currentTimeMillis(), activeInterval, assistedSettings.checkWindowSeconds * 1000L)
+    val ecoFlowGrid = if (assistancePaused || assistedSettings.ignoreUnchanged && powerSourceStatus?.dataPossiblyStalled == true)
+        GridAvailability.UNKNOWN else if (previousOnline) GridAvailability.AVAILABLE
+        else sourceReading?.check?.ecoFlowAvailability ?: sourceReading?.availability ?: GridAvailability.UNKNOWN
+    val keepLastOnline = (effectivePowered == true || previousOnline) && selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
+        powerSourceStatus?.check?.active == true && !powerSourceStatus.check.gridEvidenceAvailable &&
+        powerSourceStatus.check.lastConfirmedOnlineAtEpochMs != null && monitorState.phase == OutageEngine.Phase.POWERED
     val baseStatus = gridStatus(
-        powered = effectivePowered,
+        powered = if (previousOnline) true else effectivePowered,
         phase = monitorState.phase,
         enabled = settings.monitoringEnabled,
         recentlyRestored = recentlyRestored,
         outageDelayMs = settings.outageDelayMs
     )
     val status = if (settings.monitoringEnabled && keepLastOnline) {
-        val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sourceReading!!.check!!.lastConfirmedOnlineAtEpochMs!!))
+        val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(powerSourceStatus!!.check!!.lastConfirmedOnlineAtEpochMs!!))
         baseStatus.copy(description = "Last confirmed online at $time. Checking EcoFlow now.")
     } else if (settings.monitoringEnabled && effectivePowered == true && sourceReading?.recoveryPending == true) {
         baseStatus.copy(title = "Grid appears back", description = "Meter activity has resumed. Waiting for EcoFlow to reconnect to the grid.", tone = GridTone.CAUTION)
@@ -290,7 +309,30 @@ internal fun DashboardScreen(
                             PowerSourceStore.Source.ECOFLOW_ACCOUNT -> if (assistedActive) "Charger + EcoFlow assistance" else "PowerOcean account · experimental"
                         },
                         colors.primary,
-                        onOpenPowerSources
+                        onOpenPowerSources,
+                        styledValue = if (assistedActive) buildAnnotatedString {
+                            withStyle(SpanStyle(color = when (snapshot?.externallyPowered) {
+                                true -> colors.primary
+                                false -> colors.error
+                                null -> colors.onSurfaceVariant
+                            })) { append("Charger") }
+                            withStyle(SpanStyle(color = colors.onSurfaceVariant)) { append(" + ") }
+                            withStyle(SpanStyle(color = when (ecoFlowGrid) {
+                                GridAvailability.AVAILABLE -> colors.primary
+                                GridAvailability.UNAVAILABLE -> colors.error
+                                GridAvailability.UNKNOWN -> colors.onSurfaceVariant
+                            })) {
+                                append("EcoFlow assistance")
+                            }
+                        } else null,
+                        valueDescription = if (assistedActive) {
+                            (if (snapshot?.externallyPowered == false) "Charger has no power." else "Charger has power.") + " " +
+                                when (ecoFlowGrid) {
+                                    GridAvailability.AVAILABLE -> "EcoFlow reports grid power online."
+                                    GridAvailability.UNAVAILABLE -> "EcoFlow reports a grid outage."
+                                    GridAvailability.UNKNOWN -> "EcoFlow grid status is unknown."
+                                }
+                        } else null
                     )
                     if (assistedActive) {
                         val incident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
@@ -324,7 +366,7 @@ internal fun DashboardScreen(
                         }
                         checkFeedback?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant) }
                     }
-                    if (effectivePowered == null && settings.monitoringEnabled &&
+                    if (effectivePowered == null && !previousOnline && settings.monitoringEnabled &&
                         scheduledAlertSettings.sourceUnavailableEnabled
                     ) {
                         val sourceAlertText = when {
@@ -437,7 +479,8 @@ private fun ReadingTile(label: String, value: String, modifier: Modifier = Modif
 }
 
 @Composable
-internal fun StatusRow(label: String, value: String, valueColor: Color, onClick: (() -> Unit)? = null) {
+internal fun StatusRow(label: String, value: String, valueColor: Color, onClick: (() -> Unit)? = null,
+    styledValue: AnnotatedString? = null, valueDescription: String? = null) {
     val modifier = if (onClick != null) Modifier.fillMaxWidth().heightIn(min = 48.dp)
         .clickable(role = Role.Button, onClickLabel = "Open $label settings", onClick = onClick)
         else Modifier.fillMaxWidth()
@@ -449,14 +492,15 @@ internal fun StatusRow(label: String, value: String, valueColor: Color, onClick:
             modifier = Modifier.weight(0.4f)
         )
         Text(
-            value,
+            styledValue ?: AnnotatedString(value),
             color = valueColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(0.6f)
+            modifier = Modifier.weight(0.6f).then(if (valueDescription != null)
+                Modifier.semantics { contentDescription = valueDescription } else Modifier)
         )
         if (onClick != null) Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 8.dp), fontSize = 18.sp)
@@ -508,8 +552,6 @@ private fun gridStatus(
         "?", "GRID STATE UNKNOWN", "Waiting for a trustworthy source reading.", GridTone.MUTED
     )
 }
-
-private const val SOURCE_FRESH_MS = 15_000L
 
 private fun sourceText(plugged: Int?) = when (plugged) {
     0 -> "None"

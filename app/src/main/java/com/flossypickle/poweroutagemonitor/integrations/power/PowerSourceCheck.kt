@@ -6,7 +6,9 @@ internal data class PowerSourceCheck(val requestedAtEpochMs: Long, val liveRepor
     val observations: List<SourceReportedValue> = emptyList(),
     val cycleState: CycleState? = null, val finishedAtEpochMs: Long? = null, val nextCheckAtEpochMs: Long? = null,
     val deviceUpdates: Int = 0, val powerUpdates: Int = 0, val valuesChanged: Boolean = false,
-    val lastConfirmedOnlineAtEpochMs: Long? = null) {
+    val lastConfirmedOnlineAtEpochMs: Long? = null,
+    val lastConfirmedOnlineValidUntilEpochMs: Long? = null,
+    val ecoFlowAvailability: GridAvailability? = null) {
     enum class CycleState { CONNECTING, COLLECTING, WAITING, PAUSED, FAILED }
     val active get() = cycleState in setOf(CycleState.CONNECTING, CycleState.COLLECTING)
     enum class DataHealth { CHANGING, UNCHANGED, NO_UPDATES }

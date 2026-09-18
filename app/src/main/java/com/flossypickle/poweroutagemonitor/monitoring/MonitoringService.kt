@@ -340,6 +340,10 @@ internal class MonitoringService : Service() {
 
     private fun processEcoFlow(primary: PowerSignal) {
         if (!MonitorStore(this).settings().monitoringEnabled) return
+        val previousCheck = latestPrimarySignal?.check
+        val checkChanged = primary.check?.requestedAtEpochMs != previousCheck?.requestedAtEpochMs ||
+            primary.check?.cycleState != previousCheck?.cycleState ||
+            primary.check?.gridEvidenceAvailable != previousCheck?.gridEvidenceAvailable
         latestPrimarySignal = primary
         val sourceStore = PowerSourceStore(this)
         val assisted = sourceStore.powerOceanAssistedSettings()
@@ -401,7 +405,7 @@ internal class MonitoringService : Service() {
                 signal.observedAtEpochMs
             )
         }
-        if (signal.observedAtEpochMs - lastEcoFlowUiRefreshAt >= UI_REFRESH_INTERVAL_MS) {
+        if (availabilityChanged || checkChanged || signal.observedAtEpochMs - lastEcoFlowUiRefreshAt >= UI_REFRESH_INTERVAL_MS) {
             lastEcoFlowUiRefreshAt = signal.observedAtEpochMs
             sendBroadcast(Intent(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED).setPackage(packageName))
             refreshNotification()
@@ -635,7 +639,7 @@ internal class MonitoringService : Service() {
             "com.flossypickle.poweroutagemonitor.RESUME_AFTER_BOOT"
         private const val ANDROID_PROVIDER_ID = "android_charger"
         private const val ECOFLOW_STALE_AFTER_MS = 15_000L
-        private const val UI_REFRESH_INTERVAL_MS = 15_000L
+        private const val UI_REFRESH_INTERVAL_MS = 5_000L
         private const val STATUS_PERSIST_INTERVAL_MS = 5 * 60_000L
     }
 }

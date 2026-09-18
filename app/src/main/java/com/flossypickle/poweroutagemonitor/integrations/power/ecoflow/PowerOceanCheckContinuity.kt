@@ -4,6 +4,10 @@ import com.flossypickle.poweroutagemonitor.integrations.power.*
 
 /** A planned check interval is not a source failure. Keep the original evidence receipt time. */
 internal object PowerOceanCheckContinuity {
+    fun intervalDuringCheck(previous: PowerSignal?, check: PowerSourceCheck?, verifiedInterval: Int?, configuredInterval: Int?): Int? =
+        if (check?.active == true && previous != null && check.requestedAtEpochMs != previous.check?.requestedAtEpochMs)
+            verifiedInterval else configuredInterval
+
     fun availability(previous: PowerSignal?, check: PowerSourceCheck?, now: Long, windowMs: Long, intervalSeconds: Int?): GridAvailability {
         val evidence = previous?.evidenceReceivedAtEpochMs ?: return GridAvailability.UNKNOWN
         if (previous.availability == GridAvailability.UNKNOWN || evidence !in 1..now || check == null)
@@ -11,7 +15,8 @@ internal object PowerOceanCheckContinuity {
         val validForMs = ((intervalSeconds ?: 0) + 60) * 1000L
         if (now - evidence > validForMs) return GridAvailability.UNKNOWN
         val usable = when {
-            check.active -> check.requestedAtEpochMs >= evidence &&
+            check.active -> (check.requestedAtEpochMs >= evidence ||
+                check.requestedAtEpochMs == previous.check?.requestedAtEpochMs) &&
                 now - check.requestedAtEpochMs in 0..(windowMs + 60_000)
             check.cycleState == PowerSourceCheck.CycleState.WAITING && check.gridEvidenceAvailable &&
                 check.finishedAtEpochMs != null && now >= check.finishedAtEpochMs &&
