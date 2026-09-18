@@ -114,4 +114,43 @@ class PowerOceanCheckContinuityTest {
         assertNull(PowerOceanCheckContinuity.completedEvidence(report, report, 125_000, false))
     }
 
+    @Test fun cachedOnlineCodeWithFirstPowerPacketDoesNotErasePreviousVerifiedOnlineReport() {
+        val active = PowerSourceCheck(125_000, 130_000, true, cycleState = PowerSourceCheck.CycleState.COLLECTING,
+            deviceUpdates = 1)
+        val partial = PowerSignal(GridAvailability.AVAILABLE, 130_000, "account", check = active)
+        val held = PowerOceanCheckContinuity.retainEvidence(verified, partial, 120_000, 120, 105_000)
+        assertEquals(GridAvailability.AVAILABLE, held.availability)
+        assertEquals(105_000L, held.evidenceReceivedAtEpochMs)
+        assertFalse(held.check!!.gridEvidenceAvailable)
+        assertEquals(285_000L, held.check!!.evidenceValidUntilEpochMs)
+        assertEquals(GridAvailability.AVAILABLE, ChargerFirstPolicy.evaluate(false, held, 90_000,
+            false, true, 130_000, verificationWindowMs = 180_000).availability)
+        val screen = PowerSourceStore.Status(PowerSourceStore.Source.ECOFLOW_ACCOUNT, held.availability,
+            held.observedAtEpochMs, null, check = held.check, evidenceReceivedAtEpochMs = held.evidenceReceivedAtEpochMs)
+        assertTrue(DashboardSourceReadingPolicy.previousOnlineDuringCheck(screen, 130_000, 120, 120_000))
+        assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.retainEvidence(null, partial,
+            120_000, 120, null).availability)
+    }
+    @Test fun partialCodeCannotClearKnownOutageButQualifiedRecoveryAndFailureAreApplied() {
+        val offline = verified.copy(availability = GridAvailability.UNAVAILABLE)
+        val active = PowerSourceCheck(125_000, 130_000, true, cycleState = PowerSourceCheck.CycleState.COLLECTING)
+        val partial = PowerSignal(GridAvailability.AVAILABLE, 130_000, "account", check = active)
+        assertEquals(GridAvailability.UNAVAILABLE, PowerOceanCheckContinuity.retainEvidence(offline,
+            partial, 120_000, 120, null).availability)
+        assertEquals(GridAvailability.AVAILABLE, PowerOceanCheckContinuity.retainEvidence(offline,
+            partial.copy(evidenceReceivedAtEpochMs = 130_000), 120_000, 120, 130_000).availability)
+        val failed = partial.copy(availability = GridAvailability.UNKNOWN,
+            check = active.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = 130_000))
+        assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.retainEvidence(verified,
+            failed, 120_000, 120, 105_000).availability)
+        assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.qualifiedReport(
+            partial.copy(evidenceReceivedAtEpochMs = 140_000)).availability)
+        assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.qualifiedReport(
+            partial.copy(evidenceReceivedAtEpochMs = 105_000)).availability)
+        val unsupported = partial.copy(check = active.copy(observations = listOf(
+            SourceReportedValue("Reported grid code", "2", "Unsupported", 130_000, true))))
+        assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.retainEvidence(verified,
+            unsupported, 120_000, 120, 105_000).availability)
+    }
+
 }

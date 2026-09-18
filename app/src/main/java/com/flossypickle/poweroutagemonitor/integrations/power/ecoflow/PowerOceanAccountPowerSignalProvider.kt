@@ -49,26 +49,20 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     val configuredInterval = if (samplingSettings.enabled)
                         (if (incident()) samplingSettings.outageSeconds else samplingSettings.normalSeconds).takeIf { it > 0 }
                         else savedRefreshSeconds
-                    if (check?.active == true && check.gridEvidenceAvailable && evidenceAt != null && availability != GridAvailability.UNKNOWN) {
-                        lastVerified = PowerSignal(availability, now, id, detail, pending, evidenceAt, dataStalled, check)
+                    val report = PowerOceanCheckContinuity.qualifiedReport(
+                        PowerSignal(availability, now, id, detail, pending, evidenceAt, dataStalled, check))
+                    if (report.check?.active == true && report.check.gridEvidenceAvailable &&
+                        report.availability != GridAvailability.UNKNOWN) {
+                        lastVerified = report
                         lastVerifiedIntervalSeconds = configuredInterval
-                        lastConfirmedOnlineAt = evidenceAt.takeIf { availability == GridAvailability.AVAILABLE && !pending }
+                        lastConfirmedOnlineAt = report.evidenceReceivedAtEpochMs.takeIf {
+                            report.availability == GridAvailability.AVAILABLE && !pending }
                     }
                     // A new check keeps the previous report's deadline until new evidence arrives.
-                    val continuityInterval = PowerOceanCheckContinuity.intervalDuringCheck(lastVerified, check,
+                    val continuityInterval = PowerOceanCheckContinuity.intervalDuringCheck(lastVerified, report.check,
                         lastVerifiedIntervalSeconds, configuredInterval)
-                    val carried = if (availability == GridAvailability.UNKNOWN)
-                        PowerOceanCheckContinuity.availability(lastVerified, check, now,
-                            samplingSettings.checkWindowSeconds * 1000L,
-                            continuityInterval)
-                    else GridAvailability.UNKNOWN
-                    val signal = PowerSignal(if (carried != GridAvailability.UNKNOWN) carried else availability, now, id, detail,
-                        if (carried != GridAvailability.UNKNOWN) lastVerified!!.recoveryPending else pending,
-                        if (carried != GridAvailability.UNKNOWN) lastVerified!!.evidenceReceivedAtEpochMs else evidenceAt, dataStalled,
-                        check?.copy(lastConfirmedOnlineAtEpochMs = lastConfirmedOnlineAt,
-                            evidenceValidUntilEpochMs = (if (carried != GridAvailability.UNKNOWN) lastVerified?.evidenceReceivedAtEpochMs else evidenceAt)
-                                ?.let { it + ((continuityInterval ?: 0) + 60) * 1000L },
-                            ecoFlowAvailability = if (carried != GridAvailability.UNKNOWN) carried else availability))
+                    val signal = PowerOceanCheckContinuity.retainEvidence(lastVerified, report,
+                        samplingSettings.checkWindowSeconds * 1000L, continuityInterval, lastConfirmedOnlineAt)
                     latest = signal; onSignal(signal)
                 }
             }
