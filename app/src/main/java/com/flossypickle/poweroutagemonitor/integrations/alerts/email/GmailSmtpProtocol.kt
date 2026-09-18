@@ -24,7 +24,7 @@ internal object GmailSmtpProtocol {
         val messageId = ResendEmailProtocol.idempotencyKey(message, recipient)
             .substringAfterLast('/')
         return listOf(
-            "From: FP Grid Monitor <$account>",
+            "From: Flockle Grid Outage Monitor <$account>",
             "To: <$recipient>",
             "Subject: $subject",
             "Message-ID: <$messageId@fp-grid-monitor.local>",

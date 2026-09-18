@@ -143,7 +143,7 @@ internal fun SmsSetupScreen(
             } else if (!capability.permissionGranted) {
                 Text(
                     if (helpLevel.isGuided) {
-                        "Tap Allow SMS sending, then choose Allow in Android's permission window. Android may say “send and view SMS messages” for the whole permission group, but FP Grid Monitor requests SEND_SMS only and cannot read your inbox, contacts, call logs or phone identity."
+                        "Tap Allow SMS sending, then choose Allow in Android's permission window. Android may say “send and view SMS messages” for the whole permission group, but Flockle Grid Outage Monitor requests SEND_SMS only and cannot read your inbox, contacts, call logs or phone identity."
                     } else {
                         "SEND_SMS permission is required. The app declares no SMS read, contacts, call-log or phone-identity permission."
                     },
@@ -309,7 +309,7 @@ internal fun SmsSetupScreen(
         SmsSectionTitle("Privacy & distribution")
         SmsCard {
             Text(
-                "Phone numbers stay on this device. Android's automatic device backup excludes them; a password-encrypted FP Grid Monitor recovery archive includes them only when you select Alert channels and keys. Android reports when each SMS part is accepted by the phone's radio; carrier delivery receipts are not guaranteed.",
+                "Phone numbers stay on this device. Android's automatic device backup excludes them; a password-encrypted Flockle Grid Outage Monitor recovery archive includes them only when you select Alert channels and keys. Android reports when each SMS part is accepted by the phone's radio; carrier delivery receipts are not guaranteed.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

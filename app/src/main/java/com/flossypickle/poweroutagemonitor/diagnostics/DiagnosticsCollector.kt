@@ -62,7 +62,7 @@ internal data class DiagnosticsReport(
     val lastBackupError: String? = null
 ) {
     fun asPlainText(): String = buildString {
-        appendLine("FP Grid Monitor diagnostics")
+        appendLine("Flockle Grid Outage Monitor diagnostics")
         appendLine("App version: $appVersion")
         appendLine("Android: $androidVersion")
         appendLine("Device: $device")

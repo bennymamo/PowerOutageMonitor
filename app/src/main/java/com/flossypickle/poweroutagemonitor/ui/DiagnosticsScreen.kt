@@ -255,7 +255,7 @@ internal fun DiagnosticsScreen(
             OutlinedButton(
                 onClick = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    clipboard.setPrimaryClip(ClipData.newPlainText("FP Grid Monitor diagnostics", report.asPlainText()))
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Flockle Grid Outage Monitor diagnostics", report.asPlainText()))
                     Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier

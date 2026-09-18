@@ -170,7 +170,7 @@ internal fun ResendEmailSetupScreen(
                 onValueChange = { if (it.length <= 254) sender = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Sender") },
-                supportingText = { Text("Example: FP Grid Monitor <alerts@alerts.example.com>") },
+                supportingText = { Text("Example: Flockle Grid Outage Monitor <alerts@alerts.example.com>") },
                 singleLine = true,
                 enabled = !loading
             )
@@ -314,7 +314,7 @@ internal fun ResendEmailSetupScreen(
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
             Text(
-                "The API key is supplied by you, encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted FP Grid Monitor recovery archive includes it only when you select Alert channels and keys. Use a sending-only key restricted to the verified domain.",
+                "The API key is supplied by you, encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted Flockle Grid Outage Monitor recovery archive includes it only when you select Alert channels and keys. Use a sending-only key restricted to the verified domain.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

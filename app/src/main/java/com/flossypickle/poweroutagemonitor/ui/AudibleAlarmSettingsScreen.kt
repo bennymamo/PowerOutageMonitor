@@ -71,7 +71,7 @@ internal fun AudibleAlarmSettingsContent(
     ExpandableSettingsSection("Sound", "Selected tone or built-in beep") {
         Text("Sound", fontWeight = FontWeight.Medium)
         Text(
-            "An active outage alarm shows a speaker notification from FP Grid Monitor. Expand it and tap Stop sound to silence this outage; monitoring and message alerts continue.",
+            "An active outage alarm shows a speaker notification from Flockle Grid Outage Monitor. Expand it and tap Stop sound to silence this outage; monitoring and message alerts continue.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
@@ -107,7 +107,7 @@ internal fun AudibleAlarmSettingsContent(
             ) { Text("Use built-in beep") }
         }
         Text(
-            "If the selected sound cannot be opened, FP Grid Monitor uses its built-in beep.",
+            "If the selected sound cannot be opened, Flockle Grid Outage Monitor uses its built-in beep.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )

@@ -45,9 +45,9 @@ internal object PasswordBackupCipher {
 
     fun decrypt(backup: ByteArray, password: CharArray): ByteArray {
         require(backup.size <= MAX_BACKUP_BYTES + HEADER_BYTES + 32) { "Backup file is too large." }
-        require(backup.size > HEADER_BYTES) { "This is not an FP Grid Monitor backup." }
+        require(backup.size > HEADER_BYTES) { "This is not an Flockle Grid Outage Monitor backup." }
         val magic = backup.copyOfRange(0, MAGIC.size)
-        require(magic.contentEquals(MAGIC)) { "This is not an FP Grid Monitor backup." }
+        require(magic.contentEquals(MAGIC)) { "This is not an Flockle Grid Outage Monitor backup." }
         val iterations = readInt(backup, MAGIC.size)
         require(iterations == ITERATIONS) { "This backup uses an unsupported security format." }
         val saltStart = MAGIC.size + Int.SIZE_BYTES

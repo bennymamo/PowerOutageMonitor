@@ -110,7 +110,7 @@ internal fun GmailEmailSetupScreen(
             if (helpLevel.isGuided) {
                 Text("1. Sign in to the Google account that will send alerts.")
                 Text("2. Turn on 2-Step Verification for that account.")
-                Text("3. Open App Passwords and create one named FP Grid Monitor.")
+                Text("3. Open App Passwords and create one named Flockle Grid Outage Monitor.")
                 Text("4. Copy the 16-character password into this app. Do not use the normal Google password.")
                 Text("5. Enter recipients, save, send a test, then enable Gmail alerts.")
             } else {
@@ -302,7 +302,7 @@ internal fun GmailEmailSetupScreen(
         SectionTitle("Security")
         GmailCard {
             Text(
-                "The App Password is encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted FP Grid Monitor recovery archive includes it only when you select Alert channels and keys. It can be revoked at any time from the Google account.",
+                "The App Password is encrypted with Android Keystore and never shown again. Android's automatic device backup excludes it; a password-encrypted Flockle Grid Outage Monitor recovery archive includes it only when you select Alert channels and keys. It can be revoked at any time from the Google account.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

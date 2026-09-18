@@ -1,6 +1,8 @@
-# FP Grid Monitor
+# Flockle Grid Outage Monitor
 
 Turn a spare Android phone or tablet into a grid-outage monitor. It watches its charger, confirms a sustained power loss, and sends alerts to the destinations you choose.
+
+Previously called FP Grid Monitor. Existing release installations can be updated without resetting their configuration.
 
 ## Quick start
 
@@ -85,7 +87,7 @@ The bot token is a password. Never share it in screenshots or bug reports.
 
 1. Open **Alert channels → Configure email → Gmail**.
 2. Use the in-app links to turn on Google **2-Step Verification** and open **Google App Passwords**.
-3. Create an App Password for FP Grid Monitor. Enter the sending Google account email and that App Password, **not your normal Google password**.
+3. Create an App Password for Flockle Grid Outage Monitor. Enter the sending Google account email and that App Password, **not your normal Google password**.
 4. Enter recipient email addresses, one per line. Save and send a test; check inboxes and spam folders.
 5. Enable Gmail alerts and save.
 
@@ -219,7 +221,7 @@ Open **Settings → Data & recovery**. A `.fpgrid` backup can include settings, 
 
 **Create backup:** choose included data, enter/confirm a password of at least ten characters, then choose where to save. Use **Show/Hide** to check each password field. Password keyboards are requested with suggestions disabled and, on Android 8 or newer, no personalized learning; the keyboard ultimately decides whether to honor these requests. Keep the password in your password manager and a copy of the archive away from the phone.
 
-**Automatic backups:** choose a destination folder, expand **Frequency & copies**, **Included data** and **Backup password**, enable backups and **Save automatic backup plan**. Run **Create an automatic backup now** and verify its result. A cloud app can sync the chosen folder if it supports Android folder access; FP Grid Monitor does not need your cloud login. If cloud folders are unavailable, use a local folder and your own sync/copy arrangement.
+**Automatic backups:** choose a destination folder, expand **Frequency & copies**, **Included data** and **Backup password**, enable backups and **Save automatic backup plan**. Run **Create an automatic backup now** and verify its result. A cloud app can sync the chosen folder if it supports Android folder access; Flockle Grid Outage Monitor does not need your cloud login. If cloud folders are unavailable, use a local folder and your own sync/copy arrangement.
 
 **Restore:** turn monitoring off, open **Restore backup**, enter the password and **Choose backup to unlock**. On a new installation, use **Restore an existing backup** on the welcome screen. When **Ready to restore** appears, review version/data, select sections and **Restore selected data**. Include app settings to recover completed setup. Only choose **Resume monitoring after restore** if the old device is offline, to avoid duplicate pending alerts.
 
@@ -236,7 +238,7 @@ The archive uses password-strengthening and authenticated **AES-256-GCM** encryp
 | Telegram finds no chats | Send a fresh `/start` to your bot, then tap Find chats. Check the saved token and internet. |
 | Telegram commands do not arrive | Check trusted private chat, saved/enabled remote control and its Receiver status; use one receiver per bot. |
 | Messages missing | Check saved/enabled channels and recipients, send their tests and inspect Diagnostics. |
-| Notification hidden | Allow FP Grid Monitor notifications in Android settings. |
+| Notification hidden | Allow Flockle Grid Outage Monitor notifications in Android settings. |
 | Monitoring restarts unexpectedly | Check History and Diagnostics, then follow battery/background guidance. |
 | No alarm sound | Play its test; check alarm volume, Do Not Disturb and custom-tone access. |
 | EcoFlow values not changing | Check the backed-up network, inspect data health, and review stuck-reading safeguards. |
@@ -245,7 +247,7 @@ The archive uses password-strengthening and authenticated **AES-256-GCM** encryp
 
 ## Privacy, permissions and limits
 
-No analytics, advertising, tracking or FP Grid Monitor backend. History and configuration stay on the phone. Credentials are encrypted at rest with Android Keystore and are excluded from Android automatic backup; selected credentials transfer through password-encrypted `.fpgrid` files. Alerts go only to your configured services and recipients. Diagnostics omit secret credentials.
+No analytics, advertising, tracking or Flockle Grid Outage Monitor backend. History and configuration stay on the phone. Credentials are encrypted at rest with Android Keystore and are excluded from Android automatic backup; selected credentials transfer through password-encrypted `.fpgrid` files. Alerts go only to your configured services and recipients. Diagnostics omit secret credentials.
 
 The app uses notifications, a foreground service, reboot startup and network access for their stated features. Optional SMS needs SMS permission; exact alarm repeats can need Alarms & reminders access. File/folder pickers grant only selected backup access. Optional local network monitoring may require Android's local-network permission. It does not request contacts, location, camera, microphone or broad storage access.
 
@@ -253,7 +255,7 @@ Charger detection cannot distinguish a grid outage from an unplugged cable, fail
 
 ## License, support and source
 
-FP Grid Monitor is free software under [GPLv3](LICENSE). Distributed modified versions must provide corresponding source under GPLv3. Flossy Pickle branding does not imply endorsement of unofficial forks. Third-party attributions are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Flockle Grid Outage Monitor is free software under [GPLv3](LICENSE). Distributed modified versions must provide corresponding source under GPLv3. Flossy Pickle branding does not imply endorsement of unofficial forks. Third-party attributions are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Report reproducible bugs through [GitHub Issues](https://github.com/bennymamo/PowerOutageMonitor/issues). Remove emails, serials, phone numbers, chat IDs, passwords, tokens and API keys from screenshots before posting.
 

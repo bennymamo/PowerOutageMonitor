@@ -225,7 +225,7 @@ internal fun DataBackupSettingsContent(
         PasswordField("Backup password", exportPassword) { exportPassword = it }
         PasswordField("Confirm password", exportConfirmation) { exportConfirmation = it }
         Text(
-            "Use at least ${PasswordBackupCipher.MIN_PASSWORD_LENGTH} characters. FP Grid Monitor cannot recover a forgotten backup password.",
+            "Use at least ${PasswordBackupCipher.MIN_PASSWORD_LENGTH} characters. Flockle Grid Outage Monitor cannot recover a forgotten backup password.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
@@ -244,7 +244,7 @@ internal fun DataBackupSettingsContent(
     if (panel == BackupPanel.AUTOMATIC) SettingsCard {
         Text("Automatic encrypted backups", fontWeight = FontWeight.Medium)
         Text(
-            "Android writes to one folder you choose. If Google Drive, OneDrive or Dropbox appears in the folder picker, selecting its folder lets that app sync the files without sharing your cloud password with FP Grid Monitor.",
+            "Android writes to one folder you choose. If Google Drive, OneDrive or Dropbox appears in the folder picker, selecting its folder lets that app sync the files without sharing your cloud password with Flockle Grid Outage Monitor.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )

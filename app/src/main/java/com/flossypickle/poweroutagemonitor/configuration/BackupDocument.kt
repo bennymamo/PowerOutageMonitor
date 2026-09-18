@@ -112,7 +112,7 @@ internal object BackupDocumentCodec {
         document.history?.let { writeHistory(p, it) }
         document.activeState?.let { writeActiveState(p, it) }
         return StringWriter().use { writer ->
-            p.store(writer, "FP Grid Monitor encrypted backup payload")
+            p.store(writer, "Flockle Grid Outage Monitor encrypted backup payload")
             writer.toString().toByteArray(Charsets.UTF_8)
         }
     }
@@ -122,7 +122,7 @@ internal object BackupDocumentCodec {
         val p = Properties().apply {
             StringReader(bytes.toString(Charsets.UTF_8)).use(::load)
         }
-        require(p.required("format") == FORMAT) { "This is not an FP Grid Monitor backup." }
+        require(p.required("format") == FORMAT) { "This is not an Flockle Grid Outage Monitor backup." }
         require(p.int("version") == VERSION) { "This backup version is not supported." }
         val categories = p.required("categories").split(',').filter(String::isNotBlank)
             .mapTo(linkedSetOf()) { value ->

@@ -28,7 +28,7 @@ class GmailSmtpProtocolTest {
             "recipient@example.com",
             AlertMessage("event-1", AlertKind.OUTAGE, "Grid outage", "Power is offline")
         )
-        assertTrue(data.contains("From: FP Grid Monitor <sender@gmail.com>"))
+        assertTrue(data.contains("From: Flockle Grid Outage Monitor <sender@gmail.com>"))
         assertTrue(data.contains("To: <recipient@example.com>"))
         assertTrue(data.contains("Content-Transfer-Encoding: base64"))
         assertFalse(data.contains("Power is offline"))

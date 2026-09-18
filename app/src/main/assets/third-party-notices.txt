@@ -1,6 +1,6 @@
 # Third-party notices
 
-FP Grid Monitor is licensed under GPLv3. Third-party components retain their own licenses.
+Flockle Grid Outage Monitor is licensed under GPLv3. Third-party components retain their own licenses.
 
 ## PowerOcean protocol references and adaptations
 

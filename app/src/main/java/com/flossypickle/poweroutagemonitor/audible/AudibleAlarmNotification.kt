@@ -39,14 +39,14 @@ internal class AudibleAlarmNotification(private val context: Context) {
             @Suppress("DEPRECATION")
             Notification.Builder(context)
         }
-        val explanation = "FP Grid Monitor is sounding a repeating outage alarm. " +
+        val explanation = "Flockle Grid Outage Monitor is sounding a repeating outage alarm. " +
             "Stop sound silences this outage and cancels its repeats. " +
             "Grid monitoring and message alerts continue."
         @Suppress("DEPRECATION")
         val notification = builder
             .setSmallIcon(R.drawable.ic_audible_alarm)
             .setContentTitle("Outage alarm active")
-            .setContentText("FP Grid Monitor is sounding a repeating alarm.")
+            .setContentText("Flockle Grid Outage Monitor is sounding a repeating alarm.")
             .setStyle(Notification.BigTextStyle().bigText(explanation))
             .setContentIntent(
                 PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java),

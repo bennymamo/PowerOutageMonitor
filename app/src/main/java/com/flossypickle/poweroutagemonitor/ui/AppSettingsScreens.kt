@@ -224,7 +224,7 @@ internal fun AboutSettingsContent() {
 
     SettingsCard {
         Text(
-            "FP Grid Monitor",
+            "Flockle Grid Outage Monitor",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.clickable {
@@ -295,7 +295,7 @@ private fun GridLogo(engineerVisible: Boolean, onLongPress: () -> Unit) {
     val secondary = MaterialTheme.colorScheme.tertiary
     Canvas(
         Modifier.fillMaxWidth().height(92.dp)
-            .semantics { contentDescription = "FP Grid Monitor electricity-grid logo" }
+            .semantics { contentDescription = "Flockle Grid Outage Monitor electricity-grid logo" }
             .pointerInput(Unit) { detectTapGestures(onLongPress = { onLongPress() }) }
     ) {
         val center = size.width / 2f

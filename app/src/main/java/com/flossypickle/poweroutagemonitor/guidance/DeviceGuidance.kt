@@ -17,7 +17,7 @@ internal data class DeviceGuidance(
                 steps = listOf(
                     "Allow the ongoing Power monitoring notification.",
                     "Open this app's system settings and avoid a Restricted battery mode.",
-                    "If this device has Auto-start or Background activity controls, allow FP Grid Monitor.",
+                    "If this device has Auto-start or Background activity controls, allow Flockle Grid Outage Monitor.",
                     "After changing device settings, reboot once and confirm Monitoring service is running in Diagnostics."
                 )
             )

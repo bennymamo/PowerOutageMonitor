@@ -225,7 +225,7 @@ internal fun EcoFlowCloudSetupScreen(
                 )
             }
             Text(
-                "These are API credentials from the developer console, not your Wi-Fi password and not your normal EcoFlow account password. FP Grid Monitor never needs your EcoFlow account password for this connection.",
+                "These are API credentials from the developer console, not your Wi-Fi password and not your normal EcoFlow account password. Flockle Grid Outage Monitor never needs your EcoFlow account password for this connection.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )

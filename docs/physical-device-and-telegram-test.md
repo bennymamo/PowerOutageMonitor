@@ -1,6 +1,6 @@
 # Physical-device and Telegram validation
 
-This is the first mandatory test before FP Grid Monitor is treated as reliable. An emulator is useful for development, but it does not reproduce a phone maker's battery controls, real charger electronics, mobile service, speaker or long idle periods.
+This is the first mandatory test before Flockle Grid Outage Monitor is treated as reliable. An emulator is useful for development, but it does not reproduce a phone maker's battery controls, real charger electronics, mobile service, speaker or long idle periods.
 
 Choose the level of help you want:
 
@@ -53,7 +53,7 @@ Install it without deleting an older debug installation or its app data:
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" -d install -r ".\app\build\outputs\apk\debug\app-debug.apk"
 ```
 
-Open **FP Grid Monitor** from the phone's launcher. Its lightning/grid launcher graphic distinguishes it from the emulator tools.
+Open **Flockle Grid Outage Monitor** from the phone's launcher. Its lightning/grid launcher graphic distinguishes it from the emulator tools.
 
 ## Part 3: complete the guided app setup
 
@@ -74,18 +74,18 @@ Open **FP Grid Monitor** from the phone's launcher. Its lightning/grid launcher 
 
 ## Part 4: create and connect a Telegram bot
 
-Treat the bot token like a password. Enter it only into FP Grid Monitor. Do not paste it into an issue, Git commit, screenshot, chat message or diagnostic report.
+Treat the bot token like a password. Enter it only into Flockle Grid Outage Monitor. Do not paste it into an issue, Git commit, screenshot, chat message or diagnostic report.
 
-1. In FP Grid Monitor, open **Settings → Alert channels → Configure Telegram**.
+1. In Flockle Grid Outage Monitor, open **Settings → Alert channels → Configure Telegram**.
 2. Tap **Open BotFather**. Confirm Telegram opens the official verified `@BotFather` account.
 3. Send `/newbot`.
 4. Follow BotFather's prompts:
    - Choose a display name, such as `Garage Grid Monitor`.
    - Choose a unique username ending in `bot`, such as `garage_grid_alert_bot`.
 5. Copy the token BotFather returns.
-6. Return to FP Grid Monitor, paste it into **Bot token**, then tap **Check bot token**.
+6. Return to Flockle Grid Outage Monitor, paste it into **Bot token**, then tap **Check bot token**.
 7. In Telegram, open the newly created bot and tap **Start**, or send `/start`. A bot cannot initiate a private chat until the user starts it.
-8. Return to FP Grid Monitor and tap **Find chats**.
+8. Return to Flockle Grid Outage Monitor and tap **Find chats**.
 9. Add the discovered chat. For several recipients, each person must first open the bot and send `/start`; then use **Find chats** again.
 10. Turn on **Enable Telegram alerts** and tap **Save configuration**.
 11. Tap **Send test message**. Confirm the clearly marked test reaches Telegram.
@@ -99,7 +99,7 @@ If a token is exposed, open BotFather and revoke it, then save the replacement t
 1. Open **Settings → Setup & testing → Setup checklist**.
 2. Resolve every unfinished Android check.
 3. Open **Recommended reliability review → Open reliability guidance**.
-4. Follow **Keep FP Grid Monitor Running**:
+4. Follow **Keep Flockle Grid Outage Monitor Running**:
    - allow notifications;
    - allow background activity;
    - set battery use to Unrestricted or the closest manufacturer equivalent;
@@ -125,11 +125,11 @@ Record the time and result for each test:
    - Lock the phone, wait five minutes, and repeat the unplug/reconnect test without opening the app.
    - Confirm both messages arrive once and have sensible local times and battery values.
 3. **App removed from Recents**
-   - Swipe the FP Grid Monitor screen away from Android Recents. Do not force-stop it in Android Settings.
+   - Swipe the Flockle Grid Outage Monitor screen away from Android Recents. Do not force-stop it in Android Settings.
    - Repeat the outage and restoration test.
 4. **Reboot recovery**
    - Reboot while monitoring is enabled.
-   - Do not manually open FP Grid Monitor after startup.
+   - Do not manually open Flockle Grid Outage Monitor after startup.
    - Confirm the ongoing notification returns. Unlocking once may be required by the phone or Android version.
    - Repeat the outage and restoration test.
 5. **Long idle**

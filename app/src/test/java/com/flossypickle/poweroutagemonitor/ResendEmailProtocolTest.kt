@@ -12,7 +12,7 @@ import org.junit.Test
 class ResendEmailProtocolTest {
     @Test fun `validates plain and named sender addresses`() {
         assertTrue(ResendEmailProtocol.isValidEmailAddress("alerts@example.com"))
-        assertTrue(ResendEmailProtocol.isValidSender("FP Grid Monitor <alerts@example.com>"))
+        assertTrue(ResendEmailProtocol.isValidSender("Flockle Grid Outage Monitor <alerts@example.com>"))
         assertFalse(ResendEmailProtocol.isValidSender("alerts at example.com"))
     }
 

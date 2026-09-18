@@ -330,7 +330,7 @@ private fun EcoFlowLocalSettingsContent(
         if (Build.VERSION.SDK_INT >= 37 && !localNetworkAllowed) {
             Text(
                 if (helpLevel.isGuided) {
-                    "Android 17 needs your permission before FP Grid Monitor can contact devices on your home network. This is used only for the EcoFlow address you enter."
+                    "Android 17 needs your permission before Flockle Grid Outage Monitor can contact devices on your home network. This is used only for the EcoFlow address you enter."
                 } else {
                     "ACCESS_LOCAL_NETWORK is required for the Modbus TCP socket on Android 17+."
                 },

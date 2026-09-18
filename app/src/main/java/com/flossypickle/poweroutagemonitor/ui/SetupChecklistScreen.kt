@@ -74,7 +74,7 @@ internal fun SetupChecklistScreen(
         )
         Text(
             if (guided) {
-                "Work down this list once. FP Grid Monitor checks each result and shows where to fix anything unfinished."
+                "Work down this list once. Flockle Grid Outage Monitor checks each result and shows where to fix anything unfinished."
             } else {
                 "Live readiness checks for monitoring, Android restrictions and alert delivery."
             },
@@ -191,9 +191,9 @@ internal fun SetupChecklistScreen(
                 Text("Recommended reliability review", fontWeight = FontWeight.SemiBold)
                 Text(
                     if (systemHealth.batteryOptimizationExcluded) {
-                        "✓ Android battery optimization is disabled for FP Grid Monitor."
+                        "✓ Android battery optimization is disabled for Flockle Grid Outage Monitor."
                     } else if (guided) {
-                        "Android battery optimization is still active. Open Diagnostics and follow Keep FP Grid Monitor Running. Phone makers may add their own battery controls too."
+                        "Android battery optimization is still active. Open Diagnostics and follow Keep Flockle Grid Outage Monitor Running. Phone makers may add their own battery controls too."
                     } else {
                         "Battery-optimization exemption is not granted. Review Diagnostics and OEM controls."
                     },
