@@ -63,7 +63,7 @@ internal fun TelegramRemoteSettingsContent(onOpenTelegram: () -> Unit) {
                 SettingSwitch("Long polling (recommended)", "Commands arrive promptly without a public server", longPolling) { longPolling = it }
                 if (!longPolling) OutlinedTextField(seconds, { seconds = it }, label = { Text("Check every 2–60 seconds") }, singleLine = true)
                 OutlinedTextField(quietMinutes, { quietMinutes = it }, label = { Text("Default quiet time · 1–1440 minutes") }, singleLine = true)
-                SettingSwitch("EcoFlow check warnings", "Alert once when a completed check cannot confirm grid state, and when checks recover", warnings) { warnings = it }
+                SettingSwitch("EcoFlow check warnings", "Routine failed-check warnings while the charger is powered. Notifications when the charger has no power are controlled in EcoFlow monitoring settings.", warnings) { warnings = it }
                 if (trusted.isEmpty()) TextButton(onClick = { step = 1 }) { Text("Choose a trusted chat") }
             }
             3 -> {

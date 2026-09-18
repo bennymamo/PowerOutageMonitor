@@ -22,7 +22,7 @@ Current implementation: device SMS is included in the direct-APK build because t
 
 A future Google Play artifact may omit SMS through a separate build variant if restricted-permission approval is unavailable. This is a packaging concern; the provider remains isolated from outage detection and other alert adapters.
 
-## Email — Gmail default, Resend advanced
+## Email: Gmail default, Resend advanced
 
 There is no dependable public outgoing-mail service that permits unattended sending without authentication; that would operate as an open relay. A private SMTP relay can deliberately trust a device or network without a username, but it has to be operated and secured by the user and is unsuitable as the default phone setup.
 

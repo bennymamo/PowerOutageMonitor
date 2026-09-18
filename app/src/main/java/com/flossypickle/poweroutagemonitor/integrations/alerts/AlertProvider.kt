@@ -14,6 +14,7 @@ internal enum class AlertKind {
     BATTERY_LOW,
     SOURCE_UNAVAILABLE,
     SOURCE_RESTORED,
+    CHARGER_RESTORED,
     SOURCE_DATA_WARNING,
     HEARTBEAT,
     TEST

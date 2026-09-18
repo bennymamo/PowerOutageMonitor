@@ -54,7 +54,7 @@ internal fun PowerSourceCheckDetails(check: PowerSourceCheck, title: String) {
         PowerSourceCheck.DataHealth.UNCHANGED -> "Values unchanged so far"
         PowerSourceCheck.DataHealth.NO_UPDATES -> "No device updates received"
     }
-    ExpandableSettingsSection(title, "Grid ${grid?.value ?: "—"} · Meter 1 ${meter?.value ?: "—"} · $health") {
+    ExpandableSettingsSection(title, "Grid ${grid?.value ?: "?"} · Meter 1 ${meter?.value ?: "?"} · $health") {
         SettingText("Last device update", check.liveReportAtEpochMs?.let(::checkReceiptTime) ?: "Not received")
         SettingText("Updates this check", "${check.deviceUpdates} total · ${check.powerUpdates} power reports")
         SettingText("Data health", health)

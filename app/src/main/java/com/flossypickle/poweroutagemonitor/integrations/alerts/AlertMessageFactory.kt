@@ -15,7 +15,7 @@ internal object AlertMessageFactory {
             kind = AlertKind.TEST,
             title = "TEST · POWER OUTAGE DETECTED",
             body = buildString {
-                appendLine("SIMULATION — no real outage was detected.")
+                appendLine("SIMULATION: no real outage was detected.")
                 appendLine()
                 appendLine("Device: ${settings.deviceName}")
                 appendLine("Simulated power loss: ${formatTime(simulatedAtEpochMs)}")
@@ -33,7 +33,7 @@ internal object AlertMessageFactory {
         kind = AlertKind.TEST,
         title = "TEST · POWER RESTORED",
         body = buildString {
-            appendLine("SIMULATION — no real restoration was detected.")
+            appendLine("SIMULATION: no real restoration was detected.")
             appendLine()
             appendLine("Device: ${settings.deviceName}")
             appendLine("Simulated restoration: ${formatTime(simulatedRestoredAtEpochMs)}")
@@ -51,7 +51,7 @@ internal object AlertMessageFactory {
         kind = AlertKind.TEST,
         title = "TEST · MONITOR BATTERY LOW",
         body = buildString {
-            appendLine("SIMULATION — the real device battery is unchanged.")
+            appendLine("SIMULATION: the real device battery is unchanged.")
             appendLine()
             appendLine("Device: ${settings.deviceName}")
             appendLine("Simulated power loss: ${formatTime(simulatedLostAtEpochMs)}")

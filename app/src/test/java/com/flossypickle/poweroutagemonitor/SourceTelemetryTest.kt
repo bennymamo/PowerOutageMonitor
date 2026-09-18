@@ -26,7 +26,7 @@ class SourceTelemetryTest {
             "pcsAPhase.vol" to 230, "pcsAPhase" to mapOf("vol" to 0)
         ))
         assertEquals(1, result.values.size)
-        assertEquals("Conflicting values — unavailable", result.values["pcsAPhase.vol"])
+        assertEquals("Conflicting values: unavailable", result.values["pcsAPhase.vol"])
     }
 
     @Test fun `private fields and embedded credentials are excluded`() {

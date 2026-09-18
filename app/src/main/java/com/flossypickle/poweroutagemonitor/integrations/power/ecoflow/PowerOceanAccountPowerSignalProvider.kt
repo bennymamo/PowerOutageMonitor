@@ -37,10 +37,28 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         scope = owner
         worker = owner.launch {
             var latest: PowerSignal? = null
+            var lastVerified: PowerSignal? = null
+            var lastConfirmedOnlineAt: Long? = null
+            var savedRefreshSeconds: Int? = 60
             fun emit(availability: GridAvailability, detail: String, pending: Boolean = false, evidenceAt: Long? = null,
                 dataStalled: Boolean? = null, check: PowerSourceCheck? = null) {
                 if (isActive) {
-                    val signal = PowerSignal(availability, System.currentTimeMillis(), id, detail, pending, evidenceAt, dataStalled, check)
+                    val now = System.currentTimeMillis()
+                    if (check?.active == true && check.gridEvidenceAvailable && evidenceAt != null && availability != GridAvailability.UNKNOWN) {
+                        lastVerified = PowerSignal(availability, now, id, detail, pending, evidenceAt, dataStalled, check)
+                        lastConfirmedOnlineAt = evidenceAt.takeIf { availability == GridAvailability.AVAILABLE && !pending }
+                    }
+                    val samplingSettings = PowerSourceStore(appContext).powerOceanAssistedSettings()
+                    val carried = if (availability == GridAvailability.UNKNOWN)
+                        PowerOceanCheckContinuity.availability(lastVerified, check, now,
+                            samplingSettings.checkWindowSeconds * 1000L,
+                            if (samplingSettings.enabled) (if (incident()) samplingSettings.outageSeconds else samplingSettings.normalSeconds).takeIf { seconds -> seconds > 0 }
+                            else savedRefreshSeconds)
+                    else GridAvailability.UNKNOWN
+                    val signal = PowerSignal(if (carried != GridAvailability.UNKNOWN) carried else availability, now, id, detail,
+                        if (carried != GridAvailability.UNKNOWN) lastVerified!!.recoveryPending else pending,
+                        if (carried != GridAvailability.UNKNOWN) lastVerified!!.evidenceReceivedAtEpochMs else evidenceAt, dataStalled,
+                        check?.copy(lastConfirmedOnlineAtEpochMs = lastConfirmedOnlineAt))
                     latest = signal; onSignal(signal)
                 }
             }
@@ -57,10 +75,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
             var lastFailure: String? = null
             // Account editing requires switching away from this source; avoid decrypting secrets every idle tick.
             var savedAccount = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
+            savedRefreshSeconds = savedAccount?.refreshSeconds?.coerceAtLeast(60)
             var nextAccountRetry = 0L
             while (isActive) {
                 if (savedAccount == null && android.os.SystemClock.elapsedRealtime() >= nextAccountRetry) {
                     savedAccount = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
+                    savedRefreshSeconds = savedAccount?.refreshSeconds?.coerceAtLeast(60)
                     nextAccountRetry = android.os.SystemClock.elapsedRealtime() + 10_000
                     // Credential-protected storage becomes available after the first unlock.
                     if (savedAccount != null) manualRevision.incrementAndGet()
@@ -84,12 +104,14 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     val last = latest
                     val check = last?.check?.copy(cycleState = when { schedule.paused -> PowerSourceCheck.CycleState.PAUSED; lastFailure != null -> PowerSourceCheck.CycleState.FAILED; else -> PowerSourceCheck.CycleState.WAITING },
                         nextCheckAtEpochMs = next)
-                    val recent = last?.check?.liveReportAtEpochMs?.let { now - it in 0..90_000 } == true
-                    val availability = if (recent && !schedule.paused && lastFailure == null) last?.availability ?: GridAvailability.UNKNOWN else GridAvailability.UNKNOWN
+                    val availability = if (!schedule.paused && lastFailure == null)
+                        PowerOceanCheckContinuity.availability(lastVerified, check, now, assisted.checkWindowSeconds * 1000L, seconds.takeIf { it > 0 })
+                    else GridAvailability.UNKNOWN
                     val detail = lastFailure ?: when {
                         schedule.paused -> "EcoFlow paused. Connection closed; charger watching continues."
                         check == null -> "EcoFlow connection closed. Waiting for a scheduled or manual check."
-                        else -> "EcoFlow connection closed between checks. " + if (recent) "Last readings remain recent." else "Last check is saved; charger watching continues."
+                        else -> "EcoFlow connection closed between checks. " +
+                            if (availability != GridAvailability.UNKNOWN) "Last confirmed grid state retained until the next check." else "Last check is saved; charger watching continues."
                     }
                     // Reassess existing evidence without receiving or making any network request.
                     emit(availability, detail, last?.recoveryPending ?: false, last?.evidenceReceivedAtEpochMs,
@@ -212,11 +234,17 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 val now = System.currentTimeMillis()
                 val next = sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
                 val completed = latest
-                emit(if (lastFailure == null) completed?.availability ?: GridAvailability.UNKNOWN else GridAvailability.UNKNOWN,
+                if (lastFailure != null || completed?.check?.gridEvidenceAvailable != true) {
+                    lastConfirmedOnlineAt = null; lastVerified = null
+                }
+                val completedCheck = completed?.check?.copy(
+                    cycleState = if (lastFailure == null) PowerSourceCheck.CycleState.WAITING else PowerSourceCheck.CycleState.FAILED,
+                    finishedAtEpochMs = now, nextCheckAtEpochMs = next)
+                lastVerified = lastVerified?.copy(check = completedCheck)
+                emit(if (lastFailure == null && completed?.check?.gridEvidenceAvailable == true) completed.availability else GridAvailability.UNKNOWN,
                     lastFailure ?: "EcoFlow check complete. Connection closed.", completed?.recoveryPending ?: false,
                     completed?.evidenceReceivedAtEpochMs, completed?.dataPossiblyStalled,
-                    completed?.check?.copy(cycleState = if (lastFailure == null) PowerSourceCheck.CycleState.WAITING else PowerSourceCheck.CycleState.FAILED,
-                        finishedAtEpochMs = now, nextCheckAtEpochMs = next))
+                    completedCheck)
                 delay(1000)
             }
         }

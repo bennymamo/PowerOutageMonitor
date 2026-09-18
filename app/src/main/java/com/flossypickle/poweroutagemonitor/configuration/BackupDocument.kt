@@ -347,6 +347,8 @@ internal object BackupDocumentCodec {
         p["power.account.extraUpdates"] = data.powerOceanAssisted.extraPowerUpdates.toString()
         p["power.account.warnUnchanged"] = data.powerOceanAssisted.warnOnUnchanged.toString()
         p["power.account.ignoreUnchanged"] = data.powerOceanAssisted.ignoreUnchanged.toString()
+        p["power.account.notifyUnknown"] = data.powerOceanAssisted.notifyOnUnknown.toString()
+        p["power.account.notifyChargerReturn"] = data.powerOceanAssisted.notifyOnChargerReturn.toString()
         data.powerOceanAccount?.let {
             p["power.account.email"] = it.email
             p["power.account.password"] = it.password
@@ -395,7 +397,9 @@ internal object BackupDocumentCodec {
                 !p.containsKey("power.account.warnUnchanged") || p.boolean("power.account.warnUnchanged"),
                 p.containsKey("power.account.ignoreUnchanged") && p.boolean("power.account.ignoreUnchanged"),
                 if (p.containsKey("power.account.windowSeconds")) p.int("power.account.windowSeconds") else 120,
-                if (p.containsKey("power.account.extraUpdates")) p.int("power.account.extraUpdates") else 2)
+                if (p.containsKey("power.account.extraUpdates")) p.int("power.account.extraUpdates") else 2,
+                !p.containsKey("power.account.notifyUnknown") || p.boolean("power.account.notifyUnknown"),
+                !p.containsKey("power.account.notifyChargerReturn") || p.boolean("power.account.notifyChargerReturn"))
         )
     }
 

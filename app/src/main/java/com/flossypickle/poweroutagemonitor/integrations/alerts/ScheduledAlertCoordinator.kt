@@ -20,7 +20,11 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
         selectedSource: PowerSourceStore.Source,
         nowEpochMs: Long
     ) {
-        val settings = store.settings()
+        val assistance = PowerSourceStore(context).powerOceanAssistedSettings()
+        val chargerAssisted = selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && assistance.enabled
+        val configured = store.settings()
+        val settings = configured.copy(sourceUnavailableEnabled = configured.sourceUnavailableEnabled &&
+            !(chargerAssisted && snapshot.externallyPowered == false && !assistance.notifyOnUnknown))
         val canNotify = EnabledAlertProvidersStore(context).hasAny()
         val result = ScheduledAlertPolicy.update(
             before = store.state(),
@@ -42,7 +46,8 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
                     snapshot = snapshot,
                     selectedSource = selectedSource,
                     sourceReadable = gridPowered != null,
-                    nowEpochMs = nowEpochMs
+                    nowEpochMs = nowEpochMs,
+                    chargerAssisted = chargerAssisted
                 )
             )
         }

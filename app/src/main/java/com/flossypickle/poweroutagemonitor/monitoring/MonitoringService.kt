@@ -50,6 +50,7 @@ internal class MonitoringService : Service() {
     private var sourceGeneration = 0
     private var latestPrimarySignal: PowerSignal? = null
     private var latestBatterySnapshot: PowerSnapshot? = null
+    private var lastBroadcastPowered: Boolean? = null
     private var ecoFlowCpuLock: PowerManager.WakeLock? = null
     private var ecoFlowWifiLock: WifiManager.WifiLock? = null
     private var lastEcoFlowAvailability: GridAvailability? = null
@@ -259,10 +260,23 @@ internal class MonitoringService : Service() {
     }
 
     private fun onBatterySnapshot(snapshot: PowerSnapshot) {
+        val previouslyPowered = lastBroadcastPowered
+        lastBroadcastPowered = snapshot.externallyPowered
         latestBatterySnapshot = snapshot
         if (!MonitorStore(this).settings().monitoringEnabled) return
         (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.updateCharger(snapshot.externallyPowered)
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
+            val sources = PowerSourceStore(this)
+            val now = System.currentTimeMillis()
+            if (com.flossypickle.poweroutagemonitor.integrations.power.ChargerReconnectPolicy.shouldNotify(
+                    previouslyPowered, snapshot.externallyPowered, latestPrimarySignal, sources.assistedChargerLossStartedAt(),
+                    MonitorStore(this).state().phase, now, sources.powerOceanAssistedSettings().notifyOnChargerReturn)) {
+                val alerts = com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator(this)
+                if (alerts.persistForEnabledProviders(com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage(
+                        "charger-return-$now", com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind.CHARGER_RESTORED,
+                        "Charger power is back online", "${MonitorStore(this).settings().deviceName}: charger power is back online. Grid status remains online.")))
+                    alerts.materializePending()
+            }
             processEcoFlow(latestPrimarySignal ?: PowerSignal(GridAvailability.UNKNOWN, System.currentTimeMillis(), PowerSourceStore.POWEROCEAN_PROVIDER_ID))
             return
         }
@@ -330,7 +344,8 @@ internal class MonitoringService : Service() {
         val sourceStore = PowerSourceStore(this)
         val assisted = sourceStore.powerOceanAssistedSettings()
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
-            com.flossypickle.poweroutagemonitor.integrations.alerts.SourceCheckWarningCoordinator(this).process(primary.check)
+            com.flossypickle.poweroutagemonitor.integrations.alerts.SourceCheckWarningCoordinator(this)
+                .process(primary.check, currentBatterySnapshot().externallyPowered)
             com.flossypickle.poweroutagemonitor.integrations.alerts.SourceDataWarningCoordinator(this)
                 .process(primary.dataPossiblyStalled, assisted.warnOnUnchanged)
         }

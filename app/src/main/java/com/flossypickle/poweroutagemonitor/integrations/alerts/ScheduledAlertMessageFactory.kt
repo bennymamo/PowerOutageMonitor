@@ -15,30 +15,33 @@ internal object ScheduledAlertMessageFactory {
         snapshot: PowerSnapshot,
         selectedSource: PowerSourceStore.Source,
         sourceReadable: Boolean,
-        nowEpochMs: Long
+        nowEpochMs: Long,
+        chargerAssisted: Boolean = false
     ): AlertMessage = when (notice) {
         is ScheduledAlertPolicy.Notice.SourceUnavailable -> AlertMessage(
             eventId = "source-unavailable-${notice.sinceEpochMs}",
             kind = AlertKind.SOURCE_UNAVAILABLE,
-            title = "POWER SOURCE UNAVAILABLE",
+            title = "GRID STATUS UNKNOWN",
             body = buildString {
                 appendLine("Device: ${monitorSettings.deviceName}")
-                appendLine("Source: ${sourceName(selectedSource)}")
-                appendLine("Unavailable since: ${formatTime(notice.sinceEpochMs)}")
+                appendLine("Source: ${if (chargerAssisted) "Charger with EcoFlow assistance" else sourceName(selectedSource)}")
+                appendLine("Grid status unknown since: ${formatTime(notice.sinceEpochMs)}")
                 appendLine("Checked: ${formatTime(nowEpochMs)}")
                 snapshot.batteryPercent?.let { appendLine("Monitor battery: $it%") }
-                append("The app cannot currently determine grid state. This is not an outage confirmation.")
+                append("The app cannot currently determine grid state. Please confirm manually. No grid outage has been confirmed by this warning.")
             }
         )
         is ScheduledAlertPolicy.Notice.SourceAvailableAgain -> AlertMessage(
             eventId = "source-unavailable-${notice.sinceEpochMs}",
             kind = AlertKind.SOURCE_RESTORED,
-            title = "POWER SOURCE AVAILABLE AGAIN",
+            title = "GRID STATUS READABLE AGAIN",
             body = buildString {
                 appendLine("Device: ${monitorSettings.deviceName}")
-                appendLine("Source: ${sourceName(selectedSource)}")
+                appendLine("Source: ${if (chargerAssisted) "Charger with EcoFlow assistance" else sourceName(selectedSource)}")
                 appendLine("Reading restored: ${formatTime(nowEpochMs)}")
-                appendLine("Unavailable for: ${AlertMessageFactory.formatDuration(nowEpochMs - notice.sinceEpochMs)}")
+                appendLine("Grid status was unknown for: ${AlertMessageFactory.formatDuration(nowEpochMs - notice.sinceEpochMs)}")
+                if (chargerAssisted && snapshot.externallyPowered == true)
+                    appendLine("Charger power is available. This message does not confirm the EcoFlow connection recovered.")
                 append("Grid status: ${gridStatus(monitorState, sourceReadable)}")
             }
         )

@@ -97,7 +97,8 @@ internal class PowerSourceStore(context: Context) {
         preferences.getBoolean("account_charger_first", false), preferences.getInt("account_normal_seconds", 3600),
         preferences.getInt("account_outage_seconds", 60), preferences.getBoolean("account_warn_unchanged", true),
         preferences.getBoolean("account_ignore_unchanged", false),
-        preferences.getInt("account_window_seconds", 120), preferences.getInt("account_extra_updates", 2))
+        preferences.getInt("account_window_seconds", 120), preferences.getInt("account_extra_updates", 2),
+        preferences.getBoolean("account_notify_unknown", true), preferences.getBoolean("account_notify_charger_return", true))
 
     fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
         val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
@@ -105,6 +106,8 @@ internal class PowerSourceStore(context: Context) {
             .putInt("account_normal_seconds", settings.normalSeconds).putInt("account_outage_seconds", settings.outageSeconds)
             .putInt("account_window_seconds", settings.checkWindowSeconds).putInt("account_extra_updates", settings.extraPowerUpdates)
             .putBoolean("account_warn_unchanged", settings.warnOnUnchanged).putBoolean("account_ignore_unchanged", settings.ignoreUnchanged)
+            .putBoolean("account_notify_unknown", settings.notifyOnUnknown)
+            .putBoolean("account_notify_charger_return", settings.notifyOnChargerReturn)
         if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
         check(edit.commit()) { "Unable to save charger-first settings" }
     }

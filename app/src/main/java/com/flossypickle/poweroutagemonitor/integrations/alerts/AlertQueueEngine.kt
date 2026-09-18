@@ -136,6 +136,6 @@ internal object AlertQueueEngine {
         AlertKind.RESTORED -> 2
         AlertKind.SOURCE_UNAVAILABLE, AlertKind.SOURCE_DATA_WARNING -> 0
         AlertKind.SOURCE_RESTORED -> 1
-        AlertKind.HEARTBEAT, AlertKind.TEST -> 0
+        AlertKind.HEARTBEAT, AlertKind.TEST, AlertKind.CHARGER_RESTORED -> 0
     }
 }

@@ -67,7 +67,7 @@ Tap dashboard source, alert-channel or diagnostic rows to open their settings. *
 Every enabled channel receives each alert independently. Save its configuration, send a test to every intended recipient, then enable it. Internet messages can wait in the delivery queue while connectivity is unavailable; Diagnostics shows delivery results and retry controls.
 
 <details>
-<summary><strong>Telegram — a bot you control</strong></summary>
+<summary><strong>Telegram: a bot you control</strong></summary>
 
 1. Open **Alert channels → Configure Telegram**. The guided steps link to BotFather.
 2. In Telegram, message the official `@BotFather` with `/newbot`. Follow the naming prompts and paste its token into **Bot token**.
@@ -81,7 +81,7 @@ The bot token is a password. Never share it in screenshots or bug reports.
 </details>
 
 <details>
-<summary><strong>Gmail — default email option, no domain needed</strong></summary>
+<summary><strong>Gmail: default email option, no domain needed</strong></summary>
 
 1. Open **Alert channels → Configure email → Gmail**.
 2. Use the in-app links to turn on Google **2-Step Verification** and open **Google App Passwords**.
@@ -94,7 +94,7 @@ Some accounts do not offer App Passwords. See [Google's App Password help](https
 </details>
 
 <details>
-<summary><strong>Device SMS — an alternative when internet fails</strong></summary>
+<summary><strong>Device SMS: an alternative when internet fails</strong></summary>
 
 Open **Alert channels → Configure device SMS**, allow SMS sending and enter recipients with country codes, one per line. Save, send a test and confirm receipt before enabling SMS.
 
@@ -103,7 +103,7 @@ The device needs SMS-capable telephony, an active SIM and mobile signal. Carrier
 </details>
 
 <details>
-<summary><strong>Resend — advanced email with your own verified domain</strong></summary>
+<summary><strong>Resend: advanced email with your own verified domain</strong></summary>
 
 Choose **Resend** from **Configure email** and follow the steps to verify a sending domain, enter your API key, sender and recipients, and send a test. Enable only after testing. Resend is mainly for people who already control a domain; Gmail or Telegram is usually simpler.
 
@@ -176,6 +176,12 @@ Background account monitoring currently requires the tested **Single Phase** pro
 With automatic charger-first assistance enabled, unplugging triggers an immediate EcoFlow check before outage confirmation. Current grid-connected evidence cancels the suspected outage. If the check fails or ends without usable evidence, ordinary charger confirmation takes over. A stalled check cannot hold detection indefinitely: the limit is the configured listening time plus up to one minute for connection setup. Paused assistance or manual-only outage checks use the charger directly.
 
 In charger-first mode, charger loss can alert independently if EcoFlow is unreachable. Verified EcoFlow loss can also trigger an outage when a backed-up charger stays on. A powered charger cannot veto an EcoFlow-detected outage. Grid return can be recognized from validated changing meter activity while the inverter reconnects, even if the charger remains off.
+
+**Notify when grid status is unknown** is on by default in the EcoFlow monitoring settings. If the charger has no power and a completed EcoFlow check fails or cannot verify the grid, enabled alert channels receive a warning asking you to confirm manually. It does not claim EcoFlow confirmed an outage. Repeated failures are grouped into one warning until a check provides valid grid evidence again. You can turn this warning off without disabling confirmed outage alerts. Telegram quiet time still applies. This choice is included in power-source backups.
+
+The last verified grid state remains valid for the currently active check interval plus one minute, measured from the trustworthy device report. The active interval follows the normal or outage schedule. Its original receipt time is retained. A check that runs beyond its configured listening limit and connection allowance cannot keep old evidence valid. Closing the connection deliberately does not create a source-failure warning. A failed, inconclusive or overdue check changes the state to Unknown. A new charger disconnection needs evidence received after that disconnection before EcoFlow can cancel the suspected outage.
+
+**Notify when charger power returns** sends a charger update if EcoFlow already confirmed the grid was online. It does not generate a grid outage or grid restoration. You can switch it off in the same settings; this choice is also backed up.
 
 **How scheduled checks work:**
 

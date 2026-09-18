@@ -38,27 +38,33 @@ class PowerMonitorAppUiTest {
         override fun getFilesDir(): File = File(super.getFilesDir(), "ui_qa").apply { mkdirs() }
     }
 
-    private fun launch(assisted: Boolean = false, dark: Boolean = true) {
+    private fun launch(assisted: Boolean = false, dark: Boolean = true, checking: Boolean = false, failed: Boolean = false) {
         qaContext.getSharedPreferences("power_sources", 0).edit().clear().commit()
         if (assisted) PowerSourceStore(qaContext).setPowerOceanAssistedSettings(PowerOceanAssistedSettings(enabled = true))
         val now = System.currentTimeMillis()
-        val settings = MonitorStore.Settings(true, false, 30_000, 30_000, true, "Sample grid monitor")
-        val check = PowerSourceCheck(now - 120_000, now - 60_000, true,
+        val settings = MonitorStore.Settings(true, checking || failed, 30_000, 30_000, true, "Sample grid monitor")
+        val baseCheck = PowerSourceCheck(now - 120_000, now - 60_000, true,
             observations = listOf(SourceReportedValue("Reported grid code", "0", "Connected in the tested profile.", now - 60_000, true),
                 SourceReportedValue("Meter 1 reading", "12.5", "Reported meter activity; zero alone is not an outage.", now - 60_000, true)),
             cycleState = PowerSourceCheck.CycleState.WAITING, finishedAtEpochMs = now - 59_000,
             nextCheckAtEpochMs = now + 3_480_000, deviceUpdates = 5, powerUpdates = 3, valuesChanged = true)
+        val check = if (checking || failed) baseCheck.copy(requestedAtEpochMs = now, liveReportAtEpochMs = null,
+            gridEvidenceAvailable = false, finishedAtEpochMs = if (failed) now else null,
+            cycleState = if (failed) PowerSourceCheck.CycleState.FAILED else PowerSourceCheck.CycleState.COLLECTING,
+            lastConfirmedOnlineAtEpochMs = now - 60_000) else baseCheck
         compose.setContent {
             CompositionLocalProvider(LocalContext provides qaContext) {
                 PowerOutageMonitorTheme(darkTheme = dark) {
-                    PowerMonitorApp(snapshot = PowerSnapshot(2, 88, 2, 250), monitorState = OutageEngine.State(), settings = settings,
+                    PowerMonitorApp(snapshot = PowerSnapshot(if (checking || failed) 0 else 2, 88, 2, 250),
+                        monitorState = if (checking || failed) OutageEngine.State(OutageEngine.Phase.POWERED) else OutageEngine.State(), settings = settings,
                         history = listOf(EventHistoryStore.Record("outage", now - 600_000, now - 570_000, now - 480_000, 90, 89, 240, 250)),
                         operationalHistory = listOf(OperationalHistoryStore.Record(OperationalHistoryStore.KIND_MONITORING_RECOVERED, now - 300_000, "Sample interruption detail")),
                         audibleSettings = AudibleAlarmStore.Settings(), audibleAlarmActive = false, exactAlarmAccessGranted = false,
                         lastObservationEpochMs = now, deliveryWarning = null, alertChannels = "Not configured", hasEnabledAlertChannel = false,
                         hasSentTestAlert = false, systemHealth = SystemHealthSnapshot(internetAvailable = true),
                         selectedPowerSource = if (assisted) PowerSourceStore.Source.ECOFLOW_ACCOUNT else PowerSourceStore.Source.ANDROID_CHARGER,
-                        powerSourceStatus = if (assisted) PowerSourceStore.Status(PowerSourceStore.Source.ECOFLOW_ACCOUNT, GridAvailability.AVAILABLE, now,
+                        powerSourceStatus = if (assisted) PowerSourceStore.Status(PowerSourceStore.Source.ECOFLOW_ACCOUNT,
+                            if (failed) GridAvailability.UNKNOWN else GridAvailability.AVAILABLE, now,
                             "Sample grid reading", check = check) else null,
                         scheduledAlertSettings = ScheduledAlertStore.Settings(), scheduledAlertState = ScheduledAlertStore.State(), deliverySummaries = emptyMap(),
                         onMonitoringEnabledChange = {}, onSettingsChange = { _, _, _, _ -> }, onCompleteSetup = { _, _, _, _ -> },
@@ -174,5 +180,16 @@ class PowerMonitorAppUiTest {
         click("EcoFlow readings"); compose.onNodeWithText("5 total · 3 power reports").assertExists()
         compose.onNodeWithText("Power values changing").assertExists(); capture("ecoflow-expanded-light")
         click("How to read this check"); capture("check-explanation-light")
+    }
+    @Test fun checkingKeepsOnlineWithOriginalConfirmationTimeWhileChargerIsOff() {
+        launch(assisted = true, checking = true)
+        compose.onNodeWithText("GRID POWER ONLINE").assertExists()
+        compose.onNode(hasText("Checking EcoFlow now.", substring = true)).assertExists()
+        capture("checking-last-confirmed-online")
+    }
+    @Test fun failedCheckShowsUnknownEvenIfGridWasPreviouslyOnline() {
+        launch(assisted = true, failed = true)
+        compose.onNodeWithText("GRID STATE UNKNOWN").assertExists()
+        capture("failed-check-unknown")
     }
 }

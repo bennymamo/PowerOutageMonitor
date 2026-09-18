@@ -18,7 +18,7 @@ internal class TelegramRemoteActions(private val context: Context) {
         val monitor = MonitorStore(context); val source = PowerSourceStore(context); val remote = TelegramRemoteStore(context)
         val result = when (command.name) {
             "status" -> status()
-            "help" -> TelegramRemotePolicy.commands.joinToString("\n") { "/${it.first} — ${it.second}" } +
+            "help" -> TelegramRemotePolicy.commands.joinToString("\n") { "/${it.first}: ${it.second}" } +
                 "\nQuiet affects automatic Telegram alerts only. Remote control stays on when monitoring is off."
             "stop_sound" -> { AudibleAlarmCoordinator(context).dismissCurrent(); MonitoringService.refreshNotification(context)
                 "Current audible alarm acknowledged and stopped. A new outage can sound again." }
@@ -80,7 +80,7 @@ internal class TelegramRemoteActions(private val context: Context) {
         return buildString {
             appendLine(settings.deviceName)
             appendLine("Monitoring ${if (settings.monitoringEnabled) "active" else "inactive"}")
-            appendLine("Grid: ${if (!settings.monitoringEnabled) "not being monitored" else if (source.selectedSource() != PowerSourceStore.Source.ANDROID_CHARGER && last?.availability == com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability.UNKNOWN) "unknown — no current evidence" else monitor.state().phase.name.lowercase().replace('_', ' ')}")
+            appendLine("Grid: ${if (!settings.monitoringEnabled) "not being monitored" else if (source.selectedSource() != PowerSourceStore.Source.ANDROID_CHARGER && last?.availability == com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability.UNKNOWN) "unknown: no current evidence" else monitor.state().phase.name.lowercase().replace('_', ' ')}")
             appendLine("Charger: ${when(snapshot?.externallyPowered){true -> "powered";false -> "no power";else -> "unknown"}} · Battery ${snapshot?.batteryPercent ?: "?"}%")
             appendLine("Source: ${source.selectedSource().name.lowercase().replace('_', ' ')}")
             if (source.selectedSource() == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
@@ -92,7 +92,7 @@ internal class TelegramRemoteActions(private val context: Context) {
                 appendLine("Next check: ${when { !settings.monitoringEnabled -> "monitoring inactive"; source.powerOceanAssistancePaused() -> "paused"; check?.active == true -> "after this check"; else -> time(check?.nextCheckAtEpochMs) }}")
                 appendLine("${last?.detail.orEmpty()}")
             }
-            appendLine("Sound: ${if(AudibleAlarmCoordinator(context).isActive(monitor.state(), snapshot)) "playing — /stop_sound" else "not playing"}")
+            appendLine("Sound: ${if(AudibleAlarmCoordinator(context).isActive(monitor.state(), snapshot)) "playing: /stop_sound" else "not playing"}")
             val remote = TelegramRemoteStore(context)
             append("Telegram alerts: ${if(remote.isQuiet()) "quiet until ${time(remote.settings().quietUntilEpochMs)}" else "normal"}")
         }

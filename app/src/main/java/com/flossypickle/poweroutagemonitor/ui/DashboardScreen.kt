@@ -125,9 +125,13 @@ internal fun DashboardScreen(
         it.source == selectedPowerSource &&
             System.currentTimeMillis() - it.observedAtEpochMs in 0..SOURCE_FRESH_MS
     }
-    val lastGridReadingEpochMs = if (selectedPowerSource != PowerSourceStore.Source.ANDROID_CHARGER) {
-        powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
-    } else lastObservationEpochMs
+    val lastGridReadingEpochMs = when (selectedPowerSource) {
+        PowerSourceStore.Source.ECOFLOW_ACCOUNT -> powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.check?.let {
+            it.liveReportAtEpochMs ?: it.lastConfirmedOnlineAtEpochMs
+        } ?: 0L
+        PowerSourceStore.Source.ECOFLOW_MODBUS -> powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
+        PowerSourceStore.Source.ANDROID_CHARGER -> lastObservationEpochMs
+    }
     val effectivePowered = if (assistedActive && snapshot?.externallyPowered == true) true else when (selectedPowerSource) {
         PowerSourceStore.Source.ANDROID_CHARGER -> snapshot?.externallyPowered
         PowerSourceStore.Source.ECOFLOW_MODBUS, PowerSourceStore.Source.ECOFLOW_ACCOUNT -> when (sourceReading?.availability) {
@@ -136,6 +140,9 @@ internal fun DashboardScreen(
             GridAvailability.UNKNOWN, null -> null
         }
     }
+    val keepLastOnline = effectivePowered == true && selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
+        sourceReading?.check?.active == true && !sourceReading.check.gridEvidenceAvailable &&
+        sourceReading.check.lastConfirmedOnlineAtEpochMs != null && monitorState.phase == OutageEngine.Phase.POWERED
     val baseStatus = gridStatus(
         powered = effectivePowered,
         phase = monitorState.phase,
@@ -143,7 +150,10 @@ internal fun DashboardScreen(
         recentlyRestored = recentlyRestored,
         outageDelayMs = settings.outageDelayMs
     )
-    val status = if (settings.monitoringEnabled && effectivePowered == true && sourceReading?.recoveryPending == true) {
+    val status = if (settings.monitoringEnabled && keepLastOnline) {
+        val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sourceReading!!.check!!.lastConfirmedOnlineAtEpochMs!!))
+        baseStatus.copy(description = "Last confirmed online at $time. Checking EcoFlow now.")
+    } else if (settings.monitoringEnabled && effectivePowered == true && sourceReading?.recoveryPending == true) {
         baseStatus.copy(title = "Grid appears back", description = "Meter activity has resumed. Waiting for EcoFlow to reconnect to the grid.", tone = GridTone.CAUTION)
     } else baseStatus
     val statusColor = when (status.tone) {
@@ -351,7 +361,7 @@ internal fun DashboardScreen(
                     )
                     if (lastGridReadingEpochMs > 0) {
                         StatusRow(
-                            "Last grid reading",
+                            if (selectedPowerSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) "Last EcoFlow reading received" else "Last grid reading",
                             DateFormat.getTimeInstance(DateFormat.SHORT)
                                 .format(Date(lastGridReadingEpochMs)),
                             colors.onSurfaceVariant

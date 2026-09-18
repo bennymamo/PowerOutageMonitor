@@ -4,7 +4,8 @@ package com.flossypickle.poweroutagemonitor.integrations.power.ecoflow
 internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
     val normalSeconds: Int = 3600, val outageSeconds: Int = 60,
     val warnOnUnchanged: Boolean = true, val ignoreUnchanged: Boolean = false,
-    val checkWindowSeconds: Int = 120, val extraPowerUpdates: Int = 2) {
+    val checkWindowSeconds: Int = 120, val extraPowerUpdates: Int = 2,
+    val notifyOnUnknown: Boolean = true, val notifyOnChargerReturn: Boolean = true) {
     init { require(valid(normalSeconds) && valid(outageSeconds)); require(checkWindowSeconds in 30..300 && extraPowerUpdates in 1..10) }
     companion object { fun valid(seconds: Int) = seconds == 0 || seconds in 5..86_400 }
 }

@@ -62,7 +62,7 @@ internal object SourceTelemetryFlattener {
                     }
                     val existing = values[path]
                     values[path] = if (existing != null && existing != text) {
-                        "Conflicting values — unavailable"
+                        "Conflicting values: unavailable"
                     } else text
                 }
             }

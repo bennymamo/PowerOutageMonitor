@@ -20,6 +20,19 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class BackupDocumentCodecTest {
+    @Test fun unknownNotificationChoiceRoundTripsAndOlderBackupsDefaultToEnabled() {
+        val original = completeDocument()
+        val changed = original.copy(powerSources = original.powerSources!!.copy(
+            powerOceanAssisted = original.powerSources.powerOceanAssisted.copy(notifyOnUnknown = false, notifyOnChargerReturn = false)))
+        val text = BackupDocumentCodec.encode(changed).toString(Charsets.UTF_8)
+        assertEquals(changed, BackupDocumentCodec.decode(text.toByteArray()))
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.notifyUnknown=") || it.startsWith("power.account.notifyChargerReturn=") }.joinToString("\n")
+        assertEquals(true, BackupDocumentCodec.decode(old.toByteArray()).powerSources!!.powerOceanAssisted.notifyOnUnknown)
+        assertEquals(true, BackupDocumentCodec.decode(old.toByteArray()).powerSources!!.powerOceanAssisted.notifyOnChargerReturn)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("power.account.notifyUnknown=false", "power.account.notifyUnknown=invalid").toByteArray())
+        }
+    }
     @Test fun remoteChoicesRoundTripAndOldBackupsCannotEnableControl() {
         val original = completeDocument()
         val config = com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore.Settings(

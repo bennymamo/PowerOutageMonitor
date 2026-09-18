@@ -16,6 +16,12 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
             { onChange(settings.copy(enabled = it)) })
         if (settings.enabled) Text("A charger that loses grid power gives the earliest local alert. If backup power keeps it on, EcoFlow can still detect an outage at its next check. A powered charger cannot clear an EcoFlow-detected outage.", style = MaterialTheme.typography.bodySmall)
     }
+    SettingsCard {
+        SettingSwitch("Notify when grid status is unknown", "Send an alert if the charger has no power and an EcoFlow check fails or cannot verify the grid. Quiet time still applies. Confirmed outage alerts are unaffected.", settings.notifyOnUnknown,
+            { onChange(settings.copy(notifyOnUnknown = it)) })
+        SettingSwitch("Notify when charger power returns", "Send a charger update when EcoFlow already confirmed the grid was online. This does not report a grid restoration.", settings.notifyOnChargerReturn,
+            { onChange(settings.copy(notifyOnChargerReturn = it)) })
+    }
     ExpandableSettingsSection("Stuck-reading safeguards", "Warning after three identical checks") {
         Text("Power readings are compared between checks, ignoring request IDs and timestamps. A steady load can legitimately produce identical values. Changing power values clears the warning.", style = MaterialTheme.typography.bodySmall)
         SettingSwitch("Send stuck-reading warning", "Send one warning per episode through every enabled alert method. Dashboard warnings always remain visible.", settings.warnOnUnchanged,
@@ -45,6 +51,7 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
                 enabled = w != null && w in 30..300 && e != null && e in 1..10 && (w != settings.checkWindowSeconds || e != settings.extraPowerUpdates)) { Text("Save check limits") }
         }
         ExpandableSettingsSection("Connection & live data", "Closed between checks; saved login reused") {
+            Text("A verified grid reading remains valid for the current normal or outage interval plus one minute, measured from when the device report arrived. Failed or inconclusive checks become Unknown immediately. Manual-only readings expire after one minute.", style = MaterialTheme.typography.bodySmall)
             Text("Each check opens a secure connection, sends one reading request and activates temporary live reporting. Activation is renewed every 20 seconds only while that short check is collecting data. Default schedules are hourly normally and every minute during an outage. Manual-only leaves that phase disconnected until Check now. Very short intervals can leave little time between checks.", style = MaterialTheme.typography.bodySmall)
             Text("The saved login session and broker credentials are reused until access fails or account settings change. Closing the connection stops this app receiving updates; it does not control other EcoFlow apps. This is unofficial access and EcoFlow has not confirmed permitted quotas.", style = MaterialTheme.typography.bodySmall)
             Text("New changing device values support an unchanged grid code. Missing device data stays Unknown for EcoFlow decisions. Charger detection continues while the connection is closed, unavailable or paused.", style = MaterialTheme.typography.bodySmall)
