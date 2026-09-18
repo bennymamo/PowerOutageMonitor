@@ -273,7 +273,7 @@ internal fun ResendEmailSetupScreen(
                             val message = AlertMessage(
                                 eventId = "email-test-${UUID.randomUUID()}",
                                 kind = AlertKind.TEST,
-                                title = "FP GRID MONITOR TEST",
+                                title = "Flockle Grid Outage Monitor test",
                                 body = "SIMULATION\n\nDevice: $deviceName\nEmail alerts can reach this address."
                             )
                             val results = withContext(Dispatchers.IO) {

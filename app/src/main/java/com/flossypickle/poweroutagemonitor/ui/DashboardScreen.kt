@@ -190,13 +190,13 @@ internal fun DashboardScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "FLOSSY PICKLE",
+                    "FLOCKLE",
                     color = colors.primary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 3.sp
                 )
-                Text("Grid outage monitor", fontSize = 27.sp, fontWeight = FontWeight.SemiBold)
+                Text("Grid Outage Monitor", fontSize = 27.sp, fontWeight = FontWeight.SemiBold)
                 Text(settings.deviceName, color = colors.onSurfaceVariant, fontSize = 14.sp)
             }
 

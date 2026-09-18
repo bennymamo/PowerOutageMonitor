@@ -271,7 +271,7 @@ internal fun SmsSetupScreen(
                             val message = AlertMessage(
                                 eventId = "sms-test-${UUID.randomUUID()}",
                                 kind = AlertKind.TEST,
-                                title = "FP GRID MONITOR TEST",
+                                title = "Flockle Grid Outage Monitor test",
                                 body = "SIMULATION\n\nDevice: $deviceName\nSMS alerts can reach this number."
                             )
                             val results = withContext(Dispatchers.IO) {

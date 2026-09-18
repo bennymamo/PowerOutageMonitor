@@ -262,7 +262,7 @@ internal fun GmailEmailSetupScreen(
                             val message = AlertMessage(
                                 eventId = "gmail-test-${UUID.randomUUID()}",
                                 kind = AlertKind.TEST,
-                                title = "FP GRID MONITOR TEST",
+                                title = "Flockle Grid Outage Monitor test",
                                 body = "SIMULATION\n\nDevice: $deviceName\nGmail alerts can reach this address."
                             )
                             val results = withContext(Dispatchers.IO) {

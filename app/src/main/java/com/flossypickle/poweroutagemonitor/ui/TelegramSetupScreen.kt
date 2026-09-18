@@ -313,7 +313,7 @@ internal fun TelegramSetupScreen(
                                     client.sendMessage(
                                         token,
                                         destination.chatId,
-                                        "FP GRID MONITOR TEST\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
+                                        "Flockle Grid Outage Monitor test\n\nDevice: $deviceName\nTelegram alerts can reach this chat.\n\nThis is a simulation."
                                     )
                                 }
                             }

@@ -91,7 +91,7 @@ internal fun SetupWizardScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Text("FLOSSY PICKLE", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp,
+            Text("Flockle", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp,
                 fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
             Text("SETUP ${step + 1} OF ${SETUP_STEPS.size}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,

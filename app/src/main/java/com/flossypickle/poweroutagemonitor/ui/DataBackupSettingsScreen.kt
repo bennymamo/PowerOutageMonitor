@@ -569,11 +569,11 @@ private fun readSmallBackup(context: Context, uri: Uri): ByteArray {
     }
 }
 
-private fun backupFileName(): String = "fp-grid-monitor-${
+private fun backupFileName(): String = "flockle-grid-outage-monitor-${
     SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
 }.fpgrid"
 
-private fun editedBackupFileName(): String = "fp-grid-monitor-edited-${
+private fun editedBackupFileName(): String = "flockle-grid-outage-monitor-edited-${
     SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
 }.fpgrid"
 

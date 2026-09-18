@@ -106,13 +106,13 @@ class PowerMonitorAppUiTest {
 
     @Test fun dashboardShortcutsReturnDirectlyButSettingsNavigationKeepsParents() {
         launch(assisted = true)
-        click("Grid source"); title("Power sources"); back(); title("Grid outage monitor")
-        click("Connections & alerts"); click("Alert channels"); title("Alert channels"); back(); title("Grid outage monitor")
+        click("Grid source"); title("Power sources"); back(); title("Grid Outage Monitor")
+        click("Connections & alerts"); click("Alert channels"); title("Alert channels"); back(); title("Grid Outage Monitor")
         click("EcoFlow checks"); title("PowerOcean account")
-        click("Jump to a step"); click("5. Verify and monitor"); back(); title("Grid outage monitor")
+        click("Jump to a step"); click("5. Verify and monitor"); back(); title("Grid Outage Monitor")
         nav("Settings"); click("Monitoring"); click("Outage timing"); title("Outage timing")
-        back(); title("Monitoring"); back(); title("Settings"); back(); title("Grid outage monitor")
-        nav("Settings"); click("Power sources"); title("Power sources"); back(); title("Settings"); back(); title("Grid outage monitor")
+        back(); title("Monitoring"); back(); title("Settings"); back(); title("Grid Outage Monitor")
+        nav("Settings"); click("Power sources"); title("Power sources"); back(); title("Settings"); back(); title("Grid Outage Monitor")
     }
 
     @Test fun allSettingsGroupsSubpagesProviderStepsAndHistoryAreReachable() {
@@ -166,7 +166,7 @@ class PowerMonitorAppUiTest {
         nav("Grid"); capture("history-grid"); compose.onNodeWithText("Details").performClick(); capture("history-grid-details")
         nav("App & monitor"); capture("history-app"); compose.onNodeWithText("Unrecorded monitoring interruption").assertExists()
         compose.onNodeWithText("Details").performClick(); compose.onNodeWithText("Sample interruption detail").assertExists(); capture("history-app-details")
-        nav("Status"); title("Grid outage monitor")
+        nav("Status"); title("Grid Outage Monitor")
     }
     private fun visitSteps(steps: List<String>, prefix: String) {
         for ((index, label) in steps.withIndex()) {

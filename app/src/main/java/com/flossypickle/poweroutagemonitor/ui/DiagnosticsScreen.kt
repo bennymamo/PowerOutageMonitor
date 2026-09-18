@@ -268,7 +268,7 @@ internal fun DiagnosticsScreen(
     }
 }
 
-private fun diagnosticsFileName(): String = "fp-grid-monitor-diagnostics-${
+private fun diagnosticsFileName(): String = "flockle-grid-outage-monitor-diagnostics-${
     java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
 }.txt"
 
