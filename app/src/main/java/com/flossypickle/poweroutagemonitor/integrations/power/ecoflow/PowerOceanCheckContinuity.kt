@@ -5,9 +5,11 @@ import com.flossypickle.poweroutagemonitor.integrations.power.*
 /** A planned check interval is not a source failure. Keep the original evidence receipt time. */
 internal object PowerOceanCheckContinuity {
     /** A later partial packet cannot discard qualified evidence from this same check. */
-    fun completedEvidence(latest: PowerSignal?, verified: PowerSignal?, requestedAt: Long, failed: Boolean): PowerSignal? {
+    fun completedEvidence(latest: PowerSignal?, verified: PowerSignal?, cycleStartedAt: Long, failed: Boolean): PowerSignal? {
         val check = latest?.check ?: return null
-        if (failed || check.requestedAtEpochMs != requestedAt ||
+        // The probe starts its reading request after the connection has opened.
+        val requestedAt = check.requestedAtEpochMs
+        if (failed || requestedAt < cycleStartedAt ||
             check.observations.any { it.label == "Reported grid code" && it.value !in setOf("0", "1") }) return null
         val qualified = listOfNotNull(latest, verified).firstOrNull {
             it.check?.requestedAtEpochMs == requestedAt && it.check.gridEvidenceAvailable &&

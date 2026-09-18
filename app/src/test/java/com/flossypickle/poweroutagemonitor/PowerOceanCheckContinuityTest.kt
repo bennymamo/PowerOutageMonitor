@@ -101,4 +101,17 @@ class PowerOceanCheckContinuityTest {
         assertNull(PowerOceanCheckContinuity.completedEvidence(unsupported, verified, 100_000, false))
     }
 
+    @Test fun requestBeginningAfterConnectionStillCompletesTheSameBoundedCycle() {
+        val readingCheck = check.copy(requestedAtEpochMs = 110_000, liveReportAtEpochMs = 115_000,
+            cycleState = PowerSourceCheck.CycleState.COLLECTING)
+        val report = verified.copy(observedAtEpochMs = 120_000, evidenceReceivedAtEpochMs = 115_000, check = readingCheck)
+        val completed = PowerOceanCheckContinuity.completedEvidence(report, report, 100_000, false)!!
+        assertEquals(GridAvailability.AVAILABLE, completed.availability)
+        assertEquals(115_000L, completed.evidenceReceivedAtEpochMs)
+        val partial = report.copy(check = readingCheck.copy(gridEvidenceAvailable = false))
+        assertNotNull(PowerOceanCheckContinuity.completedEvidence(partial, report, 100_000, false))
+        assertNull(PowerOceanCheckContinuity.completedEvidence(partial, verified, 100_000, false))
+        assertNull(PowerOceanCheckContinuity.completedEvidence(report, report, 125_000, false))
+    }
+
 }
