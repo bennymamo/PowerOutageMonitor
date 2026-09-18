@@ -20,19 +20,23 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
         selectedSource: PowerSourceStore.Source,
         nowEpochMs: Long
     ) {
-        val assistance = PowerSourceStore(context).powerOceanAssistedSettings()
+        val sourceStore = PowerSourceStore(context)
+        val assistance = sourceStore.powerOceanAssistedSettings()
         val chargerAssisted = selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && assistance.enabled
         val configured = store.settings()
         val settings = configured.copy(sourceUnavailableEnabled = configured.sourceUnavailableEnabled &&
             !(chargerAssisted && snapshot.externallyPowered == false && !assistance.notifyOnUnknown))
         val canNotify = EnabledAlertProvidersStore(context).hasAny()
+        val verifyUntil = if (selectedSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && gridPowered == null)
+            sourceStore.lastStatus()?.check?.verificationDeadline(nowEpochMs, assistance.checkWindowSeconds * 1000L) else null
         val result = ScheduledAlertPolicy.update(
             before = store.state(),
             settings = settings,
             sourceReadable = gridPowered != null,
             monitorState = monitorState,
             nowEpochMs = nowEpochMs,
-            canNotify = canNotify
+            canNotify = canNotify,
+            deferSourceWarningUntilEpochMs = verifyUntil
         )
         // Save the timer advancement before queueing so a process restart cannot duplicate a notice.
         store.save(result.state)
@@ -52,7 +56,7 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
             )
         }
         ScheduledAlertScheduler(context).schedule(if (canNotify) {
-            ScheduledAlertPolicy.nextDeadline(result.state, settings, monitorState)
+            ScheduledAlertPolicy.nextDeadline(result.state, settings, monitorState, verifyUntil)
         } else null)
         if (result.notices.isNotEmpty()) alerts.materializePending()
     }

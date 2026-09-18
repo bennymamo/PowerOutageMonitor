@@ -150,6 +150,24 @@ class ScheduledAlertPolicyTest {
         assertTrue(due.notices.any { it is ScheduledAlertPolicy.Notice.OutageUpdate })
     }
 
+
+    @Test fun `overdue source warning waits for restart check without fabricating recovery`() {
+        val before = ScheduledAlertStore.State(sourceUnavailableSinceEpochMs = 1_000)
+        val connecting = ScheduledAlertPolicy.update(before, settings, false, powered(), 400_000,
+            deferSourceWarningUntilEpochMs = 580_000)
+        assertTrue(connecting.notices.isEmpty())
+        assertFalse(connecting.state.sourceUnavailableAlerted)
+        assertEquals(580_000L, ScheduledAlertPolicy.nextDeadline(connecting.state, settings, powered(), 580_000))
+        val restored = ScheduledAlertPolicy.update(connecting.state, settings, true, powered(), 420_000)
+        assertTrue(restored.notices.isEmpty())
+        assertNull(restored.state.sourceUnavailableSinceEpochMs)
+        val failed = ScheduledAlertPolicy.update(connecting.state, settings, false, powered(), 420_000)
+        assertEquals(listOf(ScheduledAlertPolicy.Notice.SourceUnavailable(1_000)), failed.notices)
+        val hung = ScheduledAlertPolicy.update(connecting.state, settings, false, powered(), 580_000,
+            deferSourceWarningUntilEpochMs = 580_000)
+        assertEquals(listOf(ScheduledAlertPolicy.Notice.SourceUnavailable(1_000)), hung.notices)
+    }
+
     private fun powered() = OutageEngine.State(
         phase = OutageEngine.Phase.POWERED,
         phaseSinceEpochMs = 1L

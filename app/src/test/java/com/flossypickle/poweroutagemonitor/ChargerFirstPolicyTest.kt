@@ -108,4 +108,20 @@ class ChargerFirstPolicyTest {
             false, connected.recovered, 100_000, verificationWindowMs = 180_000).availability)
     }
 
+    @Test fun restartWithOldChargerLossStillWaitsForItsFirstBoundedCheck() {
+        val check = PowerSourceCheck(400_000, null, false, cycleState = PowerSourceCheck.CycleState.CONNECTING)
+        val unknown = grid(GridAvailability.UNKNOWN).copy(observedAtEpochMs = 420_000, check = check)
+        assertEquals(GridAvailability.UNKNOWN, ChargerFirstPolicy.evaluate(false, unknown, 1000,
+            false, false, 420_000, verificationWindowMs = 180_000).availability)
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false,
+            unknown.copy(observedAtEpochMs = 580_000), 1000, false, false, 580_000,
+            verificationWindowMs = 180_000).availability)
+        val failed = unknown.copy(check = check.copy(cycleState = PowerSourceCheck.CycleState.FAILED,
+            finishedAtEpochMs = 425_000), observedAtEpochMs = 425_000)
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, failed, 1000,
+            false, false, 425_000, verificationWindowMs = 180_000).availability)
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, unknown, 1000,
+            true, false, 420_000, verificationWindowMs = 180_000).availability)
+    }
+
 }

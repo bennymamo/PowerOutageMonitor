@@ -41,7 +41,10 @@ internal object ChargerFirstPolicy {
         val check = ecoFlow?.check
         val checkCompletedAfterLoss = check != null && !check.active &&
             check.finishedAtEpochMs?.let { it in lossStartedAt..now } == true
-        if (!outageConfirmed && verificationWindowMs > 0 && now - lossStartedAt in 0 until verificationWindowMs &&
+        val restartedCheckIsCollecting = check?.active == true && check.requestedAtEpochMs >= lossStartedAt &&
+            now - check.requestedAtEpochMs in 0 until verificationWindowMs
+        if (!outageConfirmed && verificationWindowMs > 0 &&
+            (now - lossStartedAt in 0 until verificationWindowMs || restartedCheckIsCollecting) &&
             !checkCompletedAfterLoss) return Result(GridAvailability.UNKNOWN,
             detail = "Charger power lost. Checking EcoFlow before confirming an outage.", ecoFlowOutageStartedAt = ecoLoss)
         return Result(GridAvailability.UNAVAILABLE,

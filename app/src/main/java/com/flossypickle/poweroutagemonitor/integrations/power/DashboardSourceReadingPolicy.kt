@@ -6,10 +6,10 @@ import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOcean
 internal object DashboardSourceReadingPolicy {
     private fun evidenceInterval(status: PowerSourceStore.Status, configured: Int?): Int? {
         val check = status.check
-        val onlineAt = check?.lastConfirmedOnlineAtEpochMs
-        val until = check?.lastConfirmedOnlineValidUntilEpochMs
-        return if (onlineAt != null && onlineAt == status.evidenceReceivedAtEpochMs && until != null && until >= onlineAt + 60_000)
-            ((until - onlineAt) / 1000 - 60).toInt() else configured
+        val receipt = status.evidenceReceivedAtEpochMs
+        val until = check?.evidenceValidUntilEpochMs
+        return if (receipt != null && until != null && until >= receipt + 60_000)
+            ((until - receipt) / 1000 - 60).toInt() else configured
     }
 
     fun previousOnlineDuringCheck(status: PowerSourceStore.Status?, now: Long,

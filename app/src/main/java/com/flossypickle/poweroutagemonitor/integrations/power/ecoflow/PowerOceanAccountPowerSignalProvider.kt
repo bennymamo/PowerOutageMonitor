@@ -66,7 +66,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                         if (carried != GridAvailability.UNKNOWN) lastVerified!!.recoveryPending else pending,
                         if (carried != GridAvailability.UNKNOWN) lastVerified!!.evidenceReceivedAtEpochMs else evidenceAt, dataStalled,
                         check?.copy(lastConfirmedOnlineAtEpochMs = lastConfirmedOnlineAt,
-                            lastConfirmedOnlineValidUntilEpochMs = lastConfirmedOnlineAt?.let { it + ((continuityInterval ?: 0) + 60) * 1000L },
+                            evidenceValidUntilEpochMs = (if (carried != GridAvailability.UNKNOWN) lastVerified?.evidenceReceivedAtEpochMs else evidenceAt)
+                                ?.let { it + ((continuityInterval ?: 0) + 60) * 1000L },
                             ecoFlowAvailability = if (carried != GridAvailability.UNKNOWN) carried else availability))
                     latest = signal; onSignal(signal)
                 }
@@ -242,15 +243,17 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 } else { retryAt = 0; backoff = 60_000 }
                 val now = System.currentTimeMillis()
                 val next = sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
-                val completed = latest
-                if (lastFailure != null || completed?.check?.gridEvidenceAvailable != true) {
+                val qualified = PowerOceanCheckContinuity.completedEvidence(latest, lastVerified, started, lastFailure != null)
+                val completed = qualified ?: latest
+                if (qualified == null) {
                     lastConfirmedOnlineAt = null; lastVerified = null
                 }
                 val completedCheck = completed?.check?.copy(
+                    gridEvidenceAvailable = qualified != null,
                     cycleState = if (lastFailure == null) PowerSourceCheck.CycleState.WAITING else PowerSourceCheck.CycleState.FAILED,
                     finishedAtEpochMs = now, nextCheckAtEpochMs = next)
                 lastVerified = lastVerified?.copy(check = completedCheck)
-                emit(if (lastFailure == null && completed?.check?.gridEvidenceAvailable == true) completed.availability else GridAvailability.UNKNOWN,
+                emit(qualified?.availability ?: GridAvailability.UNKNOWN,
                     lastFailure ?: "EcoFlow check complete. Connection closed.", completed?.recoveryPending ?: false,
                     completed?.evidenceReceivedAtEpochMs, completed?.dataPossiblyStalled,
                     completedCheck)

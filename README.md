@@ -183,6 +183,8 @@ The last verified grid state remains valid for the currently active check interv
 
 Starting a check keeps the last good grid status on the dashboard, including when charger loss triggers the check. Switching schedules does not shorten the previous reading's existing expiry deadline while the new check is collecting data; new evidence uses the current interval plus one minute. A confirmed EcoFlow outage immediately replaces the online state and follows the configured alarms and alerts. The dashboard shows the last confirmation time while checking.
 
+After a phone restart, an immediate check runs when automatic checks are enabled, even if the charger is disconnected; the regular interval does not delay this first check. A brief Unknown state is expected until new evidence arrives, and source-loss warnings wait for this bounded check to finish.
+
 The source row colours the charger and EcoFlow separately: a disconnected charger is red while EcoFlow-reported grid power stays green. EcoFlow turns red when it reports a grid outage, including if a UPS keeps the charger powered. Unknown grid evidence has a separate neutral indication.
 
 A check that runs beyond its configured listening limit and connection allowance cannot keep old evidence valid. Closing the connection deliberately does not create a source-failure warning. A failed, inconclusive or overdue check changes the state to Unknown. A new charger disconnection needs evidence received after that disconnection before EcoFlow can cancel the suspected outage.
@@ -193,7 +195,7 @@ A check that runs beyond its configured listening limit and connection allowance
 
 - Normally, open a connection **once an hour**; during an outage, default to **once a minute**. Both schedules are configurable, including manual-only.
 - Send one reading request and activate live reporting, then collect the first power report and **two extra reports**. End early if values change and usable grid/meter evidence is available; otherwise listen for up to **two minutes**. Renew temporary live reporting every 20 seconds only while that check is collecting data.
-- **Close the connection** after the check. Reuse saved login/broker access on later checks rather than log in each time. Checks never overlap; elapsed schedule slots are skipped.
+- **Close the connection** after the check. Reuse saved login/broker access on later checks rather than log in each time. Checks never overlap. If a check runs past the next scheduled time, close the connection and wait five seconds before the next check instead of skipping another whole interval.
 - Use **Check now** on Status for a manual check. **Pause EcoFlow** closes/suspends EcoFlow checks while charger monitoring continues.
 
 Expand **Check duration & updates** to change the listening limit and extra-report count. Short intervals can leave little time disconnected. Status shows last/next check; expand **EcoFlow readings** for device receipt time, update counts, data health, grid code and meter explanations.

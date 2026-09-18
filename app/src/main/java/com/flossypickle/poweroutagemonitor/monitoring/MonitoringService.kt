@@ -265,6 +265,11 @@ internal class MonitoringService : Service() {
         latestBatterySnapshot = snapshot
         if (!MonitorStore(this).settings().monitoringEnabled) return
         (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.updateCharger(snapshot.externallyPowered)
+        // The sticky battery broadcast can arrive before the provider's first check signal.
+        if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && latestPrimarySignal == null) {
+            if (ecoFlowProvider == null) reloadPowerSource()
+            return
+        }
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
             val sources = PowerSourceStore(this)
             val now = System.currentTimeMillis()

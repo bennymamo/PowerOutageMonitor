@@ -79,4 +79,26 @@ class PowerOceanCheckContinuityTest {
         assertFalse(ChargerReconnectPolicy.shouldNotify(false, true, current.copy(availability = GridAvailability.UNAVAILABLE), 90_000, OutageEngine.Phase.OUTAGE, now, true))
         assertFalse(ChargerReconnectPolicy.shouldNotify(false, true, current.copy(recoveryPending = true), 90_000, OutageEngine.Phase.POWERED, now, true))
     }
+    @Test fun finalPartialPacketKeepsOnlyQualifiedEvidenceFromThisCheck() {
+        val collecting = check.copy(cycleState = PowerSourceCheck.CycleState.COLLECTING)
+        val good = verified.copy(check = collecting)
+        val partial = good.copy(check = collecting.copy(gridEvidenceAvailable = false, deviceUpdates = 8))
+        val completed = PowerOceanCheckContinuity.completedEvidence(partial, good, 100_000, false)!!
+        assertEquals(GridAvailability.AVAILABLE, completed.availability)
+        assertEquals(105_000L, completed.evidenceReceivedAtEpochMs)
+        assertTrue(completed.check!!.gridEvidenceAvailable)
+        assertEquals(8, completed.check!!.deviceUpdates)
+        assertNull(PowerOceanCheckContinuity.completedEvidence(partial, good, 100_000, true))
+        assertNull(PowerOceanCheckContinuity.completedEvidence(partial, good.copy(check = collecting.copy(requestedAtEpochMs = 90_000)), 100_000, false))
+        assertNull(PowerOceanCheckContinuity.completedEvidence(partial, good.copy(evidenceReceivedAtEpochMs = 99_000), 100_000, false))
+    }
+    @Test fun newQualifiedOutageWinsOverEarlierOnlineEvidence() {
+        val lost = verified.copy(availability = GridAvailability.UNAVAILABLE, evidenceReceivedAtEpochMs = 110_000)
+        assertEquals(GridAvailability.UNAVAILABLE,
+            PowerOceanCheckContinuity.completedEvidence(lost, verified, 100_000, false)!!.availability)
+        val unsupported = lost.copy(check = check.copy(gridEvidenceAvailable = false,
+            observations = listOf(SourceReportedValue("Reported grid code", "2", "Unsupported", 112_000, true))))
+        assertNull(PowerOceanCheckContinuity.completedEvidence(unsupported, verified, 100_000, false))
+    }
+
 }

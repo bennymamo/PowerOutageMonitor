@@ -138,12 +138,12 @@ internal fun DashboardScreen(
     }
     val lastGridReadingEpochMs = when (selectedPowerSource) {
         PowerSourceStore.Source.ECOFLOW_ACCOUNT -> powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.check?.let {
-            it.liveReportAtEpochMs ?: it.lastConfirmedOnlineAtEpochMs
+            it.liveReportAtEpochMs ?: powerSourceStatus.evidenceReceivedAtEpochMs ?: it.lastConfirmedOnlineAtEpochMs
         } ?: 0L
         PowerSourceStore.Source.ECOFLOW_MODBUS -> powerSourceStatus?.takeIf { it.source == selectedPowerSource }?.observedAtEpochMs ?: 0L
         PowerSourceStore.Source.ANDROID_CHARGER -> lastObservationEpochMs
     }
-    val effectivePowered = if (assistedActive && snapshot?.externallyPowered == true) true else when (selectedPowerSource) {
+    val effectivePowered = when (selectedPowerSource) {
         PowerSourceStore.Source.ANDROID_CHARGER -> snapshot?.externallyPowered
         PowerSourceStore.Source.ECOFLOW_MODBUS, PowerSourceStore.Source.ECOFLOW_ACCOUNT -> when (sourceReading?.availability) {
             GridAvailability.AVAILABLE -> true

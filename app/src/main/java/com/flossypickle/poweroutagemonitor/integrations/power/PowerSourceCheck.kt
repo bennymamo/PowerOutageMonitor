@@ -7,10 +7,15 @@ internal data class PowerSourceCheck(val requestedAtEpochMs: Long, val liveRepor
     val cycleState: CycleState? = null, val finishedAtEpochMs: Long? = null, val nextCheckAtEpochMs: Long? = null,
     val deviceUpdates: Int = 0, val powerUpdates: Int = 0, val valuesChanged: Boolean = false,
     val lastConfirmedOnlineAtEpochMs: Long? = null,
-    val lastConfirmedOnlineValidUntilEpochMs: Long? = null,
+    val evidenceValidUntilEpochMs: Long? = null,
     val ecoFlowAvailability: GridAvailability? = null) {
     enum class CycleState { CONNECTING, COLLECTING, WAITING, PAUSED, FAILED }
     val active get() = cycleState in setOf(CycleState.CONNECTING, CycleState.COLLECTING)
+    /** A first check after restart gets a bounded verification window before a source-loss warning. */
+    fun verificationDeadline(now: Long, windowMs: Long): Long? =
+        (requestedAtEpochMs + windowMs + 60_000).takeIf {
+            active && now >= requestedAtEpochMs && now < it
+        }
     enum class DataHealth { CHANGING, UNCHANGED, NO_UPDATES }
     val dataHealth get() = when { valuesChanged -> DataHealth.CHANGING; deviceUpdates > 0 -> DataHealth.UNCHANGED; else -> DataHealth.NO_UPDATES }
     enum class Phase { CHECKING, LIVE_RECEIVED, GRID_VERIFIED, TIMED_OUT }

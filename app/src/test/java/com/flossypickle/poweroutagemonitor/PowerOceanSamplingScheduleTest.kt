@@ -54,18 +54,33 @@ class PowerOceanSamplingScheduleTest {
         assertFalse(c.due(incident, 1000)); assertFalse(c.due(incident, 59_999))
         assertTrue(c.due(incident, 60_000)); assertFalse(c.due(incident, 60_001))
     }
-    @Test fun completedLongCycleSkipsElapsedSlotsAndAlwaysLeavesAFutureCheck() {
+    @Test fun completedLongCycleLeavesShortClosedGapWithoutSkippingAnotherWholeInterval() {
         val c = PowerOceanSamplingSchedule(); assertTrue(c.due(s(60), 1000))
         c.finishCheck(121_000)
-        assertEquals(181_000L, c.nextDueAt); assertFalse(c.due(s(60), 121_001))
-        assertTrue(c.due(s(60), 181_000))
+        assertEquals(126_000L, c.nextDueAt); assertFalse(c.due(s(60), 121_001))
+        assertTrue(c.due(s(60), 126_000))
     }
     @Test fun incidentFoundDuringLongCollectionAdoptsMinuteScheduleWithoutImmediateReconnect() {
         val c = PowerOceanSamplingSchedule(); c.due(s(3600), 1000)
         val incident = s(60, true).copy(incidentDetectedDuringCheck = true)
         c.finishCheck(121_000, incident)
-        assertEquals(181_000L, c.nextDueAt); assertFalse(c.due(incident, 121_001))
-        assertTrue(c.due(incident, 181_000))
+        assertEquals(126_000L, c.nextDueAt); assertFalse(c.due(incident, 121_001))
+        assertTrue(c.due(incident, 126_000))
+    }
+    @Test fun twoMinuteCheckOverrunDoesNotBecomeFourMinuteGap() {
+        val c = PowerOceanSamplingSchedule(); assertTrue(c.due(s(120), 0))
+        c.finishCheck(121_000)
+        assertEquals(126_000L, c.nextDueAt)
+        assertFalse(c.due(s(120), 125_999)); assertTrue(c.due(s(120), 126_000))
+        assertFalse(c.due(s(120), 126_001))
+        assertTrue(126_000L < 3_000L + (120 + 60) * 1000)
+    }
+    @Test fun restartingWithDisconnectedChargerChecksImmediatelyEvenOnHourlyIncidentSchedule() {
+        val c = PowerOceanSamplingSchedule()
+        assertTrue(c.due(s(3600, true), 0))
+        c.finishCheck(20_000)
+        assertEquals(3_600_000L, c.nextDueAt)
+        assertFalse(c.due(s(3600, true), 20_001))
     }
     @Test fun manualOnlyFinishAndPauseHaveNoScheduledNextTime() {
         val c = PowerOceanSamplingSchedule(); c.due(s(null, manual = 1), 1000); c.finishCheck(121_000)

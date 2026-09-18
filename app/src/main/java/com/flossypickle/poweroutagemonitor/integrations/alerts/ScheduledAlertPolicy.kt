@@ -22,7 +22,8 @@ internal object ScheduledAlertPolicy {
         sourceReadable: Boolean,
         monitorState: OutageEngine.State,
         nowEpochMs: Long,
-        canNotify: Boolean = true
+        canNotify: Boolean = true,
+        deferSourceWarningUntilEpochMs: Long? = null
     ): Result {
         var state = before
         val notices = mutableListOf<Notice>()
@@ -35,7 +36,7 @@ internal object ScheduledAlertPolicy {
             !sourceReadable -> {
                 val since = state.sourceUnavailableSinceEpochMs ?: nowEpochMs
                 val due = !state.sourceUnavailableAlerted &&
-                    canNotify &&
+                    canNotify && (deferSourceWarningUntilEpochMs == null || nowEpochMs >= deferSourceWarningUntilEpochMs) &&
                     elapsed(nowEpochMs, since) >= settings.sourceUnavailableDelayMs
                 if (due) notices += Notice.SourceUnavailable(since)
                 state.copy(
@@ -93,11 +94,12 @@ internal object ScheduledAlertPolicy {
     fun nextDeadline(
         state: ScheduledAlertStore.State,
         settings: ScheduledAlertStore.Settings,
-        monitorState: OutageEngine.State
+        monitorState: OutageEngine.State,
+        deferSourceWarningUntilEpochMs: Long? = null
     ): Long? = buildList {
         if (settings.sourceUnavailableEnabled && !state.sourceUnavailableAlerted) {
             state.sourceUnavailableSinceEpochMs?.let {
-                add(safeAdd(it, settings.sourceUnavailableDelayMs))
+                add(maxOf(safeAdd(it, settings.sourceUnavailableDelayMs), deferSourceWarningUntilEpochMs ?: 0))
             }
         }
         if (settings.heartbeatEnabled) {

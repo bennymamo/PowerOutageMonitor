@@ -41,7 +41,7 @@ class DashboardSourceReadingPolicyTest {
     @Test fun switchingToOutageScheduleDoesNotRetroactivelyExpireGoodNormalReading() {
         val old = PowerSignal(GridAvailability.AVAILABLE, 120_000, "account", evidenceReceivedAtEpochMs = 105_000,
             check = check.copy(requestedAtEpochMs = 100_000))
-        val started = check.copy(requestedAtEpochMs = 1_000_000, lastConfirmedOnlineValidUntilEpochMs = 3_765_000)
+        val started = check.copy(requestedAtEpochMs = 1_000_000, evidenceValidUntilEpochMs = 3_765_000)
         val interval = PowerOceanCheckContinuity.intervalDuringCheck(old, started, 3600, 300)
         assertEquals(3600, interval)
         assertEquals(GridAvailability.AVAILABLE, PowerOceanCheckContinuity.availability(old, started, 1_010_000, 120_000, interval))
@@ -55,4 +55,20 @@ class DashboardSourceReadingPolicyTest {
         assertEquals(GridAvailability.AVAILABLE, PowerOceanCheckContinuity.availability(signal, collecting, 110_000, 120_000, 300))
         assertEquals(GridAvailability.UNKNOWN, PowerOceanCheckContinuity.availability(signal, collecting.copy(requestedAtEpochMs = 90_000), 110_000, 120_000, 300))
     }
+    @Test fun standaloneKnownOutageKeepsItsEvidenceDeadlineDuringSlowCheck() {
+        val outage = status.copy(availability = GridAvailability.UNAVAILABLE,
+            check = check.copy(lastConfirmedOnlineAtEpochMs = null, evidenceValidUntilEpochMs = 3_765_000))
+        assertTrue(DashboardSourceReadingPolicy.isCurrent(outage, source, 420_000, null, 120_000))
+        assertFalse(DashboardSourceReadingPolicy.previousOnlineDuringCheck(outage, 420_000, null, 120_000))
+        assertFalse(DashboardSourceReadingPolicy.isCurrent(outage, source, 580_001, null, 120_000))
+    }
+    @Test fun firstCheckWarningGraceIsBoundedAndNeverAppliesToCompletedChecks() {
+        assertEquals(580_000L, check.verificationDeadline(420_000, 120_000))
+        assertNull(check.verificationDeadline(580_000, 120_000))
+        assertNull(check.verificationDeadline(399_999, 120_000))
+        for (cycle in listOf(PowerSourceCheck.CycleState.WAITING, PowerSourceCheck.CycleState.FAILED, PowerSourceCheck.CycleState.PAUSED)) {
+            assertNull(check.copy(cycleState = cycle).verificationDeadline(420_000, 120_000))
+        }
+    }
+
 }

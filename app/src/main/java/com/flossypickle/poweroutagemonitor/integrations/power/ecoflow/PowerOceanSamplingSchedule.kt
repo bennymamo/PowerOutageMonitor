@@ -25,16 +25,15 @@ internal class PowerOceanSamplingSchedule {
 
     val nextDueAt: Long? get() = nextRead.takeUnless { it == Long.MAX_VALUE || previous?.paused == true || previous?.intervalSeconds == null }
 
-    /** Skip elapsed slots rather than reopening immediately after a long collection window. */
+    /** Finish an overdue check before the next one, with a short closed interval and no catch-up burst. */
     fun finishCheck(now: Long, after: PowerOceanReadSchedule? = null) {
         if (after != null) {
             require(after.intervalSeconds == null || after.intervalSeconds in 5..86_400)
             previous = after
             nextRead = after.intervalSeconds?.let { (lastRead ?: now) + it * 1000L } ?: Long.MAX_VALUE
         }
-        val seconds = previous?.intervalSeconds ?: return
-        val step = seconds * 1000L
-        if (nextRead <= now) nextRead += ((now - nextRead) / step + 1) * step
+        if (previous?.intervalSeconds == null) return
+        if (nextRead <= now) nextRead = now + 5_000
     }
 
     fun due(schedule: PowerOceanReadSchedule, now: Long): Boolean {
