@@ -5,9 +5,25 @@ internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
     val normalSeconds: Int = 3600, val outageSeconds: Int = 60,
     val warnOnUnchanged: Boolean = true, val ignoreUnchanged: Boolean = false,
     val checkWindowSeconds: Int = 120, val extraPowerUpdates: Int = 2,
-    val notifyOnUnknown: Boolean = true, val notifyOnChargerReturn: Boolean = true) {
-    init { require(valid(normalSeconds) && valid(outageSeconds)); require(checkWindowSeconds in 30..300 && extraPowerUpdates in 1..10) }
+    val notifyOnUnknown: Boolean = true, val notifyOnChargerReturn: Boolean = true,
+    val poweredFailureThreshold: Int = 5) {
+    init {
+        require(valid(normalSeconds) && valid(outageSeconds))
+        require(checkWindowSeconds in 30..300 && extraPowerUpdates in 1..10)
+        require(poweredFailureThreshold in 1..20)
+    }
     companion object { fun valid(seconds: Int) = seconds == 0 || seconds in 5..86_400 }
+}
+
+/** Routine cloud failures are retried quickly while local charger evidence still proves power. */
+internal object PowerOceanFailureRetryPolicy {
+    fun nextStreak(previous: Int, chargerPowered: Boolean?, failed: Boolean): Int = when {
+        !failed || chargerPowered != true -> 0
+        else -> (previous + 1).coerceAtMost(20)
+    }
+
+    fun deferPoweredWarning(chargerPowered: Boolean?, failed: Boolean, streak: Int, threshold: Int) =
+        failed && chargerPowered == true && streak < threshold
 }
 
 internal data class PowerOceanReadSchedule(val intervalSeconds: Int?, val incident: Boolean,

@@ -99,7 +99,8 @@ internal class PowerSourceStore(context: Context) {
         preferences.getInt("account_outage_seconds", 60), preferences.getBoolean("account_warn_unchanged", true),
         preferences.getBoolean("account_ignore_unchanged", false),
         preferences.getInt("account_window_seconds", 120), preferences.getInt("account_extra_updates", 2),
-        preferences.getBoolean("account_notify_unknown", true), preferences.getBoolean("account_notify_charger_return", true))
+        preferences.getBoolean("account_notify_unknown", true), preferences.getBoolean("account_notify_charger_return", true),
+        preferences.getInt("account_powered_failure_threshold", 5))
 
     fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
         val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
@@ -109,13 +110,21 @@ internal class PowerSourceStore(context: Context) {
             .putBoolean("account_warn_unchanged", settings.warnOnUnchanged).putBoolean("account_ignore_unchanged", settings.ignoreUnchanged)
             .putBoolean("account_notify_unknown", settings.notifyOnUnknown)
             .putBoolean("account_notify_charger_return", settings.notifyOnChargerReturn)
-        if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
+            .putInt("account_powered_failure_threshold", settings.poweredFailureThreshold)
+        if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
+            .remove("account_ecoflow_outage_started").remove("account_powered_failure_streak")
         check(edit.commit()) { "Unable to save charger-first settings" }
     }
 
     fun powerOceanAssistancePaused() = preferences.getBoolean("account_assistance_paused", false)
     fun setPowerOceanAssistancePaused(paused: Boolean) {
         check(preferences.edit().putBoolean("account_assistance_paused", paused).commit())
+    }
+
+    fun powerOceanPoweredFailureStreak() = preferences.getInt("account_powered_failure_streak", 0).coerceIn(0, 20)
+    fun setPowerOceanPoweredFailureStreak(value: Int) {
+        require(value in 0..20)
+        check(preferences.edit().putInt("account_powered_failure_streak", value).commit())
     }
 
     fun assistedChargerLossStartedAt() = preferences.getLong("account_charger_loss_started", 0)
@@ -192,7 +201,9 @@ internal class PowerSourceStore(context: Context) {
     fun select(source: Source): Boolean {
         if (source == Source.ECOFLOW_MODBUS && !ecoFlowReadyToActivate()) return false
         if (source == Source.ECOFLOW_ACCOUNT && !powerOceanReadyToActivate()) return false
-        check(preferences.edit().putString(KEY_SELECTED_SOURCE, source.name).commit()) {
+        val edit = preferences.edit().putString(KEY_SELECTED_SOURCE, source.name)
+        if (source != Source.ECOFLOW_ACCOUNT) edit.remove("account_powered_failure_streak")
+        check(edit.commit()) {
             "Unable to save power source"
         }
         return true

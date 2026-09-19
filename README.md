@@ -140,7 +140,7 @@ Only explicitly trusted private senders can act. Forwarded/edited messages and s
 
 Outage/restoration alerts include the charger state and available grid/meter observations with their receipt times. A charger-based fallback is identified when EcoFlow could not verify grid loss. Trusted Telegram chats also receive short command hints.
 
-EcoFlow check warnings notify enabled alert channels once when a completed check fails or lacks current grid evidence, and when a later completed check recovers. Intentional time between checks does not trigger this warning.
+When the charger still has power, a failed or inconclusive EcoFlow check switches temporarily to the configured outage-check interval. The app warns only after the configured number of consecutive failures, five by default, then groups further failures into the same episode. A successful check resets the count, restores the normal schedule and sends a recovery only if a warning was sent. Charger-off fail-safe warnings keep their separate behavior. Both the retry interval and powered-charger failure limit are configurable and included in power-source backups.
 
 ### Audible alarm and scheduled messages
 

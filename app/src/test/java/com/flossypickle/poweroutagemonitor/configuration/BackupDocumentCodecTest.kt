@@ -33,6 +33,19 @@ class BackupDocumentCodecTest {
             BackupDocumentCodec.decode(text.replace("power.account.notifyUnknown=false", "power.account.notifyUnknown=invalid").toByteArray())
         }
     }
+    @Test fun poweredFailureThresholdRoundTripsAndOlderBackupsDefaultToFive() {
+        val original = completeDocument()
+        val configured = original.copy(powerSources = original.powerSources!!.copy(
+            powerOceanAssisted = original.powerSources.powerOceanAssisted.copy(poweredFailureThreshold = 7)))
+        val text = BackupDocumentCodec.encode(configured).toString(Charsets.UTF_8)
+        assertEquals(configured, BackupDocumentCodec.decode(text.toByteArray()))
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.poweredFailureThreshold=") }.joinToString("\n")
+        assertEquals(5, BackupDocumentCodec.decode(old.toByteArray()).powerSources!!.powerOceanAssisted.poweredFailureThreshold)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("power.account.poweredFailureThreshold=7",
+                "power.account.poweredFailureThreshold=21").toByteArray())
+        }
+    }
     @Test fun remoteChoicesRoundTripAndOldBackupsCannotEnableControl() {
         val original = completeDocument()
         val config = com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore.Settings(

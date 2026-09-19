@@ -6,6 +6,7 @@ import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
+import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanFailureRetryPolicy
 import java.util.UUID
 
 /** Report failed completed checks once per episode, never intentional idle time. */
@@ -23,6 +24,11 @@ internal class SourceCheckWarningCoordinator(private val context: Context,
         val failed = check.cycleState == PowerSourceCheck.CycleState.FAILED || !check.gridEvidenceAvailable
         val chargerOff = failed && chargerPowered == false
         val assistance = PowerSourceStore(context).powerOceanAssistedSettings()
+        val failureStreak = PowerSourceStore(context).powerOceanPoweredFailureStreak()
+        if (PowerOceanFailureRetryPolicy.deferPoweredWarning(chargerPowered, failed, failureStreak,
+                assistance.poweredFailureThreshold)) {
+            check(prefs.edit().putLong("last_finished", finished).commit()); return
+        }
         if (failed && (chargerOff && !assistance.notifyOnUnknown ||
                 !chargerOff && !TelegramRemoteStore(context).settings().checkWarnings)) {
             check(prefs.edit().putLong("last_finished", finished).commit()); return

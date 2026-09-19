@@ -35,7 +35,16 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
         }
         ExpandableSettingsSection("Outage EcoFlow checks", samplingSummary(settings.outageSeconds)) {
             SamplingIntervalEditor(settings.outageSeconds, 60) { onChange(settings.copy(outageSeconds = it)) }
-            Text("Starts when charger power is lost or EcoFlow reports a possible outage. Continues while the charger remains disconnected or an outage/recovery is still in progress.", style = MaterialTheme.typography.bodySmall)
+            Text("Starts when charger power is lost, EcoFlow reports a possible outage, or an EcoFlow check fails while the charger still has power. A successful powered-charger retry returns to the normal schedule.", style = MaterialTheme.typography.bodySmall)
+        }
+        ExpandableSettingsSection("Powered-charger failure warning", "After ${settings.poweredFailureThreshold} consecutive failures") {
+            Text("When the charger still has power, retry using the outage-check interval and wait for this many consecutive failed or inconclusive checks before warning. A successful check resets the count. Charger-off warnings keep their existing fail-safe behavior.", style = MaterialTheme.typography.bodySmall)
+            var threshold by remember(settings.poweredFailureThreshold) { mutableStateOf(settings.poweredFailureThreshold.toString()) }
+            OutlinedTextField(threshold, { threshold = it.take(2) }, label = { Text("Failures before warning") }, singleLine = true,
+                supportingText = { Text("1–20; default 5") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            val value = threshold.toIntOrNull()
+            Button({ value?.let { onChange(settings.copy(poweredFailureThreshold = it)) } },
+                enabled = value != null && value in 1..20 && value != settings.poweredFailureThreshold) { Text("Save failure limit") }
         }
     }
         ExpandableSettingsSection("Check duration & updates", "Up to ${settings.checkWindowSeconds}s · ${settings.extraPowerUpdates} extra power reports") {

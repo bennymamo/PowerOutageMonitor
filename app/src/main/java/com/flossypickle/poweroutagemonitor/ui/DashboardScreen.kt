@@ -127,7 +127,9 @@ internal fun DashboardScreen(
     }
     val recentlyRestored = lastEvent?.kind == EventHistoryStore.KIND_CONFIRMED_OUTAGE &&
         statusClock - lastEvent.restoredAtEpochMs in 0 until RESTORED_STATUS_DURATION_MS
-    val samplingIncident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 ||
+    val poweredFailureStreak = sourceStore.powerOceanPoweredFailureStreak()
+    val poweredFailureRetry = snapshot?.externallyPowered == true && poweredFailureStreak > 0
+    val samplingIncident = snapshot?.externallyPowered == false || poweredFailureRetry || sourceStore.assistedEcoFlowOutageStartedAt() > 0 ||
         monitorState.phase in setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
     val activeInterval = if (assistedActive) {
         (if (samplingIncident) assistedSettings.outageSeconds else assistedSettings.normalSeconds).takeIf { it > 0 }
@@ -335,9 +337,11 @@ internal fun DashboardScreen(
                         } else null
                     )
                     if (assistedActive) {
-                        val incident = snapshot?.externallyPowered == false || sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
+                        val incident = snapshot?.externallyPowered == false || poweredFailureRetry || sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
                             setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
-                        StatusRow("EcoFlow checks", samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds), colors.onSurfaceVariant, onOpenEcoFlowSchedule)
+                        val scheduleSummary = samplingSummary(if (incident) assistedSettings.outageSeconds else assistedSettings.normalSeconds) +
+                            if (poweredFailureRetry) " · retry $poweredFailureStreak/${assistedSettings.poweredFailureThreshold}" else ""
+                        StatusRow("EcoFlow checks", scheduleSummary, colors.onSurfaceVariant, onOpenEcoFlowSchedule)
                         val check = powerSourceStatus?.check
                         val manualNotStarted = manualCheckAt > 0 && (check?.requestedAtEpochMs ?: 0) < manualCheckAt
                         val awaitingManualStart = manualNotStarted && checkClock - manualCheckAt < 45_000

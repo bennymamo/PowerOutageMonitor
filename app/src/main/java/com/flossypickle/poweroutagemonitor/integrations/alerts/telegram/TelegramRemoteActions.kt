@@ -84,12 +84,17 @@ internal class TelegramRemoteActions(private val context: Context) {
             appendLine("Charger: ${when(snapshot?.externallyPowered){true -> "powered";false -> "no power";else -> "unknown"}} · Battery ${snapshot?.batteryPercent ?: "?"}%")
             appendLine("Source: ${source.selectedSource().name.lowercase().replace('_', ' ')}")
             if (source.selectedSource() == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
-                appendLine("Charger watching: ${if (source.powerOceanAssistedSettings().enabled) "on" else "off"} · EcoFlow: ${if(source.powerOceanAssistancePaused()) "paused" else "on"}")
+                val assisted = source.powerOceanAssistedSettings()
+                val failureStreak = source.powerOceanPoweredFailureStreak()
+                appendLine("Charger watching: ${if (assisted.enabled) "on" else "off"} · EcoFlow: ${if(source.powerOceanAssistancePaused()) "paused" else "on"}")
                 appendLine("Last check: ${time(check?.requestedAtEpochMs)} · ${check?.cycleState?.name?.lowercase() ?: "not checked"}")
                 appendLine("Last device update: ${time(check?.liveReportAtEpochMs)}")
                 appendLine("Updates: ${check?.deviceUpdates ?: 0} · Values: ${check?.dataHealth?.name?.lowercase()?.replace('_',' ') ?: "unknown"}")
                 check?.observations?.filter { it.label in setOf("Reported grid code", "Meter 1 reading") }?.forEach { appendLine("${it.label}: ${it.value} · ${time(it.receivedAtEpochMs)}") }
                 appendLine("Next check: ${when { !settings.monitoringEnabled -> "monitoring inactive"; source.powerOceanAssistancePaused() -> "paused"; check?.active == true -> "after this check"; else -> time(check?.nextCheckAtEpochMs) }}")
+                if (snapshot?.externallyPowered == true && failureStreak > 0) {
+                    appendLine("EcoFlow retries: $failureStreak/${assisted.poweredFailureThreshold} failures · ${retryInterval(assisted.outageSeconds)}")
+                }
                 appendLine("${last?.detail.orEmpty()}")
             }
             appendLine("Sound: ${if(AudibleAlarmCoordinator(context).isActive(monitor.state(), snapshot)) "playing: /stop_sound" else "not playing"}")
@@ -98,4 +103,10 @@ internal class TelegramRemoteActions(private val context: Context) {
         }
     }
     private fun time(value: Long?) = value?.takeIf { it > 0 }?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(it)) } ?: "not scheduled / unavailable"
+    private fun retryInterval(seconds: Int) = when {
+        seconds == 0 -> "manual checks only"
+        seconds % 3600 == 0 -> "every ${seconds / 3600}h"
+        seconds % 60 == 0 -> "every ${seconds / 60}m"
+        else -> "every ${seconds}s"
+    }
 }

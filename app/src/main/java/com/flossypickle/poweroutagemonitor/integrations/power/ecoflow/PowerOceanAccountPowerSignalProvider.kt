@@ -92,10 +92,11 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 val store = PowerSourceStore(appContext)
                 val assisted = store.powerOceanAssistedSettings()
                 val active = incident()
+                val poweredFailureRetry = chargerPowered == true && store.powerOceanPoweredFailureStreak() > 0
                 val seconds = if (assisted.enabled) {
-                    if (active) assisted.outageSeconds else assisted.normalSeconds
+                    if (active || poweredFailureRetry) assisted.outageSeconds else assisted.normalSeconds
                 } else savedAccount?.refreshSeconds?.coerceAtLeast(60) ?: 60
-                val schedule = PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active, manualRevision.get(), true,
+                val schedule = PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active || poweredFailureRetry, manualRevision.get(), true,
                     store.powerOceanAssistancePaused(), assisted.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
                 val monotonic = android.os.SystemClock.elapsedRealtime()
                 val retryBlocked = monotonic < retryAt && schedule.manualRevision <= attemptedManual
@@ -226,19 +227,26 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { lastFailure = "EcoFlow check unavailable. Connection closed; waiting before retrying." }
+                val qualified = PowerOceanCheckContinuity.completedEvidence(latest, lastVerified, started, lastFailure != null)
+                val completed = qualified ?: latest
+                val poweredFailureStreak = PowerOceanFailureRetryPolicy.nextStreak(
+                    store.powerOceanPoweredFailureStreak(), chargerPowered, qualified == null)
+                store.setPowerOceanPoweredFailureStreak(poweredFailureStreak)
                 val after = store.powerOceanAssistedSettings()
                 val afterIncident = incident()
-                val afterSeconds = if (after.enabled) { if (afterIncident) after.outageSeconds else after.normalSeconds } else account.refreshSeconds.coerceAtLeast(60)
-                sampling.finishCheck(android.os.SystemClock.elapsedRealtime(), schedule.copy(intervalSeconds = afterSeconds.takeIf { it > 0 }, incident = afterIncident,
+                val poweredFailureRetryAfter = chargerPowered == true && poweredFailureStreak > 0
+                val afterSeconds = if (after.enabled) {
+                    if (afterIncident || poweredFailureRetryAfter) after.outageSeconds else after.normalSeconds
+                } else account.refreshSeconds.coerceAtLeast(60)
+                sampling.finishCheck(android.os.SystemClock.elapsedRealtime(), schedule.copy(intervalSeconds = afterSeconds.takeIf { it > 0 },
+                    incident = afterIncident || poweredFailureRetryAfter,
                     paused = store.powerOceanAssistancePaused()))
-                if (lastFailure != null) {
+                if (lastFailure != null && chargerPowered != true) {
                     retryAt = android.os.SystemClock.elapsedRealtime() + backoff
                     backoff = (backoff * 2).coerceAtMost(30 * 60_000L)
                 } else { retryAt = 0; backoff = 60_000 }
                 val now = System.currentTimeMillis()
                 val next = sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
-                val qualified = PowerOceanCheckContinuity.completedEvidence(latest, lastVerified, started, lastFailure != null)
-                val completed = qualified ?: latest
                 if (qualified == null) {
                     lastConfirmedOnlineAt = null; lastVerified = null
                 }
@@ -247,8 +255,15 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     cycleState = if (lastFailure == null) PowerSourceCheck.CycleState.WAITING else PowerSourceCheck.CycleState.FAILED,
                     finishedAtEpochMs = now, nextCheckAtEpochMs = next)
                 lastVerified = lastVerified?.copy(check = completedCheck)
+                val resultDetail = when {
+                    qualified != null -> lastFailure ?: "EcoFlow check complete. Connection closed."
+                    chargerPowered == true && poweredFailureStreak < after.poweredFailureThreshold ->
+                        (lastFailure ?: "EcoFlow check did not obtain current grid evidence.") +
+                            " Retrying at the outage-check interval; warning after ${after.poweredFailureThreshold} consecutive failures."
+                    else -> lastFailure ?: "EcoFlow check did not obtain current grid evidence."
+                }
                 emit(qualified?.availability ?: GridAvailability.UNKNOWN,
-                    lastFailure ?: "EcoFlow check complete. Connection closed.", completed?.recoveryPending ?: false,
+                    resultDetail, completed?.recoveryPending ?: false,
                     completed?.evidenceReceivedAtEpochMs, completed?.dataPossiblyStalled,
                     completedCheck)
                 delay(1000)
