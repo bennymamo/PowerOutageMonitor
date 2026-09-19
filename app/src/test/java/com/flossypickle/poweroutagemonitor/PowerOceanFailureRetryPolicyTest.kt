@@ -22,4 +22,12 @@ class PowerOceanFailureRetryPolicyTest {
         assertEquals(0, PowerOceanFailureRetryPolicy.nextStreak(4, null, true))
         assertFalse(PowerOceanFailureRetryPolicy.deferPoweredWarning(false, true, 1, 5))
     }
+
+    @Test fun `broker session refresh occurs at configured failure multiples`() {
+        assertFalse(PowerOceanFailureRetryPolicy.refreshSession(1, 2, true))
+        assertTrue(PowerOceanFailureRetryPolicy.refreshSession(2, 2, true))
+        assertTrue(PowerOceanFailureRetryPolicy.refreshSession(4, 2, true))
+        assertFalse(PowerOceanFailureRetryPolicy.refreshSession(2, 0, true))
+        assertFalse(PowerOceanFailureRetryPolicy.refreshSession(2, 2, false))
+    }
 }

@@ -46,6 +46,15 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
             Button({ value?.let { onChange(settings.copy(poweredFailureThreshold = it)) } },
                 enabled = value != null && value in 1..20 && value != settings.poweredFailureThreshold) { Text("Save failure limit") }
         }
+        ExpandableSettingsSection("Connection recovery", if (settings.sessionRefreshFailureThreshold == 0) "Automatic login refresh off" else "Refresh after ${settings.sessionRefreshFailureThreshold} connection failures") {
+            Text("Every retry opens a new secure broker connection. After this many consecutive connection-timeout failures, the app also discards its cached EcoFlow session and broker credentials so the following retry logs in again. Zero keeps the saved session until EcoFlow explicitly rejects it.", style = MaterialTheme.typography.bodySmall)
+            var refreshFailures by remember(settings.sessionRefreshFailureThreshold) { mutableStateOf(settings.sessionRefreshFailureThreshold.toString()) }
+            OutlinedTextField(refreshFailures, { refreshFailures = it.take(2) }, label = { Text("Failures before login refresh") }, singleLine = true,
+                supportingText = { Text("0–10; default 2; zero disables automatic refresh") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            val refreshValue = refreshFailures.toIntOrNull()
+            Button({ refreshValue?.let { onChange(settings.copy(sessionRefreshFailureThreshold = it)) } },
+                enabled = refreshValue != null && refreshValue in 0..10 && refreshValue != settings.sessionRefreshFailureThreshold) { Text("Save connection recovery") }
+        }
     }
         ExpandableSettingsSection("Check duration & updates", "Up to ${settings.checkWindowSeconds}s · ${settings.extraPowerUpdates} extra power reports") {
             Text("Listen to the first power report and extra reports to see whether values change. A check ends early when enough changing reports and usable grid/meter evidence arrive; otherwise it ends at the time limit. The connection is then closed. Missed schedule slots are skipped, so checks never overlap.", style = MaterialTheme.typography.bodySmall)

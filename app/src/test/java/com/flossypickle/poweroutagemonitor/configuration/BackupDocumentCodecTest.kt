@@ -46,6 +46,19 @@ class BackupDocumentCodecTest {
                 "power.account.poweredFailureThreshold=21").toByteArray())
         }
     }
+    @Test fun sessionRefreshThresholdRoundTripsAndOlderBackupsDefaultToTwo() {
+        val original = completeDocument()
+        val configured = original.copy(powerSources = original.powerSources!!.copy(
+            powerOceanAssisted = original.powerSources.powerOceanAssisted.copy(sessionRefreshFailureThreshold = 4)))
+        val text = BackupDocumentCodec.encode(configured).toString(Charsets.UTF_8)
+        assertEquals(configured, BackupDocumentCodec.decode(text.toByteArray()))
+        val old = text.lineSequence().filterNot { it.startsWith("power.account.sessionRefreshFailureThreshold=") }.joinToString("\n")
+        assertEquals(2, BackupDocumentCodec.decode(old.toByteArray()).powerSources!!.powerOceanAssisted.sessionRefreshFailureThreshold)
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(text.replace("power.account.sessionRefreshFailureThreshold=4",
+                "power.account.sessionRefreshFailureThreshold=11").toByteArray())
+        }
+    }
     @Test fun remoteChoicesRoundTripAndOldBackupsCannotEnableControl() {
         val original = completeDocument()
         val config = com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore.Settings(

@@ -233,6 +233,14 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     store.powerOceanPoweredFailureStreak(), chargerPowered, qualified == null)
                 store.setPowerOceanPoweredFailureStreak(poweredFailureStreak)
                 val after = store.powerOceanAssistedSettings()
+                val brokerConnectionFailed = qualified == null &&
+                    lastFailure?.contains("while connecting to the secure broker") == true
+                val refreshSessionBeforeNextRetry = PowerOceanFailureRetryPolicy.refreshSession(
+                    poweredFailureStreak, after.sessionRefreshFailureThreshold, brokerConnectionFailed)
+                if (refreshSessionBeforeNextRetry) {
+                    session = null
+                    credentials = null
+                }
                 val afterIncident = incident()
                 val poweredFailureRetryAfter = chargerPowered == true && poweredFailureStreak > 0
                 val afterSeconds = if (after.enabled) {
@@ -259,7 +267,8 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     qualified != null -> lastFailure ?: "EcoFlow check complete. Connection closed."
                     chargerPowered == true && poweredFailureStreak < after.poweredFailureThreshold ->
                         (lastFailure ?: "EcoFlow check did not obtain current grid evidence.") +
-                            " Retrying at the outage-check interval; warning after ${after.poweredFailureThreshold} consecutive failures."
+                            " Retrying at the outage-check interval; warning after ${after.poweredFailureThreshold} consecutive failures." +
+                            if (refreshSessionBeforeNextRetry) " The saved EcoFlow session will be refreshed before the next retry." else ""
                     else -> lastFailure ?: "EcoFlow check did not obtain current grid evidence."
                 }
                 emit(qualified?.availability ?: GridAvailability.UNKNOWN,

@@ -100,7 +100,8 @@ internal class PowerSourceStore(context: Context) {
         preferences.getBoolean("account_ignore_unchanged", false),
         preferences.getInt("account_window_seconds", 120), preferences.getInt("account_extra_updates", 2),
         preferences.getBoolean("account_notify_unknown", true), preferences.getBoolean("account_notify_charger_return", true),
-        preferences.getInt("account_powered_failure_threshold", 5))
+        preferences.getInt("account_powered_failure_threshold", 5),
+        preferences.getInt("account_session_refresh_failure_threshold", 2))
 
     fun setPowerOceanAssistedSettings(settings: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistedSettings) {
         val changedMode = powerOceanAssistedSettings().enabled != settings.enabled
@@ -111,6 +112,7 @@ internal class PowerSourceStore(context: Context) {
             .putBoolean("account_notify_unknown", settings.notifyOnUnknown)
             .putBoolean("account_notify_charger_return", settings.notifyOnChargerReturn)
             .putInt("account_powered_failure_threshold", settings.poweredFailureThreshold)
+            .putInt("account_session_refresh_failure_threshold", settings.sessionRefreshFailureThreshold)
         if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
             .remove("account_ecoflow_outage_started").remove("account_powered_failure_streak")
         check(edit.commit()) { "Unable to save charger-first settings" }

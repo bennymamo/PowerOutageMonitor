@@ -350,6 +350,7 @@ internal object BackupDocumentCodec {
         p["power.account.notifyUnknown"] = data.powerOceanAssisted.notifyOnUnknown.toString()
         p["power.account.notifyChargerReturn"] = data.powerOceanAssisted.notifyOnChargerReturn.toString()
         p["power.account.poweredFailureThreshold"] = data.powerOceanAssisted.poweredFailureThreshold.toString()
+        p["power.account.sessionRefreshFailureThreshold"] = data.powerOceanAssisted.sessionRefreshFailureThreshold.toString()
         data.powerOceanAccount?.let {
             p["power.account.email"] = it.email
             p["power.account.password"] = it.password
@@ -401,7 +402,8 @@ internal object BackupDocumentCodec {
                 if (p.containsKey("power.account.extraUpdates")) p.int("power.account.extraUpdates") else 2,
                 !p.containsKey("power.account.notifyUnknown") || p.boolean("power.account.notifyUnknown"),
                 !p.containsKey("power.account.notifyChargerReturn") || p.boolean("power.account.notifyChargerReturn"),
-                if (p.containsKey("power.account.poweredFailureThreshold")) p.int("power.account.poweredFailureThreshold") else 5)
+                if (p.containsKey("power.account.poweredFailureThreshold")) p.int("power.account.poweredFailureThreshold") else 5,
+                if (p.containsKey("power.account.sessionRefreshFailureThreshold")) p.int("power.account.sessionRefreshFailureThreshold") else 2)
         )
     }
 

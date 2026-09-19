@@ -6,11 +6,12 @@ internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
     val warnOnUnchanged: Boolean = true, val ignoreUnchanged: Boolean = false,
     val checkWindowSeconds: Int = 120, val extraPowerUpdates: Int = 2,
     val notifyOnUnknown: Boolean = true, val notifyOnChargerReturn: Boolean = true,
-    val poweredFailureThreshold: Int = 5) {
+    val poweredFailureThreshold: Int = 5, val sessionRefreshFailureThreshold: Int = 2) {
     init {
         require(valid(normalSeconds) && valid(outageSeconds))
         require(checkWindowSeconds in 30..300 && extraPowerUpdates in 1..10)
         require(poweredFailureThreshold in 1..20)
+        require(sessionRefreshFailureThreshold in 0..10)
     }
     companion object { fun valid(seconds: Int) = seconds == 0 || seconds in 5..86_400 }
 }
@@ -24,6 +25,9 @@ internal object PowerOceanFailureRetryPolicy {
 
     fun deferPoweredWarning(chargerPowered: Boolean?, failed: Boolean, streak: Int, threshold: Int) =
         failed && chargerPowered == true && streak < threshold
+
+    fun refreshSession(streak: Int, threshold: Int, connectionFailed: Boolean) =
+        connectionFailed && threshold > 0 && streak > 0 && streak % threshold == 0
 }
 
 internal data class PowerOceanReadSchedule(val intervalSeconds: Int?, val incident: Boolean,

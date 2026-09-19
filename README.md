@@ -142,6 +142,8 @@ Outage/restoration alerts include the charger state and available grid/meter obs
 
 When the charger still has power, a failed or inconclusive EcoFlow check switches temporarily to the configured outage-check interval. The app warns only after the configured number of consecutive failures, five by default, then groups further failures into the same episode. A successful check resets the count, restores the normal schedule and sends a recovery only if a warning was sent. Charger-off fail-safe warnings keep their separate behavior. Both the retry interval and powered-charger failure limit are configurable and included in power-source backups.
 
+Every retry opens a new secure broker connection. After repeated broker connection failures, two by default, the app also clears its cached EcoFlow login session and broker credentials so the following retry logs in again. This deeper recovery threshold is configurable from zero to ten; zero disables it. Successful normal checks continue reusing the saved session, which avoids an unnecessary login for every check.
+
 ### Audible alarm and scheduled messages
 
 Open **Settings → Alerts & sound → Audible alarm**. Choose the built-in beep or **Choose Android alarm sound**, then **Play 5-second test**. Available custom sounds depend on the phone's picker. Expand **Repeats and timing** or **Battery and volume** to adjust repeats, optional exact timing, loudness and battery cutoff.
