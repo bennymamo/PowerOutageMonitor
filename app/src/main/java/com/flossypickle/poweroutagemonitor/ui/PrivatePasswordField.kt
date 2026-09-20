@@ -21,9 +21,29 @@ import androidx.compose.ui.text.input.VisualTransformation
 /** Revealing characters must not change the IME from password input to ordinary text. */
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
-internal fun PrivatePasswordField(label: String, value: String, onChange: (String) -> Unit) {
+internal fun PrivatePasswordField(
+    label: String,
+    value: String,
+    enabled: Boolean = true,
+    maxLength: Int = 200,
+    onChange: (String) -> Unit
+) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(value.isEmpty()) { if (value.isEmpty()) visible = false }
+    SecureScreen(visible)
+    PrivateTextInputProtection {
+        OutlinedTextField(value, { if (it.length <= maxLength) onChange(it) }, Modifier.fillMaxWidth(),
+            label = { Text(label) }, singleLine = true,
+            enabled = enabled,
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+            trailingIcon = { TextButton(enabled = enabled, onClick = { visible = !visible }) { Text(if (visible) "Hide" else "Show") } })
+    }
+}
+
+@Composable
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun PrivateTextInputProtection(content: @Composable () -> Unit) {
     val interceptor = remember {
         PlatformTextInputInterceptor { request, next ->
             next.startInputMethod(PlatformTextInputMethodRequest { info ->
@@ -34,11 +54,7 @@ internal fun PrivatePasswordField(label: String, value: String, onChange: (Strin
         }
     }
     InterceptPlatformTextInput(interceptor) {
-        OutlinedTextField(value, { if (it.length <= 200) onChange(it) }, Modifier.fillMaxWidth(),
-            label = { Text(label) }, singleLine = true,
-            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-            trailingIcon = { TextButton(onClick = { visible = !visible }) { Text(if (visible) "Hide" else "Show") } })
+        content()
     }
 }
 

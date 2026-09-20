@@ -40,33 +40,39 @@ internal fun PowerOceanSamplingSettings(settings: PowerOceanAssistedSettings, on
         ExpandableSettingsSection("Powered-charger failure warning", "After ${settings.poweredFailureThreshold} consecutive failures") {
             Text("When the charger still has power, retry using the outage-check interval and wait for this many consecutive failed or inconclusive checks before warning. A successful check resets the count. Charger-off warnings keep their existing fail-safe behavior.", style = MaterialTheme.typography.bodySmall)
             var threshold by remember(settings.poweredFailureThreshold) { mutableStateOf(settings.poweredFailureThreshold.toString()) }
-            OutlinedTextField(threshold, { threshold = it.take(2) }, label = { Text("Failures before warning") }, singleLine = true,
+            var thresholdSaved by remember { mutableStateOf(false) }
+            OutlinedTextField(threshold, { threshold = it.take(2); thresholdSaved = false }, label = { Text("Failures before warning") }, singleLine = true,
                 supportingText = { Text("1–20; default 5") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
             val value = threshold.toIntOrNull()
-            Button({ value?.let { onChange(settings.copy(poweredFailureThreshold = it)) } },
+            Button({ value?.let { onChange(settings.copy(poweredFailureThreshold = it)); thresholdSaved = true } },
                 enabled = value != null && value in 1..20 && value != settings.poweredFailureThreshold) { Text("Save failure limit") }
+            if (thresholdSaved) SaveConfirmation()
         }
         ExpandableSettingsSection("Connection recovery", if (settings.sessionRefreshFailureThreshold == 0) "Automatic login refresh off" else "Refresh after ${settings.sessionRefreshFailureThreshold} connection failures") {
             Text("Every retry opens a new secure broker connection. After this many consecutive connection-timeout failures, the app also discards its cached EcoFlow session and broker credentials so the following retry logs in again. Zero keeps the saved session until EcoFlow explicitly rejects it.", style = MaterialTheme.typography.bodySmall)
             var refreshFailures by remember(settings.sessionRefreshFailureThreshold) { mutableStateOf(settings.sessionRefreshFailureThreshold.toString()) }
-            OutlinedTextField(refreshFailures, { refreshFailures = it.take(2) }, label = { Text("Failures before login refresh") }, singleLine = true,
+            var recoverySaved by remember { mutableStateOf(false) }
+            OutlinedTextField(refreshFailures, { refreshFailures = it.take(2); recoverySaved = false }, label = { Text("Failures before login refresh") }, singleLine = true,
                 supportingText = { Text("0–10; default 2; zero disables automatic refresh") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
             val refreshValue = refreshFailures.toIntOrNull()
-            Button({ refreshValue?.let { onChange(settings.copy(sessionRefreshFailureThreshold = it)) } },
+            Button({ refreshValue?.let { onChange(settings.copy(sessionRefreshFailureThreshold = it)); recoverySaved = true } },
                 enabled = refreshValue != null && refreshValue in 0..10 && refreshValue != settings.sessionRefreshFailureThreshold) { Text("Save connection recovery") }
+            if (recoverySaved) SaveConfirmation()
         }
     }
         ExpandableSettingsSection("Check duration & updates", "Up to ${settings.checkWindowSeconds}s · ${settings.extraPowerUpdates} extra power reports") {
             Text("Listen to the first power report and extra reports to see whether values change. A check ends early when enough changing reports and usable grid/meter evidence arrive; otherwise it ends at the time limit. The connection is then closed. Missed schedule slots are skipped, so checks never overlap.", style = MaterialTheme.typography.bodySmall)
             var window by remember(settings.checkWindowSeconds) { mutableStateOf(settings.checkWindowSeconds.toString()) }
             var extra by remember(settings.extraPowerUpdates) { mutableStateOf(settings.extraPowerUpdates.toString()) }
-            OutlinedTextField(window, { window = it.take(3) }, label = { Text("Maximum listening time · seconds") }, singleLine = true,
+            var limitsSaved by remember { mutableStateOf(false) }
+            OutlinedTextField(window, { window = it.take(3); limitsSaved = false }, label = { Text("Maximum listening time · seconds") }, singleLine = true,
                 supportingText = { Text("30–300 seconds; default 120") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(extra, { extra = it.take(2) }, label = { Text("Extra power reports") }, singleLine = true,
+            OutlinedTextField(extra, { extra = it.take(2); limitsSaved = false }, label = { Text("Extra power reports") }, singleLine = true,
                 supportingText = { Text("1–10; default 2 after the first report") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
             val w = window.toIntOrNull(); val e = extra.toIntOrNull()
-            Button({ if (w != null && e != null) onChange(settings.copy(checkWindowSeconds = w, extraPowerUpdates = e)) },
+            Button({ if (w != null && e != null) { onChange(settings.copy(checkWindowSeconds = w, extraPowerUpdates = e)); limitsSaved = true } },
                 enabled = w != null && w in 30..300 && e != null && e in 1..10 && (w != settings.checkWindowSeconds || e != settings.extraPowerUpdates)) { Text("Save check limits") }
+            if (limitsSaved) SaveConfirmation()
         }
         ExpandableSettingsSection("Connection & live data", "Closed between checks; saved login reused") {
             Text("A verified grid reading remains valid for the current normal or outage interval plus one minute, measured from when the device report arrived. Failed or inconclusive checks become Unknown immediately. Manual-only readings expire after one minute.", style = MaterialTheme.typography.bodySmall)
@@ -80,19 +86,21 @@ internal fun samplingSummary(seconds: Int) = if (seconds == 0) "Manual only" els
 
 @Composable
 private fun SamplingIntervalEditor(seconds: Int, defaultSeconds: Int, onSave: (Int) -> Unit) {
+    var saveConfirmed by remember { mutableStateOf(false) }
     SettingSwitch("Manual checks only", "Stay disconnected until you choose Check now in this phase.", seconds == 0,
-        { onSave(if (it) 0 else defaultSeconds) })
+        { saveConfirmed = false; onSave(if (it) 0 else defaultSeconds) })
     if (seconds == 0) return
     var unit by remember(seconds) { mutableIntStateOf(if (seconds % 3600 == 0) 3600 else if (seconds % 60 == 0) 60 else 1) }
     var quantity by remember(seconds) { mutableStateOf((seconds / unit).toString()) }
-    OutlinedTextField(quantity, { quantity = it.take(8) }, label = { Text("Interval") }, singleLine = true,
+    OutlinedTextField(quantity, { quantity = it.take(8); saveConfirmed = false }, label = { Text("Interval") }, singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(1 to "Seconds", 60 to "Minutes", 3600 to "Hours").forEach { (value, title) ->
-            FilterChip(unit == value, { unit = value }, label = { Text(title) })
+            FilterChip(unit == value, { unit = value; saveConfirmed = false }, label = { Text(title) })
         }
     }
     val value = quantity.toLongOrNull()?.let { it * unit }?.takeIf { it in 5..86_400 }?.toInt()
     Text("Choose 5 seconds to 24 hours. Intervals below one minute create substantially more traffic.", style = MaterialTheme.typography.bodySmall)
-    Button({ value?.let(onSave) }, enabled = value != null && value != seconds, modifier = Modifier) { Text("Save interval") }
+    Button({ value?.let { onSave(it); saveConfirmed = true } }, enabled = value != null && value != seconds, modifier = Modifier) { Text("Save interval") }
+    if (saveConfirmed) SaveConfirmation()
 }

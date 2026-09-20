@@ -18,6 +18,8 @@ import android.os.Looper
 import android.os.PowerManager
 import android.net.wifi.WifiManager
 import androidx.core.content.ContextCompat
+import com.flossypickle.poweroutagemonitor.diagnostics.MonitoringEvidenceStore
+import com.flossypickle.poweroutagemonitor.diagnostics.SystemHealthMonitor
 import com.flossypickle.poweroutagemonitor.MainActivity
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.R
@@ -43,6 +45,8 @@ import java.util.concurrent.TimeUnit
 /** Event-driven foreground service. It performs no polling while power state is stable. */
 internal class MonitoringService : Service() {
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var connectivityEvidence: SystemHealthMonitor
+    private var lastInternetAvailable: Boolean? = null
     private lateinit var coordinator: MonitoringCoordinator
     private lateinit var audibleAlarm: AudibleAlarmCoordinator
     private var activeSource = PowerSourceStore.Source.ANDROID_CHARGER
@@ -57,6 +61,8 @@ internal class MonitoringService : Service() {
     private var ecoFlowHadUnknown = false
     private var lastEcoFlowStatusPersistedAt = 0L
     private var lastEcoFlowUiRefreshAt = 0L
+    private var scheduledDeadline: Long? = null
+    private var handoffWakeLock: PowerManager.WakeLock? = null
     private val deadlineCheck = Runnable { reconcileSelectedPower() }
     private var historyStartRecorded = false
     private lateinit var remoteControl: TelegramRemoteController
@@ -75,8 +81,12 @@ internal class MonitoringService : Service() {
         isRunning = MonitorStore(this).settings().monitoringEnabled
         coordinator = MonitoringCoordinator(this)
         audibleAlarm = AudibleAlarmCoordinator(this)
-        remoteControl = TelegramRemoteController(this, { command ->
-            val task = FutureTask { TelegramRemoteActions(this).execute(command) }
+        remoteControl = TelegramRemoteController(this, { command, deliveryGeneration ->
+            val task = FutureTask {
+                if (deliveryGeneration != MonitorStore(this).deliveryGeneration())
+                    "Configuration changed. Send the command again after restore completes."
+                else TelegramRemoteActions(this).execute(command)
+            }
             handler.post(task)
             try { task.get(15, TimeUnit.SECONDS) } finally { task.cancel(false) }
         })
@@ -84,6 +94,13 @@ internal class MonitoringService : Service() {
         createNotificationChannel()
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
         registerBatteryReceiver()
+        connectivityEvidence = SystemHealthMonitor(this) { health ->
+            if (lastInternetAvailable != health.internetAvailable && MonitorStore(this).settings().monitoringEnabled) {
+                MonitoringEvidenceStore(this).record(MonitoringEvidenceStore.Event.NETWORK_CHANGED)
+            }
+            lastInternetAvailable = health.internetAvailable
+        }
+        connectivityEvidence.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -134,9 +151,12 @@ internal class MonitoringService : Service() {
     }
 
     override fun onDestroy() {
+        connectivityEvidence.stop()
         remoteControl.stop()
         isRunning = false
         handler.removeCallbacks(deadlineCheck)
+        scheduledDeadline = null
+        runCatching { handoffWakeLock?.takeIf { it.isHeld }?.release() }
         sourceGeneration++
         latestPrimarySignal = null
         ecoFlowProvider?.stop()
@@ -166,6 +186,8 @@ internal class MonitoringService : Service() {
 
     private fun suspendPowerMonitoring() {
         handler.removeCallbacks(deadlineCheck)
+        scheduledDeadline = null
+        runCatching { handoffWakeLock?.takeIf { it.isHeld }?.release() }
         sourceGeneration++
         ecoFlowProvider?.stop(); ecoFlowProvider = null; latestPrimarySignal = null
         lastEcoFlowAvailability = null; ecoFlowHadUnknown = false; releaseEcoFlowLocks()
@@ -206,7 +228,9 @@ internal class MonitoringService : Service() {
         if (!MonitorStore(this).settings().monitoringEnabled) return
         val selected = PowerSourceStore(this).selectedSource()
         if (selected != activeSource ||
-            selected != PowerSourceStore.Source.ANDROID_CHARGER && ecoFlowProvider == null
+            selected != PowerSourceStore.Source.ANDROID_CHARGER && ecoFlowProvider == null ||
+            selected == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
+                (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.isRunning() == false
         ) {
             reloadPowerSource()
             return
@@ -214,7 +238,15 @@ internal class MonitoringService : Service() {
         when (selected) {
             PowerSourceStore.Source.ANDROID_CHARGER -> processAndroid(currentBatterySnapshot())
             PowerSourceStore.Source.ECOFLOW_MODBUS -> (ecoFlowProvider as? EcoFlowModbusPowerSignalProvider)?.refresh()
-            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> onBatterySnapshot(currentBatterySnapshot())
+            PowerSourceStore.Source.ECOFLOW_ACCOUNT -> {
+                // The alarm's receiver wake lock ends before the provider's IO loop resumes.
+                if (handoffWakeLock?.isHeld != true) {
+                    handoffWakeLock = getSystemService(PowerManager::class.java)
+                        .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:account-handoff")
+                        .apply { setReferenceCounted(false); acquire(10_000L) }
+                }
+                onBatterySnapshot(currentBatterySnapshot())
+            }
         }
     }
 
@@ -249,7 +281,6 @@ internal class MonitoringService : Service() {
             process(currentBatterySnapshot(), null, System.currentTimeMillis())
             ecoFlowProvider = PowerOceanAccountPowerSignalProvider(this).also { provider ->
                 provider.updateCharger(currentBatterySnapshot().externallyPowered)
-                acquireEcoFlowLocks()
                 provider.start { signal -> handler.post {
                     if (sourceGeneration == generation && isRunning) processEcoFlow(signal)
                 } }
@@ -264,11 +295,15 @@ internal class MonitoringService : Service() {
         lastBroadcastPowered = snapshot.externallyPowered
         latestBatterySnapshot = snapshot
         if (!MonitorStore(this).settings().monitoringEnabled) return
+        if (previouslyPowered != snapshot.externallyPowered) {
+            val monitor = MonitorStore(this)
+            monitor.save(monitor.state(), snapshot, System.currentTimeMillis())
+            MonitoringEvidenceStore(this).record(MonitoringEvidenceStore.Event.CHARGER_CHANGED)
+        }
         (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.updateCharger(snapshot.externallyPowered)
         // The sticky battery broadcast can arrive before the provider's first check signal.
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && latestPrimarySignal == null) {
-            if (ecoFlowProvider == null) reloadPowerSource()
-            return
+            if (ecoFlowProvider == null) { reloadPowerSource(); return }
         }
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT && PowerSourceStore(this).powerOceanAssistedSettings().enabled) {
             val sources = PowerSourceStore(this)
@@ -283,6 +318,8 @@ internal class MonitoringService : Service() {
                     alerts.materializePending()
             }
             processEcoFlow(latestPrimarySignal ?: PowerSignal(GridAvailability.UNKNOWN, System.currentTimeMillis(), PowerSourceStore.POWEROCEAN_PROVIDER_ID))
+            sendBroadcast(Intent(MonitoringCoordinator.ACTION_MONITOR_STATE_CHANGED).setPackage(packageName))
+            refreshNotification()
             return
         }
         if (activeSource == PowerSourceStore.Source.ANDROID_CHARGER) {
@@ -350,6 +387,12 @@ internal class MonitoringService : Service() {
             primary.check?.cycleState != previousCheck?.cycleState ||
             primary.check?.gridEvidenceAvailable != previousCheck?.gridEvidenceAvailable
         latestPrimarySignal = primary
+        if (checkChanged && (primary.check?.active == false ||
+                primary.check?.requestedAtEpochMs != previousCheck?.requestedAtEpochMs)) {
+            MonitoringEvidenceStore(this).record(
+                if (primary.check?.active == true) MonitoringEvidenceStore.Event.CHECK_STARTED
+                else MonitoringEvidenceStore.Event.CHECK_FINISHED, primary.check)
+        }
         val sourceStore = PowerSourceStore(this)
         val assisted = sourceStore.powerOceanAssistedSettings()
         if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
@@ -381,25 +424,26 @@ internal class MonitoringService : Service() {
         val monitorStore = MonitorStore(this)
         val state = monitorStore.state()
         val settings = monitorStore.settings()
+        val now = System.currentTimeMillis()
         val deadlineReached = OutageEngine.deadlineEpochMs(
             state, settings.outageDelayMs, settings.restoreDelayMs
-        )?.let { signal.observedAtEpochMs >= it } == true
+        )?.let { now >= it } == true
         var fullStateProcessRan = false
         when {
             powered == null && !ecoFlowHadUnknown -> {
                 ecoFlowHadUnknown = true
-                process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
+                process(currentBatterySnapshot(), null, now)
                 fullStateProcessRan = true
             }
             powered == null -> Unit
             ecoFlowHadUnknown -> {
                 ecoFlowHadUnknown = false
-                process(currentBatterySnapshot(), null, signal.observedAtEpochMs)
-                process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+                process(currentBatterySnapshot(), null, now)
+                process(currentBatterySnapshot(), powered, now)
                 fullStateProcessRan = true
             }
             availabilityChanged || deadlineReached -> {
-                process(currentBatterySnapshot(), powered, signal.observedAtEpochMs)
+                process(currentBatterySnapshot(), powered, now)
                 fullStateProcessRan = true
             }
         }
@@ -407,8 +451,9 @@ internal class MonitoringService : Service() {
             coordinator.processScheduledOnly(
                 currentBatterySnapshot(),
                 powered,
-                signal.observedAtEpochMs
+                now
             )
+            scheduleInProcessDeadline(state, force = false)
         }
         if (availabilityChanged || checkChanged || signal.observedAtEpochMs - lastEcoFlowUiRefreshAt >= UI_REFRESH_INTERVAL_MS) {
             lastEcoFlowUiRefreshAt = signal.observedAtEpochMs
@@ -459,15 +504,30 @@ internal class MonitoringService : Service() {
             .notify(NOTIFICATION_ID, buildNotification(store.state(), store.lastSnapshot()))
     }
 
-    private fun scheduleInProcessDeadline(state: OutageEngine.State) {
-        handler.removeCallbacks(deadlineCheck)
+    private fun scheduleInProcessDeadline(state: OutageEngine.State, force: Boolean = true) {
         val settings = MonitorStore(this).settings()
-        val deadline = OutageEngine.deadlineEpochMs(
-            state,
-            settings.outageDelayMs,
-            settings.restoreDelayMs
-        ) ?: return
-        handler.postDelayed(deadlineCheck, (deadline - System.currentTimeMillis()).coerceAtLeast(0))
+        val sources = PowerSourceStore(this)
+        val assistance = sources.powerOceanAssistedSettings()
+        val lossAt = sources.assistedChargerLossStartedAt()
+        val fallback = if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
+            assistance.enabled && !sources.powerOceanAssistancePaused() &&
+            assistance.outageSeconds > 0 && lossAt > 0) {
+            maxOf(lossAt + assistance.checkWindowSeconds * 1000L + 60_000L,
+                latestPrimarySignal?.check?.takeIf { it.active && it.requestedAtEpochMs >= lossAt }
+                    ?.let { it.requestedAtEpochMs + assistance.checkWindowSeconds * 1000L + 60_000L } ?: 0L)
+                .takeIf { it > System.currentTimeMillis() }
+        } else null
+        val deadline = listOfNotNull(
+            OutageEngine.deadlineEpochMs(state, settings.outageDelayMs, settings.restoreDelayMs),
+            fallback
+        ).minOrNull()
+        if (!force && deadline == scheduledDeadline) return
+        scheduledDeadline = deadline
+        handler.removeCallbacks(deadlineCheck)
+        DeadlineScheduler(this).scheduleAt(deadline)
+        if (deadline != null) {
+            handler.postDelayed(deadlineCheck, (deadline - System.currentTimeMillis()).coerceAtLeast(0))
+        }
     }
 
     private fun startAsForeground(notification: Notification) {

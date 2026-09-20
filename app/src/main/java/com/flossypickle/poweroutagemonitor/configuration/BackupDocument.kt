@@ -5,6 +5,7 @@ import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmEngine
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.legacyAlertOrderingKey
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
@@ -96,9 +97,19 @@ internal data class BackupDocument(
 internal object BackupDocumentCodec {
     private const val FORMAT = "fp-grid-monitor-backup"
     private const val VERSION = 1
-    private const val MAX_ITEMS = 1_000
+    private const val MAX_ITEMS = 10_000
 
     fun encode(document: BackupDocument): ByteArray {
+        require(document.history?.powerEvents?.size.orZero() <= MAX_ITEMS &&
+            document.history?.operationalEvents?.size.orZero() <= MAX_ITEMS &&
+            document.activeState?.deliveryQueue?.size.orZero() <= MAX_ITEMS &&
+            document.activeState?.pendingEvents?.size.orZero() <= MAX_ITEMS &&
+            document.alerts?.telegram?.destinations?.size.orZero() <= MAX_ITEMS &&
+            document.alerts?.telegramRemote?.trustedChatIds?.size.orZero() <= MAX_ITEMS &&
+            document.alerts?.gmail?.recipients?.size.orZero() <= MAX_ITEMS &&
+            document.alerts?.resend?.recipients?.size.orZero() <= MAX_ITEMS &&
+            document.alerts?.sms?.recipients?.size.orZero() <= MAX_ITEMS
+        ) { "Backup contains too many records. Export fewer categories or wait for pending deliveries to finish." }
         val p = Properties()
         p["format"] = FORMAT
         p["version"] = VERSION.toString()
@@ -111,9 +122,16 @@ internal object BackupDocumentCodec {
         document.powerSources?.let { writePowerSources(p, it) }
         document.history?.let { writeHistory(p, it) }
         document.activeState?.let { writeActiveState(p, it) }
-        return StringWriter().use { writer ->
+        val bytes = StringWriter().use { writer ->
             p.store(writer, "Flockle Grid Outage Monitor encrypted backup payload")
             writer.toString().toByteArray(Charsets.UTF_8)
+        }
+        try {
+            decode(bytes) // Every exported payload must satisfy the import constraints.
+            return bytes
+        } catch (error: Exception) {
+            bytes.fill(0)
+            throw error
         }
     }
 
@@ -549,14 +567,18 @@ internal object BackupDocumentCodec {
         this["$prefix.kind"] = item.kind.name
         this["$prefix.title"] = item.title
         this["$prefix.body"] = item.body
+        this["$prefix.ordering"] = item.orderingKey
     }
 
     private fun Properties.readMessage(prefix: String) = AlertMessage(
         eventId = required("$prefix.event"),
         kind = enumValue<AlertKind>("$prefix.kind"),
         title = required("$prefix.title"),
-        body = required("$prefix.body")
+        body = required("$prefix.body"),
+        orderingKey = getProperty("$prefix.ordering") ?: legacyAlertOrderingKey(required("$prefix.event"), enumValue<AlertKind>("$prefix.kind"))
     )
+
+    private fun Int?.orZero(): Int = this ?: 0
 
     private fun Properties.required(key: String): String = getProperty(key)
         ?: throw IllegalArgumentException("Backup is missing $key.")

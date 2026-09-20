@@ -59,7 +59,8 @@ internal data class DiagnosticsReport(
     val automaticBackupFrequency: String = "Off",
     val automaticBackupRetainedCopies: Int = 0,
     val lastBackupSuccess: String = "Never",
-    val lastBackupError: String? = null
+    val lastBackupError: String? = null,
+    val monitoringEvidence: List<String> = emptyList()
 ) {
     fun asPlainText(): String = buildString {
         appendLine("Flockle Grid Outage Monitor diagnostics")
@@ -102,6 +103,9 @@ internal data class DiagnosticsReport(
         appendLine("Backup copies retained: $automaticBackupRetainedCopies")
         appendLine("Last successful backup: $lastBackupSuccess")
         lastBackupError?.let { appendLine("Last backup error: $it") }
+        appendLine("Monitoring connectivity/timing evidence (UTC epoch milliseconds):")
+        appendLine("Phone validation is Android's network assessment; EcoFlow live-report timestamps are separate evidence. Neither proves uninterrupted internet.")
+        monitoringEvidence.forEach { appendLine(it) }
     }
 
     private fun yesNo(value: Boolean) = if (value) "Yes" else "No"
@@ -219,7 +223,8 @@ internal class DiagnosticsCollector(private val context: Context) {
         lastBackupSuccess = backupStatus.lastSuccessAtEpochMs?.let {
             DateFormat.getDateTimeInstance().format(Date(it))
         } ?: "Never",
-        lastBackupError = backupStatus.lastError
+        lastBackupError = backupStatus.lastError,
+        monitoringEvidence = MonitoringEvidenceStore(context).read()
         )
     }
 

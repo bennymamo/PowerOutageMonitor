@@ -33,3 +33,5 @@ local.properties
 # Temporary UI captures used during local verification.
 /.codex-*.xml
 /.codex-*.png
+/.codex-remote-attachments/
+/.review-evidence/

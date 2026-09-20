@@ -20,12 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.flossypickle.poweroutagemonitor.configuration.BackupCategory
@@ -43,6 +41,9 @@ import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
+import android.provider.DocumentsContract
 
 internal enum class BackupPanel {
     CREATE,
@@ -60,30 +61,33 @@ internal fun DataBackupSettingsContent(
     val manager = remember(context) { BackupManager(context) }
     val scheduleStore = remember(context) { BackupScheduleStore(context) }
     val scheduler = remember(context) { BackupScheduler(context) }
-    val scope = rememberCoroutineScope()
-    var backupCategories by remember { mutableStateOf(BackupCategory.entries.toSet()) }
-    var restoreCategories by remember { mutableStateOf(emptySet<BackupCategory>()) }
-    var exportPassword by remember { mutableStateOf("") }
-    var exportConfirmation by remember { mutableStateOf("") }
-    var importPassword by remember { mutableStateOf("") }
-    var pendingRestore by remember { mutableStateOf<BackupDocument?>(null) }
-    var resumeMonitoring by remember { mutableStateOf(false) }
-    var feedback by remember { mutableStateOf<String?>(null) }
-    var feedbackIsError by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    var scheduleSettings by remember { mutableStateOf(scheduleStore.settings()) }
-    var scheduleStatus by remember { mutableStateOf(scheduleStore.status()) }
-    var automaticEnabled by remember { mutableStateOf(scheduleSettings.enabled) }
-    var automaticFolderUri by remember { mutableStateOf(scheduleSettings.folderUri) }
-    var automaticFolderLabel by remember { mutableStateOf(scheduleSettings.folderLabel) }
-    var automaticInterval by remember { mutableStateOf(scheduleSettings.intervalHours) }
-    var retainedCopies by remember { mutableStateOf(scheduleSettings.retainedCopies) }
-    var automaticCategories by remember { mutableStateOf(scheduleSettings.categories) }
-    var automaticPassword by remember { mutableStateOf("") }
-    var automaticConfirmation by remember { mutableStateOf("") }
-    var editorText by remember { mutableStateOf<String?>(null) }
-    var editorPassword by remember { mutableStateOf("") }
-    var editorConfirmation by remember { mutableStateOf("") }
+    val drafts: ScreenDraftViewModel = viewModel(key = "backup-drafts-${panel.name}")
+    val scope = drafts.viewModelScope
+    var backupCategories by drafts.state("backupCategories", BackupCategory.entries.toSet())
+    var restoreCategories by drafts.state("restoreCategories", emptySet<BackupCategory>())
+    var exportPassword by drafts.state("export-password", "")
+    var exportConfirmation by drafts.state("export-confirmation", "")
+    var importPassword by drafts.state("import-password", "")
+    var pendingRestore by drafts.state<BackupDocument?>("pending-restore", null)
+    var resumeMonitoring by drafts.state("resumeMonitoring", false)
+    var feedback by drafts.state<String?>("feedback", null)
+    var feedbackIsError by drafts.state("feedbackIsError", false)
+    var busy by drafts.state("busy", false)
+    var scheduleSettings by drafts.state("scheduleSettings", scheduleStore.settings())
+    var scheduleStatus by drafts.state("scheduleStatus", scheduleStore.status())
+    var automaticEnabled by drafts.state("automaticEnabled", scheduleSettings.enabled)
+    var automaticFolderUri by drafts.state("automaticFolderUri", scheduleSettings.folderUri)
+    var automaticFolderLabel by drafts.state("automaticFolderLabel", scheduleSettings.folderLabel)
+    var automaticInterval by drafts.state("automaticInterval", scheduleSettings.intervalHours)
+    var retainedCopies by drafts.state("retainedCopies", scheduleSettings.retainedCopies)
+    var automaticCategories by drafts.state("automaticCategories", scheduleSettings.categories)
+    var automaticPassword by drafts.state("automatic-password", "")
+    var automaticConfirmation by drafts.state("automatic-confirmation", "")
+    var editorText by drafts.state<String?>("editor-text", null)
+    var editorPassword by drafts.state("editor-password", "")
+    var editorConfirmation by drafts.state("editor-confirmation", "")
+
+    SecureScreen(editorText != null)
 
     fun result(message: String, isError: Boolean = false) {
         feedback = message
@@ -94,10 +98,15 @@ internal fun DataBackupSettingsContent(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (exportPassword.length < PasswordBackupCipher.MIN_PASSWORD_LENGTH) {
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            result("Re-enter your backup password and choose a file again. Passwords are not retained after the app process stops.", true)
+            return@rememberLauncherForActivityResult
+        }
         val password = exportPassword.toCharArray()
         scope.launch {
             busy = true
-            val saved = withContext(Dispatchers.IO) {
+            val saved = try { withContext(Dispatchers.IO) {
                 runCatching {
                     val encrypted = manager.create(backupCategories, password)
                     try {
@@ -106,10 +115,10 @@ internal fun DataBackupSettingsContent(
                     } finally {
                         encrypted.fill(0)
                     }
+                }.onFailure {
+                    runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
                 }
-            }
-            password.fill('\u0000')
-            busy = false
+            } } finally { password.fill('\u0000'); busy = false }
             saved.fold(
                 onSuccess = {
                     exportPassword = ""
@@ -122,10 +131,14 @@ internal fun DataBackupSettingsContent(
     }
     val openDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (importPassword.isEmpty()) {
+            result("Re-enter the backup password, then select the backup again.", true)
+            return@rememberLauncherForActivityResult
+        }
         val password = importPassword.toCharArray()
         scope.launch {
             busy = true
-            val opened = withContext(Dispatchers.IO) {
+            val opened = try { withContext(Dispatchers.IO) {
                 runCatching {
                     val encrypted = readSmallBackup(context, uri)
                     try {
@@ -134,9 +147,7 @@ internal fun DataBackupSettingsContent(
                         encrypted.fill(0)
                     }
                 }
-            }
-            password.fill('\u0000')
-            busy = false
+            } } finally { password.fill('\u0000'); busy = false }
             opened.fold(
                 onSuccess = { document ->
                     pendingRestore = document
@@ -174,11 +185,16 @@ internal fun DataBackupSettingsContent(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         val text = editorText
-        if (uri == null || text == null) return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        if (text == null || editorPassword.length < PasswordBackupCipher.MIN_PASSWORD_LENGTH) {
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            result("Unlock the backup again and re-enter the password for the edited copy.", true)
+            return@rememberLauncherForActivityResult
+        }
         val password = editorPassword.toCharArray()
         scope.launch {
             busy = true
-            val saved = withContext(Dispatchers.IO) {
+            val saved = try { withContext(Dispatchers.IO) {
                 runCatching {
                     val encrypted = manager.createEdited(text, password)
                     try {
@@ -187,10 +203,10 @@ internal fun DataBackupSettingsContent(
                     } finally {
                         encrypted.fill(0)
                     }
+                }.onFailure {
+                    runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
                 }
-            }
-            password.fill('\u0000')
-            busy = false
+            } } finally { password.fill('\u0000'); busy = false }
             saved.fold(
                 onSuccess = {
                     editorPassword = ""
@@ -306,7 +322,7 @@ internal fun DataBackupSettingsContent(
             automaticConfirmation = it
         }
         Text(
-            "This password is kept in Android Keystore on this phone. The encrypted backup also contains the automatic-backup plan so a replacement phone can restore it; Android will still ask you to reconnect the destination folder.",
+            "This password is kept in Android Keystore on this phone. Backups include the portable plan, but not this password or the destination-folder grant; enter a new password and reconnect the folder after restore.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp
         )
@@ -412,6 +428,9 @@ internal fun DataBackupSettingsContent(
                     onCheckedChange = { checked ->
                         restoreCategories = if (checked) restoreCategories + category
                         else restoreCategories - category
+                        if (category == BackupCategory.ACTIVE_STATE && !checked) {
+                            resumeMonitoring = false
+                        }
                     }
                 )
             }
@@ -433,7 +452,10 @@ internal fun DataBackupSettingsContent(
             CompactActions {
                 Button(
                     onClick = {
-                        val restoreError = onRestore(document, restoreCategories, resumeMonitoring)
+                        val effectiveResume = resumeMonitoring &&
+                            BackupCategory.ACTIVE_STATE in restoreCategories &&
+                            document.activeState?.monitoringWasEnabled == true
+                        val restoreError = onRestore(document, restoreCategories, effectiveResume)
                         if (restoreError == null) {
                             pendingRestore = null
                             editorText = null
@@ -445,7 +467,7 @@ internal fun DataBackupSettingsContent(
                             automaticInterval = scheduleSettings.intervalHours
                             retainedCopies = scheduleSettings.retainedCopies
                             automaticCategories = scheduleSettings.categories
-                            result(if (resumeMonitoring) "Backup restored and monitoring resumed."
+                            result(if (effectiveResume) "Backup restored and monitoring resumed."
                                 else "Selected backup data restored.")
                         } else {
                             result(restoreError, true)
@@ -470,17 +492,19 @@ internal fun DataBackupSettingsContent(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
-                OutlinedTextField(
-                    value = editable,
-                    onValueChange = {
-                        if (it.length <= PasswordBackupCipher.MAX_BACKUP_BYTES) editorText = it
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Decrypted backup document") },
-                    minLines = 12,
-                    maxLines = 24,
-                    textStyle = MaterialTheme.typography.bodySmall
-                )
+                PrivateTextInputProtection {
+                    OutlinedTextField(
+                        value = editable,
+                        onValueChange = {
+                            if (it.length <= PasswordBackupCipher.MAX_BACKUP_BYTES) editorText = it
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Decrypted backup document") },
+                        minLines = 12,
+                        maxLines = 24,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
                 PasswordField("Password for edited copy", editorPassword) {
                     editorPassword = it
                 }
@@ -514,13 +538,7 @@ internal fun DataBackupSettingsContent(
         }
     }
 
-    feedback?.let {
-        Text(
-            it,
-            color = if (feedbackIsError) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.primary
-        )
-    }
+    feedback?.let { SaveConfirmation(it, isError = feedbackIsError) }
     Text(
         "Android system permissions and manufacturer battery settings cannot be copied. A restored local EcoFlow connection must pass a new read-only test before it can be selected.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -541,7 +559,7 @@ private fun RadioChoice(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun PasswordField(label: String, value: String, onChange: (String) -> Unit) {
-    PrivatePasswordField(label, value, onChange)
+    PrivatePasswordField(label, value, onChange = onChange)
 }
 
 private fun categoryDescription(category: BackupCategory) = when (category) {

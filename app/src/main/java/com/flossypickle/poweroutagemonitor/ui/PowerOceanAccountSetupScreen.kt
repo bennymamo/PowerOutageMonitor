@@ -11,13 +11,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flossypickle.poweroutagemonitor.integrations.power.SourceTelemetrySnapshot
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.*
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, padding: PaddingValues, onPowerSourceChanged: () -> Unit, onBack: () -> Unit) {
     val directReturn = LocalDashboardReturn.current
     val context = LocalContext.current
+    val drafts: ScreenDraftViewModel = viewModel(key = "powerocean-account-drafts")
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val store = remember(context) { PowerOceanAccountStore(context) }
     val sourceStore = remember(context) { com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore(context) }
@@ -42,12 +43,12 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     val client = remember { PowerOceanAccountClient() }
     val scope = rememberCoroutineScope()
     var saved by remember { mutableStateOf(store.connection()) }
-    var email by remember { mutableStateOf(saved?.email.orEmpty()) }
-    var password by remember { mutableStateOf("") }
-    var serial by remember { mutableStateOf(saved?.serial.orEmpty()) }
-    var model by remember { mutableStateOf(saved?.model ?: "86") }
-    var region by remember { mutableStateOf(saved?.region ?: "eu") }
-    var interval by remember { mutableStateOf((saved?.refreshSeconds ?: 60).toString()) }
+    var email by drafts.state("email", saved?.email.orEmpty())
+    var password by drafts.state("password", "")
+    var serial by drafts.state("serial", saved?.serial.orEmpty())
+    var model by drafts.state("model", saved?.model ?: "86")
+    var region by drafts.state("region", saved?.region ?: "eu")
+    var interval by drafts.state("interval", (saved?.refreshSeconds ?: 60).toString())
     var session by remember { mutableStateOf<PowerOceanAccountClient.Session?>(null) }
     var snapshot by remember { mutableStateOf<SourceTelemetrySnapshot?>(null) }
     var dashboardOpen by remember { mutableStateOf(false) }
@@ -71,7 +72,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
     var confirmGridCorrelation by remember { mutableStateOf(false) }
     var confirmPreviousTest by remember { mutableStateOf(false) }
     val setupSteps = listOf("Before you begin", "Account login", "Your equipment", "Save and connect", "Verify and monitor")
-    var setupStep by rememberSaveable { mutableStateOf(if (saved != null) 4 else 0) }
+    var setupStep by drafts.state("setup-step", if (saved != null) 4 else 0)
     var selectedSource by remember { mutableStateOf(sourceStore.selectedSource()) }
     val accountActive = selectedSource == com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore.Source.ECOFLOW_ACCOUNT
     val setupScroll = rememberScrollState()
@@ -223,8 +224,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         Text("PowerOcean account", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         SetupGuidanceCaption(helpLevel)
         SetupFlowHeader(setupSteps, setupStep, helpLevel.isGuided, loading) { setupStep = it }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        feedback?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        if (helpLevel.isGuided && setupStep != 3) {
+            error?.let { SaveConfirmation(it, isError = true) }
+            feedback?.let { SaveConfirmation(it) }
+        }
         SetupFlowSection(0, setupStep, helpLevel.isGuided, "Before you begin") {
         SettingsCard {
             Text("Optional · experimental", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
@@ -249,8 +252,10 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
         PowerSourceSectionTitle("Account")
         SettingsCard {
             OutlinedTextField(email, { email = it }, label = { Text("EcoFlow account email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), singleLine = true, enabled = !loading && !accountActive, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(password, { password = it }, label = { Text(if (saved == null) "EcoFlow password" else "New password · blank keeps saved password") },
-                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), singleLine = true, enabled = !loading && !accountActive, modifier = Modifier.fillMaxWidth())
+            PrivatePasswordField(
+                if (saved == null) "EcoFlow password" else "New password · blank keeps saved password",
+                password, enabled = !loading && !accountActive
+            ) { password = it }
             Text("Email, password and serial are encrypted on this device. Password-encrypted backups include them when Power sources is selected. Login tokens stay in memory.", style = MaterialTheme.typography.bodySmall)
         }
         }
@@ -277,7 +282,7 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                     generation++; saved = store.connection(); password = ""; session = null; snapshot = null; pushStatus = null
                     successfulReads = 0; changedFields = 0; error = null; feedback = "Account saved securely. Tap Connect and read device."
                 }.onFailure { error = "Check all account fields. Refresh must be between 60 and 3,600 seconds." }
-            }, enabled = !loading && !accountActive && editedConnection().isValid, modifier = Modifier) { Text("Save account") }
+            }, enabled = !loading && !accountActive && unsaved && editedConnection().isValid, modifier = Modifier) { Text("Save account") }
             Button(onClick = {
                 val account = saved ?: return@Button
                 val requestedGeneration = generation
@@ -298,6 +303,8 @@ internal fun PowerOceanAccountSetupScreen(helpLevel: MonitorStore.HelpLevel, pad
                 Text(if (loading) "Connecting…" else "Connect and read device")
             }
         }
+        feedback?.let { SaveConfirmation(it) }
+        error?.let { SaveConfirmation(it, isError = true) }
         if (unsaved && saved != null) Text("Save your changes before connecting.", style = MaterialTheme.typography.bodySmall)
         if (snapshot != null) OutlinedButton({ dashboardOpen = true }, enabled = !loading) { Text("Open device readings") }
 

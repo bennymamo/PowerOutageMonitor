@@ -4,7 +4,8 @@ import android.content.Context
 import androidx.core.content.pm.PackageInfoCompat
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.ScheduledAlertStore
-import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryScheduler
+import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
+import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryMaintenanceGate
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.GmailSmtpConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.email.ResendEmailConfigStore
 import com.flossypickle.poweroutagemonitor.integrations.alerts.sms.SmsConfigStore
@@ -25,7 +26,7 @@ internal class BackupManager(context: Context) {
 
     fun create(categories: Set<BackupCategory>, password: CharArray): ByteArray {
         require(categories.isNotEmpty()) { "Select at least one backup category." }
-        val document = capture(categories)
+        val document = synchronized(DeliveryMaintenanceGate.lock) { capture(categories) }
         val plaintext = BackupDocumentCodec.encode(document)
         return try {
             PasswordBackupCipher.encrypt(plaintext, password)
@@ -43,16 +44,18 @@ internal class BackupManager(context: Context) {
         }
     }
 
-    fun editableText(document: BackupDocument): String =
-        BackupDocumentCodec.encode(document).toString(Charsets.UTF_8)
+    fun editableText(document: BackupDocument): String {
+        val bytes = BackupDocumentCodec.encode(document)
+        return try { bytes.toString(Charsets.UTF_8) } finally { bytes.fill(0) }
+    }
 
     /** Validates edited plain text, normalizes it, and creates a new authenticated archive. */
     fun createEdited(text: String, password: CharArray): ByteArray {
         val edited = text.toByteArray(Charsets.UTF_8)
-        require(edited.size <= PasswordBackupCipher.MAX_BACKUP_BYTES) {
-            "Edited backup contents are too large."
-        }
         return try {
+            require(edited.size <= PasswordBackupCipher.MAX_BACKUP_BYTES) {
+                "Edited backup contents are too large."
+            }
             val validated = BackupDocumentCodec.decode(edited)
             val normalized = BackupDocumentCodec.encode(validated)
             try {
@@ -69,12 +72,18 @@ internal class BackupManager(context: Context) {
         document: BackupDocument,
         categories: Set<BackupCategory>,
         resumeMonitoring: Boolean
-    ) {
+    ) = synchronized(DeliveryMaintenanceGate.lock) {
+        DeliveryMaintenanceGate.requireIdle()
         require(categories.isNotEmpty() && document.categories.containsAll(categories))
         val currentMonitor = MonitorStore(appContext)
         require(!currentMonitor.settings().monitoringEnabled) {
             "Turn off monitoring before restoring a backup."
         }
+        val wasPaused = currentMonitor.restoredDeliveriesPaused()
+        val activeState = document.activeState.takeIf { BackupCategory.ACTIVE_STATE in categories }
+        val shouldResume = resumeMonitoring && activeState?.monitoringWasEnabled == true
+        currentMonitor.beginDeliveryMaintenance()
+        try {
 
         if (BackupCategory.SETTINGS in categories) {
             val data = requireNotNull(document.settings)
@@ -102,7 +111,7 @@ internal class BackupManager(context: Context) {
             BackupScheduler(appContext).apply(BackupScheduleStore(appContext).settings())
         }
 
-        if (BackupCategory.ALERTS in categories) restoreAlerts(requireNotNull(document.alerts), resumeMonitoring)
+        if (BackupCategory.ALERTS in categories) restoreAlerts(requireNotNull(document.alerts), false)
         if (BackupCategory.POWER_SOURCES in categories) {
             restorePowerSources(requireNotNull(document.powerSources))
         }
@@ -114,23 +123,35 @@ internal class BackupManager(context: Context) {
         }
         if (BackupCategory.ACTIVE_STATE in categories) {
             val data = requireNotNull(document.activeState)
-            val shouldResume = resumeMonitoring && data.monitoringWasEnabled
-            AlertDeliveryScheduler(appContext).cancelAll()
             currentMonitor.restoreRuntime(
                 state = data.monitorState,
                 snapshot = data.lastSnapshot,
                 observedAtEpochMs = data.lastObservationEpochMs,
-                monitoringEnabled = shouldResume
+                monitoringEnabled = false
             )
             ScheduledAlertStore(appContext).save(data.scheduledState)
             AudibleAlarmStore(appContext).saveRuntime(data.audibleRuntime)
             AlertQueueStore(appContext).replaceAll(data.deliveryQueue)
             PendingAlertEventStore(appContext).replaceAll(data.pendingEvents)
-            currentMonitor.setRestoredDeliveriesPaused(!shouldResume)
         }
         OperationalHistoryStore(appContext).recordBackupRestored(
             currentMonitor.settings().historyLimit
         )
+        if (BackupCategory.ALERTS in categories && shouldResume) {
+            val remote = requireNotNull(document.alerts).telegramRemote
+            com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(appContext).save(remote)
+        }
+        if (shouldResume) currentMonitor.setMonitoringEnabled(true)
+        currentMonitor.setRestoredDeliveriesPaused(if (activeState != null) !shouldResume else wasPaused)
+        } catch (error: Exception) {
+            currentMonitor.setRestoredDeliveriesPaused(true)
+            currentMonitor.setMonitoringEnabled(false)
+            com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemoteStore(appContext).apply {
+                save(settings().copy(enabled = false))
+            }
+            throw IllegalStateException("Restore did not finish. Some data may have changed; monitoring and alert delivery remain paused. Retry restore before resuming.", error)
+        }
+        AlertDeliveryCoordinator(appContext).materializePending()
     }
 
     private fun capture(categories: Set<BackupCategory>): BackupDocument {
@@ -150,7 +171,7 @@ internal class BackupManager(context: Context) {
                     scheduled.settings(),
                     audible.settings(),
                     backupSchedule.settings(),
-                    backupSchedule.password()
+                    null
                 )
             } else null,
             alerts = if (BackupCategory.ALERTS in categories) captureAlerts() else null,

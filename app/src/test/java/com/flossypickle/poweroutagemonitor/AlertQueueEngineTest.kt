@@ -156,19 +156,69 @@ class AlertQueueEngineTest {
         )
     }
 
+    @Test
+    fun `scheduled updates with unique ids still wait for the outage message`() {
+        val outage = item(eventId = "outage-100", orderingKey = "power-event-100")
+        val update = item(
+            id = "delivery-update",
+            eventId = "outage-update-100-200",
+            orderingKey = "power-event-100",
+            kind = AlertKind.OUTAGE_UPDATE,
+            createdAtEpochMs = 2_000L
+        )
+
+        assertEquals(listOf(outage), AlertQueueEngine.due(listOf(outage, update), 3_000L))
+        assertTrue(AlertQueueEngine.hasUnfinishedPredecessor(listOf(outage, update), update))
+    }
+
+    @Test fun `same-rank messages are serialized even at equal timestamps`() {
+        val first = item(id = "a", kind = AlertKind.OUTAGE_UPDATE, eventId = "update-a", orderingKey = "incident")
+        val second = item(id = "b", kind = AlertKind.BATTERY_LOW, eventId = "battery", orderingKey = "incident")
+        assertEquals(listOf(first), AlertQueueEngine.due(listOf(second, first), 10))
+        assertEquals(second, AlertQueueEngine.nextUnfinishedForEvent(listOf(first, second), first))
+    }
+
+    @Test fun `restoration suppresses unsent updates but waits for an in-flight update`() {
+        val update = item(id = "update", kind = AlertKind.OUTAGE_UPDATE)
+        val restored = item(id = "restore", kind = AlertKind.RESTORED)
+        val queued = AlertQueueEngine.enqueue(listOf(update), restored)
+        assertEquals(AlertQueueEngine.Status.SKIPPED, queued.first().status)
+        assertEquals(listOf(restored), AlertQueueEngine.due(queued, 10))
+        val inFlight = AlertQueueEngine.markInFlight(update, 0)
+        val running = AlertQueueEngine.enqueue(listOf(inFlight), restored)
+        assertTrue(AlertQueueEngine.due(running, 10).isEmpty())
+    }
+
+    @Test fun `late updates are skipped only for the restored incident and destination`() {
+        val restored = item(id = "restore", kind = AlertKind.RESTORED)
+        val update = item(id = "update", kind = AlertKind.OUTAGE_UPDATE)
+        val late = AlertQueueEngine.enqueue(listOf(restored), update)
+        assertEquals(AlertQueueEngine.Status.SKIPPED, late.last().status)
+        val other = update.copy(destinationId = "other")
+        assertEquals(AlertQueueEngine.Status.PENDING, AlertQueueEngine.enqueue(listOf(restored), other).last().status)
+    }
+
+    @Test fun `old update identifiers recover their incident ordering`() {
+        val update = AlertMessage("outage-update-123-456", AlertKind.OUTAGE_UPDATE, "", "")
+        assertEquals("power-event-123", update.orderingKey)
+    }
+
     private fun item(
         id: String = "delivery-1",
         kind: AlertKind = AlertKind.OUTAGE,
-        createdAtEpochMs: Long = 0L
+        createdAtEpochMs: Long = 0L,
+        eventId: String = "event-1",
+        orderingKey: String = eventId
     ) = AlertQueueEngine.Item(
         id = id,
         providerId = "telegram",
         destinationId = "garage-chat",
         message = AlertMessage(
-            eventId = "event-1",
+            eventId = eventId,
             kind = kind,
             title = "Power outage detected",
-            body = "Garage monitor is on battery"
+            body = "Garage monitor is on battery",
+            orderingKey = orderingKey
         ),
         createdAtEpochMs = createdAtEpochMs
     )

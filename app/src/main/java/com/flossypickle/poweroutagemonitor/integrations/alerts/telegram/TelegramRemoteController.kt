@@ -5,10 +5,11 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.UserManager
 import java.security.MessageDigest
+import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryMaintenanceGate
 
 /** A single cancelable receiver hosted by the existing foreground service. */
 internal class TelegramRemoteController(private val context: Context,
-    private val execute: (TelegramRemotePolicy.Command) -> String,
+    private val execute: (TelegramRemotePolicy.Command, Long) -> String,
     private val clientFactory: () -> TelegramClient = { TelegramClient() }) {
     @Volatile private var generation = 0
     private var signature: String? = null
@@ -17,10 +18,11 @@ internal class TelegramRemoteController(private val context: Context,
     fun refresh() {
         if (Build.VERSION.SDK_INT >= 24 && !context.getSystemService(UserManager::class.java).isUserUnlocked) return
         val store = TelegramRemoteStore(context); val settings = store.settings()
+        val configurationGeneration = com.flossypickle.poweroutagemonitor.storage.MonitorStore(context).deliveryGeneration()
         val token = TelegramConfigStore(context).botToken()
         val hash = token?.let { MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b.toInt() and 255) } }
         val key = if (settings.enabled && settings.trustedChatIds.isNotEmpty() && token != null)
-            "$hash|${settings.trustedChatIds.sorted()}|${settings.longPolling}|${settings.pollSeconds}" else null
+            "$configurationGeneration|$hash|${settings.trustedChatIds.sorted()}|${settings.longPolling}|${settings.pollSeconds}" else null
         if (signature == key && thread?.isAlive == true) return
         stop(); signature = key
         if (key == null || token == null || hash == null) {
@@ -28,13 +30,14 @@ internal class TelegramRemoteController(private val context: Context,
             return
         }
         val run = generation; val api = clientFactory(); client = api
-        thread = Thread({ receive(run, token, hash, api) }, "telegram-remote").apply { isDaemon = true; start() }
+        thread = Thread({ receive(run, token, hash, api, configurationGeneration) }, "telegram-remote").apply { isDaemon = true; start() }
     }
     fun stop() { generation++; client?.cancelPoll(); thread?.interrupt(); thread = null; client = null; signature = null }
-    private fun receive(run: Int, token: String, hash: String, api: TelegramClient) {
+    private fun receive(run: Int, token: String, hash: String, api: TelegramClient, deliveryGeneration: Long) {
         val store = TelegramRemoteStore(context)
         val wake = context.getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
             "${context.packageName}:telegram-remote").apply { setReferenceCounted(false) }
+        fun configurationChanged() = deliveryGeneration != com.flossypickle.poweroutagemonitor.storage.MonitorStore(context).deliveryGeneration()
         var backoff = 5_000L
         try {
             while (generation == run && !Thread.currentThread().isInterrupted) {
@@ -49,9 +52,12 @@ internal class TelegramRemoteController(private val context: Context,
                         when (val tail = api.pollUpdates(token, -1, 0, 1)) {
                             is TelegramClient.ApiResult.Failure -> { store.health(tail.message); throw Retry(tail.retryAfterSeconds) }
                             is TelegramClient.ApiResult.Success -> {
-                                if (generation != run) return
+                                if (generation != run || configurationChanged()) return
                                 offset = (tail.value.maxOfOrNull { it.id } ?: -1) + 1
-                                store.checkpoint(hash, offset)
+                                synchronized(DeliveryMaintenanceGate.lock) {
+                                    if (configurationChanged()) return
+                                    store.checkpoint(hash, offset)
+                                }
                             }
                         }
                     }
@@ -63,18 +69,22 @@ internal class TelegramRemoteController(private val context: Context,
                             throw Retry(result.retryAfterSeconds)
                         }
                         is TelegramClient.ApiResult.Success -> {
-                            if (generation != run) return
+                            if (generation != run || configurationChanged()) return
                             for (update in result.value.sortedBy { it.id }) {
-                                if (generation != run) return
+                                if (generation != run || configurationChanged()) return
                                 val current = store.settings()
                                 val command = update.message?.let { TelegramRemotePolicy.authorize(it, current.trustedChatIds,
                                     store.enabledAt(), System.currentTimeMillis(), offset) }
                                 if (update.id < offset) continue
                                 // Persist before acting: a killed process must never replay a control.
-                                offset = update.id + 1; store.checkpoint(hash, offset)
+                                offset = update.id + 1
+                                synchronized(DeliveryMaintenanceGate.lock) {
+                                    if (configurationChanged()) return
+                                    store.checkpoint(hash, offset)
+                                }
                                 if (!current.enabled || command == null || generation != run) continue
-                                val reply = runCatching { execute(command) }.getOrElse { "The command could not be completed. Check the app before retrying." }
-                                if (generation != run) return
+                                val reply = runCatching { execute(command, deliveryGeneration) }.getOrElse { "The command could not be completed. Check the app before retrying." }
+                                if (generation != run || configurationChanged()) return
                                 val sent = api.sendMessage(token, update.message!!.chatId, reply)
                                 if (sent !is com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult.Sent)
                                     store.health("Command handled; its reply could not be delivered. Send /status to check.")

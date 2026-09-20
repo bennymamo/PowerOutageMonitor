@@ -168,6 +168,8 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                     )
                     if (snapshot.sections.isNotEmpty()) lastSnapshot = snapshot
                 }
+                if (singleCheck) gridInspection.corroborateSampledOffGrid(
+                    liveCheck.status(), cyclePolicy.extraUpdates + 1, System.currentTimeMillis())
                 val enough = singleCheck && cyclePolicy.enough(liveCheck.status(),
                     gridInspection.snapshot().let {
                         it.lastCode != null && it.meterValue != null && it.correlation?.currentMeterValue != null && it.correlation.state != PowerOceanGridCorrelation.State.UNKNOWN &&

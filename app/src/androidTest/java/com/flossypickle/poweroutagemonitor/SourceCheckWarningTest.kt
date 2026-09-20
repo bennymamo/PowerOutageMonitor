@@ -77,6 +77,10 @@ class SourceCheckWarningTest {
     @Test fun losingChargerEscalatesRoutineWarningOnlyOnce() {
         val context = QaContext(); val messages = mutableListOf<AlertMessage>()
         try {
+            val source = PowerSourceStore(context)
+            source.setPowerOceanPoweredFailureStreak(
+                source.powerOceanAssistedSettings().poweredFailureThreshold
+            )
             val coordinator = SourceCheckWarningCoordinator(context, { messages.add(it); true }, {})
             coordinator.process(completed(100), true)
             coordinator.process(completed(200), false)

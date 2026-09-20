@@ -30,10 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flossypickle.poweroutagemonitor.integrations.power.SourceTelemetrySnapshot
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudClient
 import com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.EcoFlowCloudConfigStore
@@ -51,12 +51,13 @@ internal fun EcoFlowCloudSetupScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val drafts: ScreenDraftViewModel = viewModel(key = "ecoflow-cloud-drafts")
     val store = remember(context) { EcoFlowCloudConfigStore(context) }
     val client = remember { EcoFlowCloudClient() }
     val scope = rememberCoroutineScope()
     var config by remember { mutableStateOf(store.config()) }
-    var accessKey by remember { mutableStateOf("") }
-    var secretKey by remember { mutableStateOf("") }
+    var accessKey by drafts.state("access-key", "")
+    var secretKey by drafts.state("secret-key", "")
     var devices by remember { mutableStateOf(emptyList<EcoFlowCloudClient.Device>()) }
     var selectedQuota by remember { mutableStateOf<EcoFlowCloudQuota?>(null) }
     var dashboard by remember { mutableStateOf<SourceTelemetrySnapshot?>(null) }
@@ -66,7 +67,7 @@ internal fun EcoFlowCloudSetupScreen(
     var loading by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     val setupSteps = listOf("Prepare developer access", "Save API keys", "Find and test devices")
-    var setupStep by rememberSaveable { mutableStateOf(if (config.hasCredentials) 2 else 0) }
+    var setupStep by drafts.state("setup-step", if (config.hasCredentials) 2 else 0)
     val setupScroll = rememberScrollState()
     LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
     var liveBrokerSummary by remember { mutableStateOf<String?>(null) }
@@ -199,23 +200,19 @@ internal fun EcoFlowCloudSetupScreen(
         }
         SetupFlowSection(1, setupStep, helpLevel.isGuided, "Save API keys") {
         SettingsCard {
-            OutlinedTextField(
+            PrivatePasswordField(
                 value = accessKey,
-                onValueChange = { if (it.length <= 200) accessKey = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (config.hasCredentials) "New Access Key (leave blank to keep saved)" else "Access Key") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-                enabled = !loading
+                onChange = { accessKey = it.trim() },
+                label = if (config.hasCredentials) "New Access Key (leave blank to keep saved)" else "Access Key",
+                enabled = !loading,
+                maxLength = 200
             )
-            OutlinedTextField(
+            PrivatePasswordField(
                 value = secretKey,
-                onValueChange = { if (it.length <= 300) secretKey = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (config.hasCredentials) "New Secret Key (leave blank to keep saved)" else "Secret Key") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-                enabled = !loading
+                onChange = { secretKey = it.trim() },
+                label = if (config.hasCredentials) "New Secret Key (leave blank to keep saved)" else "Secret Key",
+                enabled = !loading,
+                maxLength = 300
             )
             if (config.hasCredentials) {
                 Text(

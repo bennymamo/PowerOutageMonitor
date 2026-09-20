@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.legacyAlertOrderingKey
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertQueueEngine
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,11 +24,14 @@ internal class AlertQueueStore(context: Context) {
         true
     }
 
-    fun replace(item: AlertQueueEngine.Item) = synchronized(lock) {
+    /** A late completion must not overwrite a newer lease (or a replaced queue item). */
+    fun completeClaim(claimed: AlertQueueEngine.Item, completed: AlertQueueEngine.Item): AlertQueueEngine.Item? = synchronized(lock) {
         val items = readUnlocked()
-        val index = items.indexOfFirst { it.id == item.id }
-        if (index < 0) return@synchronized
-        writeUnlocked(items.toMutableList().apply { set(index, item) })
+        val index = items.indexOfFirst { it.id == claimed.id }
+        if (index < 0 || items[index] != claimed) return@synchronized null
+        val updated = AlertQueueEngine.suppressObsoleteUpdates(items.toMutableList().apply { set(index, completed) })
+        writeUnlocked(updated)
+        updated[index]
     }
 
     fun find(id: String): AlertQueueEngine.Item? = synchronized(lock) {
@@ -61,7 +65,8 @@ internal class AlertQueueStore(context: Context) {
 
     fun retryFailed(nowEpochMs: Long): List<AlertQueueEngine.Item> = synchronized(lock) {
         val items = readUnlocked()
-        val retried = items.map { AlertQueueEngine.retryFailed(it, nowEpochMs) }
+        val retried = AlertQueueEngine.suppressObsoleteUpdates(
+            items.map { AlertQueueEngine.retryFailed(it, nowEpochMs) })
         writeUnlocked(retried)
         retried.filter { retriedItem ->
             items.any { original ->
@@ -77,7 +82,7 @@ internal class AlertQueueStore(context: Context) {
     fun clearAll() = synchronized(lock) { writeUnlocked(emptyList()) }
 
     fun replaceAll(items: List<AlertQueueEngine.Item>) = synchronized(lock) {
-        writeUnlocked(items)
+        writeUnlocked(AlertQueueEngine.suppressObsoleteUpdates(items))
     }
 
     private fun readUnlocked(): List<AlertQueueEngine.Item> = runCatching {
@@ -113,6 +118,7 @@ internal class AlertQueueStore(context: Context) {
         put("kind", message.kind.name)
         put("title", message.title)
         put("body", message.body)
+        put("orderingKey", message.orderingKey)
         put("status", status.name)
         put("createdAt", createdAtEpochMs)
         put("attemptCount", attemptCount)
@@ -131,7 +137,8 @@ internal class AlertQueueStore(context: Context) {
             eventId = getString("eventId"),
             kind = AlertKind.valueOf(getString("kind")),
             title = getString("title"),
-            body = getString("body")
+            body = getString("body"),
+            orderingKey = optString("orderingKey", legacyAlertOrderingKey(getString("eventId"), AlertKind.valueOf(getString("kind"))))
         ),
         status = AlertQueueEngine.Status.valueOf(getString("status")),
         createdAtEpochMs = getLong("createdAt"),

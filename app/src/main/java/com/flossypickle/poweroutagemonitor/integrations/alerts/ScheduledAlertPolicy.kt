@@ -7,8 +7,11 @@ internal object ScheduledAlertPolicy {
     sealed interface Notice {
         data class SourceUnavailable(val sinceEpochMs: Long) : Notice
         data class SourceAvailableAgain(val sinceEpochMs: Long) : Notice
-        data object Heartbeat : Notice
-        data class OutageUpdate(val outageStartedEpochMs: Long) : Notice
+        data class Heartbeat(val scheduledAtEpochMs: Long) : Notice
+        data class OutageUpdate(
+            val outageStartedEpochMs: Long,
+            val scheduledAtEpochMs: Long
+        ) : Notice
     }
 
     data class Result(
@@ -61,7 +64,7 @@ internal object ScheduledAlertPolicy {
             if (baseline == null || nowEpochMs < baseline) {
                 state.copy(lastHeartbeatEpochMs = nowEpochMs)
             } else if (elapsed(nowEpochMs, baseline) >= settings.heartbeatIntervalMs) {
-                notices += Notice.Heartbeat
+                notices += Notice.Heartbeat(safeAdd(baseline, settings.heartbeatIntervalMs))
                 state.copy(lastHeartbeatEpochMs = nowEpochMs)
             } else state
         }
@@ -81,7 +84,10 @@ internal object ScheduledAlertPolicy {
             if (nowEpochMs >= baseline &&
                 elapsed(nowEpochMs, baseline) >= settings.outageUpdateIntervalMs
             ) {
-                notices += Notice.OutageUpdate(outageStarted)
+                notices += Notice.OutageUpdate(
+                    outageStarted,
+                    safeAdd(baseline, settings.outageUpdateIntervalMs)
+                )
                 state.copy(lastOutageUpdateEpochMs = nowEpochMs)
             } else if (nowEpochMs < baseline) {
                 state.copy(lastOutageUpdateEpochMs = nowEpochMs)

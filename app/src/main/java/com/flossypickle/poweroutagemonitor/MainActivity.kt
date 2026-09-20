@@ -279,6 +279,9 @@ class MainActivity : ComponentActivity() {
             sendRestoreNotification,
             deviceName
         )
+        if (MonitorStore(this).settings().monitoringEnabled) {
+            MonitoringService.handleDeadline(this)
+        }
         refreshStoredState()
     }
 
@@ -392,7 +395,10 @@ class MainActivity : ComponentActivity() {
             if (resumeMonitoring && MonitorStore(this).settings().monitoringEnabled) {
                 setMonitoringEnabled(true)
             }
-        }.exceptionOrNull()?.let { it.message?.take(180) ?: "Restore could not be completed." }
+        }.onFailure {
+            runCatching { MonitoringService.syncHosting(this) }
+            refreshStoredState()
+        }.exceptionOrNull()?.let { it.message?.take(250) ?: "Restore could not be completed." }
     }
 
     private fun sendTestAlert(message: AlertMessage): Boolean =

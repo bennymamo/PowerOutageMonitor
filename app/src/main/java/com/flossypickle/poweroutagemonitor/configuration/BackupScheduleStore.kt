@@ -77,8 +77,9 @@ internal class BackupScheduleStore(context: Context) {
         ) { "Unable to save automatic backup settings" }
     }
 
-    /** Restores portable choices and the secret, but never assumes another device owns the folder grant. */
+    /** Restores portable choices; current archives omit the password and folder grant. */
     fun restorePortable(settings: Settings, password: String?) {
+        if (password == null) secrets.remove(PASSWORD_SECRET)
         save(
             enabled = false,
             folderUri = null,

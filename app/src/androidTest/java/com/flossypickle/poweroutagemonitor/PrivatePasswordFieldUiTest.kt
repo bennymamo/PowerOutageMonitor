@@ -1,5 +1,8 @@
 package com.flossypickle.poweroutagemonitor
 
+import android.view.WindowManager
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
@@ -17,8 +20,10 @@ class PrivatePasswordFieldUiTest {
         }
         compose.onNode(hasSetTextAction()).performTextInput("fake test password")
         compose.onNodeWithText("Show").performClick()
+        compose.runOnIdle { assertTrue(compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0) }
         compose.onNode(hasSetTextAction()).assertTextContains("fake test password")
         compose.onNodeWithText("Hide").performClick()
+        compose.runOnIdle { assertFalse(compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0) }
         compose.onNode(hasSetTextAction()).performTextClearance()
         compose.onNodeWithText("Show").assertExists()
     }

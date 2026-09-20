@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
@@ -52,6 +51,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 internal fun ResendEmailSetupScreen(
@@ -65,16 +65,17 @@ internal fun ResendEmailSetupScreen(
     val store = remember(context) { ResendEmailConfigStore(context) }
     val client = remember { ResendEmailClient() }
     val scope = rememberCoroutineScope()
+    val drafts: ScreenDraftViewModel = viewModel(key = "resend-setup-drafts")
     var config by remember { mutableStateOf(store.config()) }
-    var apiKeyInput by remember { mutableStateOf("") }
-    var sender by remember { mutableStateOf(config.sender) }
-    var recipientText by remember { mutableStateOf(config.recipients.joinToString("\n")) }
-    var enabled by remember { mutableStateOf(config.enabled) }
+    var apiKeyInput by drafts.state("api-key", "")
+    var sender by drafts.state("sender", config.sender)
+    var recipientText by drafts.state("recipients", config.recipients.joinToString("\n"))
+    var enabled by drafts.state("enabled", config.enabled)
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     val setupSteps = listOf("Prepare Resend", "Sender and recipients", "Save and test")
-    var setupStep by rememberSaveable { mutableStateOf(if (config.hasApiKey) setupSteps.lastIndex else 0) }
+    var setupStep by drafts.state("setup-step", if (config.hasApiKey) setupSteps.lastIndex else 0)
     val setupScroll = rememberScrollState()
     LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
@@ -145,17 +146,12 @@ internal fun ResendEmailSetupScreen(
         Text("Credentials", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         EmailCard {
-            OutlinedTextField(
+            PrivatePasswordField(
                 value = apiKeyInput,
-                onValueChange = { apiKeyInput = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text(if (config.hasApiKey) {
+                onChange = { apiKeyInput = it.trim() },
+                label = if (config.hasApiKey) {
                         "New API key (stored key unchanged if blank)"
-                    } else "Resend API key")
-                },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
+                    } else "Resend API key",
                 enabled = !loading
             )
             if (config.hasApiKey) {

@@ -26,8 +26,29 @@ internal object AlertQueueEngine {
                 it.providerId == item.providerId &&
                 it.destinationId == item.destinationId
         }
-        return if (duplicate) items else items + item
+        if (duplicate) return items
+        return suppressObsoleteUpdates(items + item)
     }
+
+    /** Unsent status updates are obsolete once restoration has been queued. In-flight sends
+     * must finish before restoration, since a request already sent cannot be retracted. */
+    fun suppressObsoleteUpdates(items: List<Item>): List<Item> = items.map { item ->
+        if (item.message.kind == AlertKind.OUTAGE_UPDATE &&
+            item.status in setOf(Status.PENDING, Status.RETRYING, Status.FAILED) &&
+            items.any { other -> sameIncident(item, other) && other.message.kind == AlertKind.RESTORED }) {
+            complete(item, DeliveryResult.Skipped("Superseded by power restoration"), item.createdAtEpochMs)
+        } else item
+    }
+
+    private fun sameIncident(a: Item, b: Item): Boolean =
+        a.providerId == b.providerId && a.destinationId == b.destinationId &&
+            a.message.orderingKey == b.message.orderingKey
+
+    private val sequenceOrder = compareBy<Item>(
+        { deliveryOrder(it.message.kind) }, { it.createdAtEpochMs }, { it.id }
+    )
+
+    private fun precedes(a: Item, b: Item): Boolean = sequenceOrder.compare(a, b) < 0
 
     fun due(items: List<Item>, nowEpochMs: Long): List<Item> = items.filter { item ->
         val timeDue = when (item.status) {
@@ -43,9 +64,9 @@ internal object AlertQueueEngine {
         other.id != item.id &&
             other.providerId == item.providerId &&
             other.destinationId == item.destinationId &&
-            other.message.eventId == item.message.eventId &&
+            other.message.orderingKey == item.message.orderingKey &&
             other.status !in terminalStatuses &&
-            deliveryOrder(other.message.kind) < deliveryOrder(item.message.kind)
+            precedes(other, item)
     }
 
     fun nextUnfinishedForEvent(items: List<Item>, item: Item): Item? = items
@@ -54,10 +75,10 @@ internal object AlertQueueEngine {
             other.id != item.id &&
                 other.providerId == item.providerId &&
                 other.destinationId == item.destinationId &&
-                other.message.eventId == item.message.eventId &&
+                other.message.orderingKey == item.message.orderingKey &&
                 other.status !in terminalStatuses
         }
-        .minWithOrNull(compareBy<Item>({ deliveryOrder(it.message.kind) }, { it.createdAtEpochMs }))
+        .minWithOrNull(sequenceOrder)
 
     fun sequenceHeads(items: List<Item>): List<Item> = items.filter { item ->
         item.status !in terminalStatuses && !hasUnfinishedPredecessor(items, item)

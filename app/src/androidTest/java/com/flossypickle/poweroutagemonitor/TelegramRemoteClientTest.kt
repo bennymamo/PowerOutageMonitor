@@ -42,7 +42,7 @@ class TelegramRemoteClientTest {
             } else """{"ok":true,"result":{"message_id":1}}"""
             Fixture(url, response)
         }
-        val controller = TelegramRemoteController(context, { command ->
+        val controller = TelegramRemoteController(context, { command, _ ->
             val hash = java.security.MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
             assertEquals(12L, store.offset(hash))
             commands.add(command.name); handled.countDown(); "Fixture reply"

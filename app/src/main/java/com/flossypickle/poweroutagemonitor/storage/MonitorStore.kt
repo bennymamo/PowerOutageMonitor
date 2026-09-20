@@ -87,6 +87,18 @@ internal class MonitorStore(context: Context) {
         }
     }
 
+    fun deliveryGeneration(): Long = preferences.getLong(KEY_DELIVERY_GENERATION, 0L)
+
+    fun beginDeliveryMaintenance(): Long {
+        val next = deliveryGeneration() + 1L
+        check(preferences.edit()
+            .putBoolean(KEY_RESTORED_DELIVERIES_PAUSED, true)
+            .putLong(KEY_DELIVERY_GENERATION, next)
+            .commit()
+        ) { "Unable to pause alert delivery" }
+        return next
+    }
+
     fun setMonitoringEnabled(enabled: Boolean) {
         val editor = preferences.edit().putBoolean(KEY_ENABLED, enabled)
         if (!enabled) {
@@ -253,5 +265,6 @@ internal class MonitorStore(context: Context) {
         private const val KEY_LAST_TEMPERATURE = "last_temperature"
         private const val KEY_LAST_OBSERVATION = "last_observation"
         private const val KEY_RESTORED_DELIVERIES_PAUSED = "restored_deliveries_paused"
+        private const val KEY_DELIVERY_GENERATION = "delivery_generation"
     }
 }

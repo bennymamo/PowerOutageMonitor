@@ -55,3 +55,11 @@ History now records a system-provided package-update or reboot resume separately
 - Repeat essential compatibility testing on an Android 6/API 23 device if one is available.
 
 This result proves the primary event, persistence, queue, Telegram, screen-off, removed-from-Recents and reboot-recovery paths on one real Android 12 device. Overnight idle and Android 6 compatibility remain open.
+
+## 20 September automated compatibility and 1.1.7 update
+
+Before producing 1.1.7, the complete 30-test instrumentation suite passed on Android 16/API 36 and on the minimum supported Android 6/API 23. The API 23 run closes the earlier emulator compatibility item. Host validation also passed 285 unit tests, Android lint with no errors, and Android-test compilation.
+
+The permanent-signature 1.1.7 APK was verified and installed in place over 1.1.6 on this Samsung. Android reported version name `1.1.7` and version code `20` after installation. The installed APK's SHA-256 is `58BF4F305F5894290A5C71F4497C35D8D876C016EF5DADF5EB308A5A11B92F14`.
+
+Installing it is an update operation and does not count as the deferred physical outage experiment. The corrected PowerOcean sampled-evidence path still needs a controlled grid-loss/restoration run on the live installation; the owner plans to perform that test later.

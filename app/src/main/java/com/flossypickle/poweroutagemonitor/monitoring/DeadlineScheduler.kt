@@ -21,12 +21,17 @@ internal class DeadlineScheduler(private val context: Context) {
     }
 
     fun schedule(state: OutageEngine.State, settings: MonitorStore.Settings) {
-        alarmManager.cancel(pendingIntent)
         val deadline = OutageEngine.deadlineEpochMs(
             state,
             settings.outageDelayMs,
             settings.restoreDelayMs
-        ) ?: return
+        )
+        scheduleAt(deadline)
+    }
+
+    fun scheduleAt(deadline: Long?) {
+        alarmManager.cancel(pendingIntent)
+        deadline ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadline, pendingIntent)
         } else {

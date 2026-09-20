@@ -90,14 +90,36 @@ internal class MonitoringCoordinator(private val context: Context) {
         gridPowered: Boolean?,
         nowEpochMs: Long = System.currentTimeMillis()
     ) {
-        if (!store.settings().monitoringEnabled) return
+        val settings = store.settings()
+        if (!settings.monitoringEnabled) return
+        val state = store.state()
+        // Battery broadcasts remain safety-relevant even when the selected grid signal
+        // is stable: persist them, enforce the sound cutoff, and send the low-battery alert.
+        if (store.lastSnapshot() != snapshot) store.save(state, snapshot, nowEpochMs)
         scheduledAlerts.process(
-            monitorState = store.state(),
+            monitorState = state,
             snapshot = snapshot,
             gridPowered = gridPowered,
             selectedSource = PowerSourceStore(context).selectedSource(),
             nowEpochMs = nowEpochMs
         )
+        if (state.phase == OutageEngine.Phase.POWERED) {
+            store.clearBatteryLowAlertMarker()
+        } else {
+            AlertMessageFactory.batteryLowForObservation(
+                state,
+                snapshot,
+                settings,
+                nowEpochMs,
+                store.batteryLowAlertedOutageEpochMs()
+            )?.let { message ->
+                if (alerts.persistForEnabledProviders(message)) {
+                    state.outageStartedEpochMs?.let(store::markBatteryLowAlerted)
+                    alerts.materializePending()
+                }
+            }
+        }
+        audibleAlarm.reconcile(state, snapshot, nowEpochMs)
     }
 
     private fun recordCompletedEvent(

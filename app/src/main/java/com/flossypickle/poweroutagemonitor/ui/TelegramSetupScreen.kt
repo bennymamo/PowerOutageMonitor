@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult
@@ -48,6 +47,7 @@ import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private enum class TelegramFeedbackArea { SETUP, CREDENTIALS, RECIPIENTS, ACTIVATION, SECURITY }
 
@@ -63,12 +63,14 @@ internal fun TelegramSetupScreen(
     val store = remember(context) { TelegramConfigStore(context) }
     val client = remember { TelegramClient() }
     val scope = rememberCoroutineScope()
+    val drafts: ScreenDraftViewModel = viewModel(key = "telegram-setup-drafts")
     var config by remember { mutableStateOf(store.config()) }
-    var tokenInput by remember { mutableStateOf("") }
-    var destinationText by remember {
-        mutableStateOf(config.destinations.joinToString("\n") { "${it.chatId} | ${it.label}" })
-    }
-    var enabled by remember { mutableStateOf(config.enabled) }
+    var tokenInput by drafts.state("token", "")
+    var destinationText by drafts.state(
+        "destinations",
+        config.destinations.joinToString("\n") { "${it.chatId} | ${it.label}" }
+    )
+    var enabled by drafts.state("enabled", config.enabled)
     var botName by remember { mutableStateOf(config.botDisplayName) }
     var botUsername by remember { mutableStateOf<String?>(null) }
     var discovered by remember { mutableStateOf(emptyList<TelegramClient.Chat>()) }
@@ -77,7 +79,7 @@ internal fun TelegramSetupScreen(
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     val setupSteps = listOf("Create your bot", "Connect your bot", "Choose recipients", "Save and test")
-    var setupStep by rememberSaveable { mutableStateOf(if (config.hasToken) setupSteps.lastIndex else 0) }
+    var setupStep by drafts.state("setup-step", if (config.hasToken) setupSteps.lastIndex else 0)
     val setupScroll = rememberScrollState()
     LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
@@ -144,13 +146,10 @@ internal fun TelegramSetupScreen(
         Text("Bot credentials", style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary)
         TelegramCard {
-            OutlinedTextField(
+            PrivatePasswordField(
                 value = tokenInput,
-                onValueChange = { tokenInput = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (config.hasToken) "New bot token (stored token unchanged if blank)" else "Bot token") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
+                onChange = { tokenInput = it.trim() },
+                label = if (config.hasToken) "New bot token (stored token unchanged if blank)" else "Bot token",
                 enabled = !loading
             )
             if (config.hasToken) {

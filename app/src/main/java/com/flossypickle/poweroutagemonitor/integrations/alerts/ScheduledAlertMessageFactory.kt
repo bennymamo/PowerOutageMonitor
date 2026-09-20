@@ -45,8 +45,8 @@ internal object ScheduledAlertMessageFactory {
                 append("Grid status: ${gridStatus(monitorState, sourceReadable)}")
             }
         )
-        ScheduledAlertPolicy.Notice.Heartbeat -> AlertMessage(
-            eventId = "heartbeat-$nowEpochMs",
+        is ScheduledAlertPolicy.Notice.Heartbeat -> AlertMessage(
+            eventId = "heartbeat-${notice.scheduledAtEpochMs}",
             kind = AlertKind.HEARTBEAT,
             title = "MONITOR HEARTBEAT",
             body = buildString {
@@ -58,7 +58,7 @@ internal object ScheduledAlertMessageFactory {
             }.trimEnd()
         )
         is ScheduledAlertPolicy.Notice.OutageUpdate -> AlertMessage(
-            eventId = "outage-update-${notice.outageStartedEpochMs}-$nowEpochMs",
+            eventId = "outage-update-${notice.outageStartedEpochMs}-${notice.scheduledAtEpochMs}",
             kind = AlertKind.OUTAGE_UPDATE,
             title = "POWER OUTAGE STILL ACTIVE",
             body = buildString {
@@ -68,7 +68,8 @@ internal object ScheduledAlertMessageFactory {
                 appendLine("Outage duration: ${AlertMessageFactory.formatDuration(nowEpochMs - notice.outageStartedEpochMs)}")
                 snapshot.batteryPercent?.let { appendLine("Monitor battery: $it%") }
                 append("The confirmed outage is still open.")
-            }
+            },
+            orderingKey = "power-event-${notice.outageStartedEpochMs}"
         )
     }
 

@@ -76,6 +76,11 @@
             android:exported="false" />
 
         <receiver
+            android:name=".integrations.power.ecoflow.PowerOceanCheckReceiver"
+            android:directBootAware="true"
+            android:exported="false" />
+
+        <receiver
             android:name=".audible.AudibleAlarmReceiver"
             android:directBootAware="true"
             android:exported="false">

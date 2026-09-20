@@ -65,6 +65,7 @@ internal fun DeviceSettingsContent(
     onSave: (Long, Long, Boolean, String) -> Unit
 ) {
     var deviceName by remember { mutableStateOf(settings.deviceName) }
+    var saveConfirmed by remember { mutableStateOf(false) }
     LaunchedEffect(settings.deviceName) { deviceName = settings.deviceName }
 
     SettingsCard {
@@ -76,7 +77,7 @@ internal fun DeviceSettingsContent(
         )
         OutlinedTextField(
             value = deviceName,
-            onValueChange = { if (it.length <= 50) deviceName = it },
+            onValueChange = { if (it.length <= 50) { deviceName = it; saveConfirmed = false } },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             label = { Text("Device name") }
@@ -88,7 +89,9 @@ internal fun DeviceSettingsContent(
                 settings.sendRestoreNotification,
                 deviceName
             )
-        }) { Text("Save name") }
+            saveConfirmed = true
+        }, enabled = deviceName.trim() != settings.deviceName) { Text("Save name") }
+        if (saveConfirmed) SaveConfirmation("Device name saved")
     }
 }
 

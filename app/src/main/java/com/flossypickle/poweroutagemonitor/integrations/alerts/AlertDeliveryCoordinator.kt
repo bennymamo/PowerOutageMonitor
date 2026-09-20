@@ -24,9 +24,9 @@ internal class AlertDeliveryCoordinator(private val context: Context) {
         return accepted
     }
 
-    fun materializePending() {
-        if (MonitorStore(context).restoredDeliveriesPaused()) return
-        if (!isUserUnlocked()) return
+    fun materializePending() = synchronized(DeliveryMaintenanceGate.lock) {
+        if (MonitorStore(context).restoredDeliveriesPaused()) return@synchronized
+        if (!isUserUnlocked()) return@synchronized
         val registry = AlertProviderRegistry(context)
         val destinations = registry.enabledDestinations()
         if (destinations.isEmpty()) {

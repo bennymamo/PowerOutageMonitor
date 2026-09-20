@@ -15,6 +15,22 @@ class ScheduledAlertPolicyTest {
         outageUpdateIntervalMs = 6 * 60 * 60_000L
     )
 
+    @Test fun `retrying an uncommitted timer result keeps the same notice identities`() {
+        val before = ScheduledAlertStore.State(
+            sourceUnavailableSinceEpochMs = 1_000L,
+            lastHeartbeatEpochMs = 1_000L,
+            trackedOutageStartedEpochMs = 1_000L,
+            lastOutageUpdateEpochMs = 1_000L
+        )
+        val config = settings.copy(sourceUnavailableDelayMs = 60_000, heartbeatIntervalMs = 60_000,
+            outageUpdateIntervalMs = 60_000)
+        val outage = OutageEngine.State(phase = OutageEngine.Phase.OUTAGE, outageStartedEpochMs = 1_000L)
+        val first = ScheduledAlertPolicy.update(before, config, false, outage, 70_000)
+        val afterCrash = ScheduledAlertPolicy.update(before, config, false, outage, 80_000)
+        assertEquals(first.notices, afterCrash.notices)
+        assertEquals(3, first.notices.size)
+    }
+
     @Test
     fun `source problem alerts only after continuous delay then reports recovery`() {
         val started = ScheduledAlertPolicy.update(
@@ -99,7 +115,7 @@ class ScheduledAlertPolicyTest {
         )
 
         assertTrue(initial.notices.isEmpty())
-        assertTrue(due.notices.contains(ScheduledAlertPolicy.Notice.Heartbeat))
+        assertTrue(due.notices.contains(ScheduledAlertPolicy.Notice.Heartbeat(dueAt)))
         assertTrue(immediateRepeat.notices.isEmpty())
         assertEquals(dueAt + settings.heartbeatIntervalMs,
             ScheduledAlertPolicy.nextDeadline(due.state, settings, powered()))
@@ -123,7 +139,7 @@ class ScheduledAlertPolicyTest {
 
         assertTrue(initial.notices.isEmpty())
         assertEquals(
-            listOf(ScheduledAlertPolicy.Notice.OutageUpdate(1_000L)),
+            listOf(ScheduledAlertPolicy.Notice.OutageUpdate(1_000L, dueAt)),
             due.notices.filterIsInstance<ScheduledAlertPolicy.Notice.OutageUpdate>()
         )
         assertNull(restored.state.trackedOutageStartedEpochMs)

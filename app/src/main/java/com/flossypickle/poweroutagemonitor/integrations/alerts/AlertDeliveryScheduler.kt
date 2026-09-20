@@ -29,7 +29,10 @@ internal class AlertDeliveryScheduler(private val context: Context) {
 
     fun cancelAll() = WorkManager.getInstance(context).cancelAllWorkByTag(TAG)
 
-    private fun enqueue(itemId: String, delayMs: Long, policy: ExistingWorkPolicy) {
+    private fun enqueue(itemId: String, delayMs: Long, policy: ExistingWorkPolicy) = synchronized(DeliveryMaintenanceGate.lock) {
+        val monitor = com.flossypickle.poweroutagemonitor.storage.MonitorStore(context)
+        if (monitor.restoredDeliveriesPaused()) return@synchronized
+        val generation = monitor.deliveryGeneration()
         val constraints = Constraints.Builder().apply {
             val providerId = AlertQueueStore(context).find(itemId)?.providerId
             if (AlertProviderRegistry.requiresInternet(providerId)) {
@@ -37,12 +40,13 @@ internal class AlertDeliveryScheduler(private val context: Context) {
             }
         }.build()
         val request = OneTimeWorkRequestBuilder<AlertDeliveryWorker>()
-            .setInputData(Data.Builder().putString(AlertDeliveryWorker.KEY_ITEM_ID, itemId).build())
+            .setInputData(Data.Builder().putString(AlertDeliveryWorker.KEY_ITEM_ID, itemId)
+                .putLong(AlertDeliveryWorker.KEY_GENERATION, generation).build())
             .setConstraints(constraints)
             .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
             .addTag(TAG)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(workName(itemId), policy, request)
+        WorkManager.getInstance(context).enqueueUniqueWork("${workName(itemId)}-$generation", policy, request)
     }
 
     private fun workName(itemId: String) = "alert-delivery-$itemId"

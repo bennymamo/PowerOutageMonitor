@@ -140,6 +140,41 @@ class BackupDocumentCodecTest {
         }
     }
 
+    @Test fun legacyMessagesWithoutOrderingStillDecode() {
+        val original = completeDocument()
+        val update = AlertMessage("outage-update-123-456", AlertKind.OUTAGE_UPDATE, "Update", "Body")
+        val document = original.copy(activeState = original.activeState!!.copy(pendingEvents = listOf(update)))
+        val legacy = BackupDocumentCodec.encode(document).toString(Charsets.UTF_8)
+            .lineSequence().filterNot { it.startsWith("active.pending.0.ordering=") }.joinToString("\n")
+        assertEquals("power-event-123", BackupDocumentCodec.decode(legacy.toByteArray()).activeState!!.pendingEvents.single().orderingKey)
+    }
+
+    @Test fun pendingCountsAboveOldLimitRoundTripAndNewLimitIsSymmetric() {
+        val original = completeDocument()
+        for (count in listOf(1_000, 1_001, 10_000)) {
+            val document = original.copy(activeState = original.activeState!!.copy(
+                pendingEvents = List(count) { AlertMessage("$it", AlertKind.OUTAGE, "", "") }))
+            val encoded = BackupDocumentCodec.encode(document)
+            assertEquals(document, BackupDocumentCodec.decode(encoded))
+        }
+        val oversized = original.copy(activeState = original.activeState!!.copy(
+            pendingEvents = List(10_001) { AlertMessage("$it", AlertKind.OUTAGE, "", "") }))
+        assertThrows(IllegalArgumentException::class.java) { BackupDocumentCodec.encode(oversized) }
+        val text = BackupDocumentCodec.encode(original).toString(Charsets.UTF_8)
+            .replace("active.pending.count=1", "active.pending.count=10001")
+        assertThrows(IllegalArgumentException::class.java) { BackupDocumentCodec.decode(text.toByteArray()) }
+    }
+
+    @Test fun byteLimitIsEnforcedOnExportAsWellAsImport() {
+        val original = completeDocument()
+        val document = original.copy(activeState = original.activeState!!.copy(pendingEvents = listOf(
+            AlertMessage("large", AlertKind.OUTAGE, "", "x".repeat(PasswordBackupCipher.MAX_BACKUP_BYTES)))))
+        assertThrows(IllegalArgumentException::class.java) { BackupDocumentCodec.encode(document) }
+        assertThrows(IllegalArgumentException::class.java) {
+            BackupDocumentCodec.decode(ByteArray(PasswordBackupCipher.MAX_BACKUP_BYTES + 1))
+        }
+    }
+
     private fun completeDocument() = BackupDocument(
         createdAtEpochMs = 1_700_000_000_000,
         appVersionName = "1.0-test",
@@ -207,7 +242,9 @@ class BackupDocumentCodecTest {
             scheduledState = ScheduledAlertStore.State(),
             audibleRuntime = AudibleAlarmEngine.Runtime(),
             deliveryQueue = emptyList(),
-            pendingEvents = listOf(AlertMessage("event-1", AlertKind.OUTAGE, "Outage", "Grid failed"))
+            pendingEvents = listOf(AlertMessage(
+                "event-1", AlertKind.OUTAGE, "Outage", "Grid failed", "power-event-1"
+            ))
         )
     )
 }

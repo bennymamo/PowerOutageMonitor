@@ -23,8 +23,8 @@ android {
         applicationId = "com.flossypickle.poweroutagemonitor"
         minSdk = 23
         targetSdk = 37
-        versionCode = 19
-        versionName = "1.1.6"
+        versionCode = 20
+        versionName = "1.1.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.work.runtime)
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     testImplementation(libs.junit)

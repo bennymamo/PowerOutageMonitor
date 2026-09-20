@@ -4,7 +4,9 @@ internal data class AlertMessage(
     val eventId: String,
     val kind: AlertKind,
     val title: String,
-    val body: String
+    val body: String,
+    /** Groups separately deduplicated messages that belong to one ordered incident. */
+    val orderingKey: String = legacyAlertOrderingKey(eventId, kind)
 )
 
 internal enum class AlertKind {
@@ -33,3 +35,10 @@ internal interface AlertProvider {
     val displayName: String
     fun send(message: AlertMessage): DeliveryResult
 }
+
+/** Version-one queues and archives predate the separate ordering key. */
+internal fun legacyAlertOrderingKey(eventId: String, kind: AlertKind): String =
+    if (kind == AlertKind.OUTAGE_UPDATE) {
+        Regex("outage-update-([0-9]+)-[0-9]+").matchEntire(eventId)
+            ?.groupValues?.get(1)?.let { "power-event-$it" } ?: eventId
+    } else eventId

@@ -21,39 +21,44 @@ internal class ScheduledBackupWorker(
             return@withContext Result.success()
         }
         val password = passwordText.toCharArray()
-        runCatching {
-            val treeUri = android.net.Uri.parse(folder)
-            val parent = DocumentsContract.buildDocumentUriUsingTree(
-                treeUri,
-                DocumentsContract.getTreeDocumentId(treeUri)
-            )
-            val name = automaticBackupFileName()
-            val file = DocumentsContract.createDocument(
-                applicationContext.contentResolver,
-                parent,
-                MIME_TYPE,
-                name
-            ) ?: error("The backup folder did not create a file.")
+        try { runCatching {
             val archive = BackupManager(applicationContext).create(settings.categories, password)
             try {
-                applicationContext.contentResolver.openOutputStream(file, "w")?.use {
-                    it.write(archive)
-                } ?: error("The new backup file could not be opened.")
-            } catch (error: Exception) {
-                runCatching { DocumentsContract.deleteDocument(applicationContext.contentResolver, file) }
-                throw error
+                val treeUri = android.net.Uri.parse(folder)
+                val parent = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    DocumentsContract.getTreeDocumentId(treeUri)
+                )
+                val name = automaticBackupFileName()
+                val file = DocumentsContract.createDocument(
+                    applicationContext.contentResolver,
+                    parent,
+                    MIME_TYPE,
+                    "$name.partial"
+                ) ?: error("The backup folder did not create a file.")
+                try {
+                    applicationContext.contentResolver.openOutputStream(file, "w")?.use {
+                        it.write(archive)
+                    } ?: error("The new backup file could not be opened.")
+                    // Only completed writes receive the extension counted by retention.
+                    DocumentsContract.renameDocument(applicationContext.contentResolver, file, name)
+                        ?: error("The backup folder could not finalize the backup file.")
+                } catch (error: Exception) {
+                    runCatching { DocumentsContract.deleteDocument(applicationContext.contentResolver, file) }
+                    throw error
+                }
+                removeOldCopies(treeUri, settings.retainedCopies)
+                store.recordSuccess()
             } finally {
                 archive.fill(0)
             }
-            removeOldCopies(treeUri, settings.retainedCopies)
-            store.recordSuccess()
         }.fold(
             onSuccess = { Result.success() },
             onFailure = {
                 store.recordFailure(it.message ?: it.javaClass.simpleName)
                 Result.failure()
             }
-        ).also { password.fill('\u0000') }
+        ) } finally { password.fill('\u0000') }
     }
 
     private fun removeOldCopies(treeUri: android.net.Uri, keep: Int) {
@@ -65,15 +70,18 @@ internal class ScheduledBackupWorker(
         val columns = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_SIZE
         )
         val files = mutableListOf<BackupFile>()
         resolver.query(children, columns, null, null, null)?.use { cursor ->
             val idIndex = cursor.getColumnIndexOrThrow(columns[0])
             val nameIndex = cursor.getColumnIndexOrThrow(columns[1])
             val modifiedIndex = cursor.getColumnIndexOrThrow(columns[2])
+            val sizeIndex = cursor.getColumnIndexOrThrow(columns[3])
             while (cursor.moveToNext()) {
                 val name = cursor.getString(nameIndex) ?: continue
+                if (cursor.isNull(sizeIndex) || cursor.getLong(sizeIndex) < 56L) continue
                 if (name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX)) {
                     files += BackupFile(cursor.getString(idIndex), name, cursor.getLong(modifiedIndex))
                 }

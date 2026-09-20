@@ -141,12 +141,13 @@ private fun DurationEditor(
     presets: List<Pair<Long, String>>,
     onSelect: (Long) -> Unit
 ) {
+    var saveConfirmed by remember { mutableStateOf(false) }
     presets.forEach { (duration, label) ->
         Row(
-            Modifier.fillMaxWidth().clickable { onSelect(duration) }.padding(vertical = 1.dp),
+            Modifier.fillMaxWidth().clickable { saveConfirmed = false; onSelect(duration) }.padding(vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RadioButton(selected = selectedMs == duration, onClick = { onSelect(duration) })
+            RadioButton(selected = selectedMs == duration, onClick = { saveConfirmed = false; onSelect(duration) })
             Text(label)
         }
     }
@@ -157,7 +158,7 @@ private fun DurationEditor(
     var customUnit by remember(selectedMs) { mutableStateOf(initialUnit) }
     OutlinedTextField(
         value = customValue,
-        onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) customValue = it },
+        onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) { customValue = it; saveConfirmed = false } },
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Custom interval") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -169,10 +170,10 @@ private fun DurationEditor(
     ) {
         DurationUnit.entries.forEach { unit ->
             Row(
-                Modifier.clickable { customUnit = unit },
+                Modifier.clickable { customUnit = unit; saveConfirmed = false },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadioButton(selected = customUnit == unit, onClick = { customUnit = unit })
+                RadioButton(selected = customUnit == unit, onClick = { customUnit = unit; saveConfirmed = false })
                 Text(unit.label, fontSize = 12.sp)
             }
         }
@@ -181,10 +182,11 @@ private fun DurationEditor(
         runCatching { Math.multiplyExact(value, customUnit.milliseconds) }.getOrNull()
     }
     Button(
-        onClick = { customMs?.let(onSelect) },
-        enabled = customMs in ScheduledAlertStore.INTERVAL_RANGE_MS,
+        onClick = { customMs?.let { onSelect(it); saveConfirmed = true } },
+        enabled = customMs in ScheduledAlertStore.INTERVAL_RANGE_MS && customMs != selectedMs,
         modifier = Modifier
     ) { Text("Save custom interval") }
+    if (saveConfirmed) SaveConfirmation()
     Text(
         "Custom range: 1 minute to 30 days",
         color = MaterialTheme.colorScheme.onSurfaceVariant,

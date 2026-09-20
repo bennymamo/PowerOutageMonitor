@@ -33,6 +33,8 @@ EcoFlow is optional. The ordinary charger monitor needs no EcoFlow equipment, ac
 
 The minimum Android version is **Android 6.0 (API 23)**. Broad support is deliberate: an unused older phone can stay connected as a dedicated monitor. The app uses event-driven charger signals and lightweight local storage. Older phones may have weaker security and battery condition; use a healthy device and test its background operation.
 
+Release 1.1.7 completed 285 local unit tests and the full 30-test Android instrumentation suite on both Android 6/API 23 and Android 16/API 36. This covers simulated outage and battery behavior, settings navigation and save feedback, private credential entry, alert ordering and retry handling, backup compatibility, and Telegram command races. A real grid-loss test is still required for every PowerOcean installation because inverter reports and reconnection timing vary by site.
+
 ## Full guide
 
 ### Install or update
@@ -176,6 +178,8 @@ Use this only if you have compatible EcoFlow equipment and want grid evidence ev
 4. Enable **Charger-first assistance**, review schedules, then choose **Use charger + EcoFlow assistance**. The Status master switch still controls monitoring.
 
 Background account monitoring currently requires the tested **Single Phase** profile: grid code `0` connected, `1` off-grid, and meter 1 behavior verified against utility loss. Codes and meter behavior can differ by installation. Other models can expose read-only data without being supported outage sources.
+
+Some installations return a sampled off-grid code while the meter reads zero and live power reports continue changing. The app can now use that combination as guarded outage evidence after enough fresh reports arrive. During restoration it preserves the nonzero-meter evidence while code `1` lingers through inverter reconnection; it does not invert the grid-code mapping. Confirm this behavior with a controlled grid-loss and restoration test before relying on it.
 
 With automatic charger-first assistance enabled, unplugging triggers an immediate EcoFlow check before outage confirmation. Current grid-connected evidence cancels the suspected outage. If the check fails or ends without usable evidence, ordinary charger confirmation takes over. A stalled check cannot hold detection indefinitely: the limit is the configured listening time plus up to one minute for connection setup. Paused assistance or manual-only outage checks use the charger directly.
 

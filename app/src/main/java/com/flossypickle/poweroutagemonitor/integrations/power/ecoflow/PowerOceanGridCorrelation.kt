@@ -39,6 +39,19 @@ internal class PowerOceanGridCorrelation(private val profile: Profile) {
         gridCode = profile.offGridCode; gridReceived = receivedAt; offGridStarted = receivedAt; zeroFlowReceived = receivedAt
     }
 
+    /** A bounded check corroborates its reply with zero flow and changing device reports. */
+    fun corroborateOffGridReply(code: Long, codeReceived: Long, zeroMeterReceived: Long) {
+        if (code != profile.offGridCode || codeReceived < (gridReceived ?: 0)) return
+        if (gridCode != code) {
+            resetMeterSequence()
+            offGridStarted = minOf(codeReceived, zeroMeterReceived)
+        }
+        gridCode = code
+        gridReceived = codeReceived
+        // Preserve established return evidence: zero net flow alone is not a second outage.
+        observeMeter(0.0, zeroMeterReceived, false, true)
+    }
+
     fun observe(report: PowerOceanPushDecoder.Report, receivedUtcMillis: Long,
         retained: Boolean, fromDevicePush: Boolean, allowSnapshotBaseline: Boolean = false) {
         if (retained || receivedUtcMillis <= 0) return

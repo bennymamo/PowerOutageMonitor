@@ -56,6 +56,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 internal fun SmsSetupScreen(
@@ -69,15 +70,16 @@ internal fun SmsSetupScreen(
     val store = remember(context) { SmsConfigStore(context) }
     val client = remember(context) { SmsClient(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val drafts: ScreenDraftViewModel = viewModel(key = "sms-setup-drafts")
     var config by remember { mutableStateOf(store.config()) }
     var capability by remember { mutableStateOf(SmsCapability.capture(context)) }
-    var recipientText by remember { mutableStateOf(config.recipients.joinToString("\n")) }
-    var enabled by remember { mutableStateOf(config.enabled) }
+    var recipientText by drafts.state("recipients", config.recipients.joinToString("\n"))
+    var enabled by drafts.state("enabled", config.enabled)
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     val setupSteps = listOf("Check your phone", "Choose recipients", "Save and test")
-    var setupStep by rememberSaveable { mutableStateOf(if (config.recipients.isNotEmpty()) setupSteps.lastIndex else 0) }
+    var setupStep by drafts.state("setup-step", if (config.recipients.isNotEmpty()) setupSteps.lastIndex else 0)
     val setupScroll = rememberScrollState()
     LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
     val requestSmsPermission = rememberLauncherForActivityResult(

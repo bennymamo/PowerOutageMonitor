@@ -1,6 +1,8 @@
 package com.flossypickle.poweroutagemonitor.integrations.power.ecoflow
 
 import android.content.Context
+import android.net.wifi.WifiManager
+import android.os.PowerManager
 import com.flossypickle.poweroutagemonitor.integrations.power.*
 import kotlinx.coroutines.*
 
@@ -10,9 +12,16 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     override val id = PowerSourceStore.POWEROCEAN_PROVIDER_ID
     override val displayName = "PowerOcean account"
     private var scope: CoroutineScope? = null
-    private var worker: Job? = null
+    @Volatile private var worker: Job? = null
+    @Volatile private var automaticRetriesBlocked = false
+    private var checkWakeLock: PowerManager.WakeLock? = null
+    private var checkWifiLock: WifiManager.WifiLock? = null
+    private var checkLockTimeout: Job? = null
+    private val checkScheduler = PowerOceanCheckScheduler(appContext)
+    private var scheduledWakeAtEpochMs: Long? = null
     @Volatile private var chargerPowered: Boolean? = null
     private val manualRevision = java.util.concurrent.atomic.AtomicLong(0)
+    private val scheduleChanges = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     @Synchronized
     fun updateCharger(powered: Boolean?) {
         val lostPower = chargerPowered == true && powered == false
@@ -20,11 +29,57 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         // Each new unplug must check immediately, even during backoff or an existing incident.
         if (lostPower && PowerSourceStore(appContext).powerOceanAssistedSettings().let { it.enabled && it.outageSeconds > 0 })
             manualRevision.incrementAndGet()
+        scheduleChanges.trySend(Unit)
     }
     fun requestCheck(): Boolean {
         if (worker?.isActive != true) return false
+        automaticRetriesBlocked = false
         manualRevision.incrementAndGet()
+        scheduleChanges.trySend(Unit)
         return true
+    }
+    fun isRunning(): Boolean = worker?.isActive == true
+
+    @Synchronized
+    private fun acquireCheckLocks() {
+        if (scope?.isActive != true) return
+        if (checkWakeLock?.isHeld != true) {
+            checkWakeLock = (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PowerOutageMonitor:PowerOceanCheck")
+                .apply { setReferenceCounted(false); acquire(MAX_CHECK_LOCK_MS + 10_000L) }
+        }
+        if (checkWifiLock?.isHeld != true) {
+            @Suppress("DEPRECATION")
+            checkWifiLock = (appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+                .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "PowerOutageMonitor:PowerOceanCheck")
+                .apply { setReferenceCounted(false); acquire() }
+        }
+        checkLockTimeout?.cancel()
+        checkLockTimeout = scope?.launch {
+            delay(MAX_CHECK_LOCK_MS)
+            releaseCheckLocks()
+        }
+    }
+
+    @Synchronized
+    private fun releaseCheckLocks() {
+        checkLockTimeout?.cancel()
+        checkLockTimeout = null
+        runCatching { checkWifiLock?.takeIf { it.isHeld }?.release() }
+        runCatching { checkWakeLock?.takeIf { it.isHeld }?.release() }
+        checkWifiLock = null
+        checkWakeLock = null
+    }
+
+    @Synchronized
+    private fun scheduleWake(deadlineEpochMs: Long?) {
+        if (scope?.isActive != true) return
+        val unchanged = deadlineEpochMs != null && scheduledWakeAtEpochMs?.let {
+            kotlin.math.abs(it - deadlineEpochMs) < 1_000L
+        } == true
+        if (unchanged || deadlineEpochMs == null && scheduledWakeAtEpochMs == null) return
+        checkScheduler.schedule(deadlineEpochMs)
+        scheduledWakeAtEpochMs = deadlineEpochMs
     }
     private fun incident() = chargerPowered == false || PowerSourceStore(appContext).assistedEcoFlowOutageStartedAt() > 0 || com.flossypickle.poweroutagemonitor.storage.MonitorStore(appContext).state().phase in
         setOf(com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_OUTAGE, com.flossypickle.poweroutagemonitor.OutageEngine.Phase.OUTAGE, com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_RESTORE)
@@ -33,7 +88,15 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     @Synchronized
     override fun start(onSignal: (PowerSignal) -> Unit) {
         if (scope != null) return
-        val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val owner = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ ->
+            // An unexpected failure outside the network boundary must be visible and recoverable.
+            // The service sees isRunning=false when the alarm reconciles this provider.
+            if (scope?.isActive == true) {
+                runCatching { scheduleWake(System.currentTimeMillis() + 60_000L) }
+                onSignal(PowerSignal(GridAvailability.UNKNOWN, System.currentTimeMillis(), id,
+                    "EcoFlow monitoring stopped unexpectedly. Charger watching continues; retry scheduled."))
+            }
+        })
         scope = owner
         worker = owner.launch {
             var latest: PowerSignal? = null
@@ -99,20 +162,22 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 val schedule = PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active || poweredFailureRetry, manualRevision.get(), true,
                     store.powerOceanAssistancePaused(), assisted.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
                 val monotonic = android.os.SystemClock.elapsedRealtime()
-                val retryBlocked = monotonic < retryAt && schedule.manualRevision <= attemptedManual
+                val retryBlocked = automaticRetriesBlocked ||
+                    monotonic < retryAt && schedule.manualRevision <= attemptedManual
                 val due = !retryBlocked && sampling.due(schedule, monotonic)
                 if (!due) {
                     val now = System.currentTimeMillis()
-                    val next = if (schedule.paused) null else sampling.nextDueAt?.let {
+                    val next = if (schedule.paused || automaticRetriesBlocked) null else sampling.nextDueAt?.let {
                         now + (maxOf(it, retryAt) - monotonic).coerceAtLeast(0)
                     }
+                    scheduleWake(next)
                     val last = latest
                     val check = last?.check?.copy(cycleState = when { schedule.paused -> PowerSourceCheck.CycleState.PAUSED; lastFailure != null -> PowerSourceCheck.CycleState.FAILED; else -> PowerSourceCheck.CycleState.WAITING },
                         nextCheckAtEpochMs = next)
                     val availability = if (!schedule.paused && lastFailure == null)
                         PowerOceanCheckContinuity.availability(lastVerified, check, now, assisted.checkWindowSeconds * 1000L, seconds.takeIf { it > 0 })
                     else GridAvailability.UNKNOWN
-                    val detail = lastFailure ?: when {
+                    val detail = if (automaticRetriesBlocked) "${lastFailure.orEmpty()} Automatic account retries stopped; correct the account and choose Check now. Charger watching continues." else lastFailure ?: when {
                         schedule.paused -> "EcoFlow paused. Connection closed; charger watching continues."
                         check == null -> "EcoFlow connection closed. Waiting for a scheduled or manual check."
                         else -> "EcoFlow connection closed between checks. " +
@@ -121,9 +186,19 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     // Reassess existing evidence without receiving or making any network request.
                     emit(availability, detail, last?.recoveryPending ?: false, last?.evidenceReceivedAtEpochMs,
                         last?.dataPossiblyStalled, check)
-                    delay(1000); continue
+                    // Wake for actual deadlines or service/settings changes, not an idle one-second poll.
+                    val waitMs = listOfNotNull(
+                        next?.let { it - now },
+                        check?.evidenceValidUntilEpochMs?.let { it - now + 1 }?.takeIf { it > 0 },
+                        nextAccountRetry.takeIf { savedAccount == null }?.let { it - monotonic }
+                    ).minOrNull()
+                    if (waitMs == null) scheduleChanges.receive()
+                    else withTimeoutOrNull(waitMs.coerceAtLeast(1)) { scheduleChanges.receive() }
+                    continue
                 }
                 attemptedManual = schedule.manualRevision
+                scheduleWake(null)
+                acquireCheckLocks()
                 val account = savedAccount
                 val started = System.currentTimeMillis()
                 liveCheck.begin(started)
@@ -132,8 +207,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 if (account == null || !store.powerOceanProfileVerified(account)) {
                     lastFailure = if (account == null) "Unlock this device and check PowerOcean account settings." else "Verify this installation's grid profile before monitoring."
                     emit(GridAvailability.UNKNOWN, lastFailure!!, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                    if (account != null) return@launch
-                    sampling.finishCheck(android.os.SystemClock.elapsedRealtime()); delay(1000); continue
+                    sampling.finishCheck(android.os.SystemClock.elapsedRealtime())
+                    automaticRetriesBlocked = account != null
+                    retryAt = android.os.SystemClock.elapsedRealtime() + 60_000L
+                    releaseCheckLocks()
+                    delay(1000)
+                    continue
                 }
                 try {
                     if (session?.connection != account) { session = null; credentials = null }
@@ -143,7 +222,7 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                             is EcoFlowCloudClient.Result.Failure -> {
                                 lastFailure = login.message
                                 emit(GridAvailability.UNKNOWN, login.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                                if (!login.retryable) return@launch
+                                if (!login.retryable) automaticRetriesBlocked = true
                             }
                         }
                     }
@@ -154,7 +233,7 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                             is EcoFlowCloudClient.Result.Failure -> {
                                 lastFailure = access.message
                                 emit(GridAvailability.UNKNOWN, access.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                                if (!access.retryable) return@launch
+                                if (!access.retryable) automaticRetriesBlocked = true
                             }
                         }
                     }
@@ -222,7 +301,9 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                         }
                         if (failure?.contains(Regex("MQTT code 128\\)")) == true) {
                             emit(GridAvailability.UNKNOWN, failure, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                            return@launch
+                            automaticRetriesBlocked = true
+                            session = null
+                            credentials = null
                         }
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
@@ -250,11 +331,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     incident = afterIncident || poweredFailureRetryAfter,
                     paused = store.powerOceanAssistancePaused()))
                 if (lastFailure != null && chargerPowered != true) {
-                    retryAt = android.os.SystemClock.elapsedRealtime() + backoff
+                    retryAt = maxOf(retryAt, android.os.SystemClock.elapsedRealtime() + backoff)
                     backoff = (backoff * 2).coerceAtMost(30 * 60_000L)
-                } else { retryAt = 0; backoff = 60_000 }
+                } else if (lastFailure == null) { retryAt = 0; backoff = 60_000 }
                 val now = System.currentTimeMillis()
-                val next = sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
+                val next = if (automaticRetriesBlocked) null else sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
+                scheduleWake(next)
                 if (qualified == null) {
                     lastConfirmedOnlineAt = null; lastVerified = null
                 }
@@ -275,11 +357,17 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     resultDetail, completed?.recoveryPending ?: false,
                     completed?.evidenceReceivedAtEpochMs, completed?.dataPossiblyStalled,
                     completedCheck)
+                releaseCheckLocks()
                 delay(1000)
             }
         }
+        worker?.invokeOnCompletion { releaseCheckLocks() }
     }
 
     @Synchronized
-    override fun stop() { scope?.cancel(); scope = null; worker = null }
+    override fun stop() { scope?.cancel(); scope = null; worker = null; checkScheduler.schedule(null); scheduledWakeAtEpochMs = null; releaseCheckLocks() }
+
+    private companion object {
+        const val MAX_CHECK_LOCK_MS = 6 * 60_000L
+    }
 }

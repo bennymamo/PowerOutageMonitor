@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertDeliveryCoordinator
@@ -53,6 +52,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 internal fun GmailEmailSetupScreen(
@@ -66,16 +66,17 @@ internal fun GmailEmailSetupScreen(
     val store = remember(context) { GmailSmtpConfigStore(context) }
     val client = remember { GmailSmtpClient() }
     val scope = rememberCoroutineScope()
+    val drafts: ScreenDraftViewModel = viewModel(key = "gmail-setup-drafts")
     var config by remember { mutableStateOf(store.config()) }
-    var account by remember { mutableStateOf(config.account) }
-    var appPasswordInput by remember { mutableStateOf("") }
-    var recipientText by remember { mutableStateOf(config.recipients.joinToString("\n")) }
-    var enabled by remember { mutableStateOf(config.enabled) }
+    var account by drafts.state("account", config.account)
+    var appPasswordInput by drafts.state("password", "")
+    var recipientText by drafts.state("recipients", config.recipients.joinToString("\n"))
+    var enabled by drafts.state("enabled", config.enabled)
     var feedback by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     val setupSteps = listOf("Prepare Google account", "Sender account", "Choose recipients", "Save and test")
-    var setupStep by rememberSaveable { mutableStateOf(if (config.hasAppPassword) setupSteps.lastIndex else 0) }
+    var setupStep by drafts.state("setup-step", if (config.hasAppPassword) setupSteps.lastIndex else 0)
     val setupScroll = rememberScrollState()
     LaunchedEffect(setupStep) { setupScroll.scrollTo(0) }
 
@@ -152,18 +153,14 @@ internal fun GmailEmailSetupScreen(
                 singleLine = true,
                 enabled = !loading
             )
-            OutlinedTextField(
+            PrivatePasswordField(
                 value = appPasswordInput,
-                onValueChange = { if (it.length <= 32) appPasswordInput = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text(if (config.hasAppPassword) {
+                onChange = { appPasswordInput = it },
+                label = if (config.hasAppPassword) {
                         "New App Password (stored password unchanged if blank)"
-                    } else "16-character App Password")
-                },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-                enabled = !loading
+                    } else "16-character App Password",
+                enabled = !loading,
+                maxLength = 32
             )
             if (config.hasAppPassword) {
                 Text(

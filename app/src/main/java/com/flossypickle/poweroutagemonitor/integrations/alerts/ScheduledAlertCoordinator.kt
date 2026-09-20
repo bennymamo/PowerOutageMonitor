@@ -38,8 +38,6 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
             canNotify = canNotify,
             deferSourceWarningUntilEpochMs = verifyUntil
         )
-        // Save the timer advancement before queueing so a process restart cannot duplicate a notice.
-        store.save(result.state)
         val monitorSettings = MonitorStore(context).settings()
         result.notices.forEach { notice ->
             alerts.persistForEnabledProviders(
@@ -55,6 +53,9 @@ internal class ScheduledAlertCoordinator(private val context: Context) {
                 )
             )
         }
+        // Message IDs are stable for each due time, so enqueue first: a crash can retry
+        // idempotently instead of permanently losing a notice whose timer was advanced.
+        store.save(result.state)
         ScheduledAlertScheduler(context).schedule(if (canNotify) {
             ScheduledAlertPolicy.nextDeadline(result.state, settings, monitorState, verifyUntil)
         } else null)

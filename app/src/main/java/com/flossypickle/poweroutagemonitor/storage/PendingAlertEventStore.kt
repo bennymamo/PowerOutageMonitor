@@ -3,8 +3,10 @@ package com.flossypickle.poweroutagemonitor.storage
 import android.content.Context
 import android.os.Build
 import android.util.AtomicFile
+import com.flossypickle.poweroutagemonitor.integrations.alerts.PendingAlertRetention
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind
 import com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage
+import com.flossypickle.poweroutagemonitor.integrations.alerts.legacyAlertOrderingKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -21,7 +23,7 @@ internal class PendingAlertEventStore(context: Context) {
     fun enqueue(message: AlertMessage): Boolean = synchronized(lock) {
         val before = readUnlocked()
         if (before.any { it.eventId == message.eventId && it.kind == message.kind }) return@synchronized false
-        writeUnlocked((before + message).takeLast(MAX_PENDING_EVENTS))
+        writeUnlocked(PendingAlertRetention.retain(before + message))
         true
     }
 
@@ -34,7 +36,7 @@ internal class PendingAlertEventStore(context: Context) {
     fun clear() = synchronized(lock) { writeUnlocked(emptyList()) }
 
     fun replaceAll(messages: List<AlertMessage>) = synchronized(lock) {
-        writeUnlocked(messages.takeLast(MAX_PENDING_EVENTS))
+        writeUnlocked(PendingAlertRetention.retain(messages))
     }
 
     private fun readUnlocked(): List<AlertMessage> = runCatching {
@@ -47,7 +49,8 @@ internal class PendingAlertEventStore(context: Context) {
                     eventId = item.getString("eventId"),
                     kind = AlertKind.valueOf(item.getString("kind")),
                     title = item.getString("title"),
-                    body = item.getString("body")
+                    body = item.getString("body"),
+                    orderingKey = item.optString("orderingKey", legacyAlertOrderingKey(item.getString("eventId"), AlertKind.valueOf(item.getString("kind"))))
                 ))
             }
         }
@@ -61,6 +64,7 @@ internal class PendingAlertEventStore(context: Context) {
                     put("kind", message.kind.name)
                     put("title", message.title)
                     put("body", message.body)
+                    put("orderingKey", message.orderingKey)
                 })
             }
         }
@@ -75,7 +79,6 @@ internal class PendingAlertEventStore(context: Context) {
     }
 
     companion object {
-        private const val MAX_PENDING_EVENTS = 50
         private val lock = Any()
     }
 }

@@ -18,6 +18,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +29,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -106,12 +113,13 @@ internal fun DelayOptions(
     var customSeconds by remember(selected) {
         mutableStateOf(if (isPreset) "" else (selected / 1_000L).toString())
     }
+    var saveConfirmed by remember { mutableStateOf(false) }
     options.forEach { (value, label) ->
         Row(
-            Modifier.fillMaxWidth().clickable { onSelect(value) }.padding(vertical = 2.dp),
+            Modifier.fillMaxWidth().clickable { saveConfirmed = false; onSelect(value) }.padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RadioButton(selected = value == selected, onClick = { onSelect(value) })
+            RadioButton(selected = value == selected, onClick = { saveConfirmed = false; onSelect(value) })
             Text(label)
         }
     }
@@ -126,7 +134,10 @@ internal fun DelayOptions(
     OutlinedTextField(
         value = customSeconds,
         onValueChange = { value ->
-            if (value.length <= 5 && value.all(Char::isDigit)) customSeconds = value
+            if (value.length <= 5 && value.all(Char::isDigit)) {
+                customSeconds = value
+                saveConfirmed = false
+            }
         },
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Custom delay in seconds") },
@@ -139,11 +150,30 @@ internal fun DelayOptions(
         onClick = {
             parsedSeconds
                 ?.takeIf { it in 0L..86_400L }
-                ?.let { onSelect(it * 1_000L) }
+                ?.let {
+                    onSelect(it * 1_000L)
+                    saveConfirmed = true
+                }
         },
-        enabled = parsedSeconds != null && parsedSeconds in 0L..86_400L,
+        enabled = parsedSeconds != null && parsedSeconds in 0L..86_400L && parsedSeconds * 1_000L != selected,
         modifier = Modifier
     ) { Text("Save custom delay") }
+    if (saveConfirmed) SaveConfirmation()
+}
+
+@Composable
+internal fun SaveConfirmation(message: String = "Saved", isError: Boolean = false) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(message) {
+        withFrameNanos { }
+        requester.bringIntoView()
+    }
+    Text(
+        message,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }
+    )
 }
 
 internal fun formatCustomDelay(milliseconds: Long): String {

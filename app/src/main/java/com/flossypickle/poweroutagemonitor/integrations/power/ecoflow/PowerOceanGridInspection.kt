@@ -40,6 +40,19 @@ internal class PowerOceanGridInspection(profile: PowerOceanGridCorrelation.Profi
         lastReceivedUtcMillis = receivedUtcMillis; lastCodeFromDevicePush = fromDevicePush
     }
 
+    fun corroborateSampledOffGrid(live: PowerOceanLiveCheck.Status, minimumPowerReports: Int, now: Long) {
+        val start = live.requestedAt ?: return
+        val code = lastCode ?: return
+        val codeAt = lastReceivedUtcMillis ?: return
+        val meterAt = meterReceived ?: return
+        if (lastCodeFromDevicePush || meterValue != 0.0 || !live.hasCurrentReport(now) ||
+            !live.valuesChanged || live.powerUpdates < minimumPowerReports ||
+            (live.lastDevicePushAt ?: 0) <= maxOf(codeAt, meterAt) ||
+            codeAt <= start || meterAt <= start || codeAt > now || meterAt > now ||
+            now - codeAt > 90_000 || now - meterAt > 90_000) return
+        correlation?.corroborateOffGridReply(code, codeAt, meterAt)
+    }
+
     fun snapshot(nowUtcMillis: Long = System.currentTimeMillis()) = Snapshot(lastCode, lastReceivedUtcMillis,
         changes.toList(), correlation?.snapshot(nowUtcMillis), lastCodeFromDevicePush, meterValue, meterReceived, meterFromDevicePush)
 }
