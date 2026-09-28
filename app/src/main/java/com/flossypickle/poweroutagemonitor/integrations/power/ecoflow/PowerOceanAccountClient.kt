@@ -11,6 +11,8 @@ import javax.net.ssl.HttpsURLConnection
 internal class PowerOceanAccountClient(
     private val openConnection: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }
 ) {
+    @Volatile private var activeRequest: HttpsURLConnection? = null
+    fun cancelActiveRequest() { runCatching { activeRequest?.disconnect() } }
     private class UnsupportedResponse(message: String) : Exception(message)
     private fun requireResponse(condition: Boolean, message: String) {
         if (!condition) throw UnsupportedResponse(message)
@@ -121,6 +123,7 @@ internal class PowerOceanAccountClient(
         var connection: HttpsURLConnection? = null
         return try {
             connection = openConnection(url)
+            activeRequest = connection
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 10_000
             connection.readTimeout = 15_000
@@ -167,6 +170,9 @@ internal class PowerOceanAccountClient(
             EcoFlowCloudClient.Result.Failure("PowerOcean cloud could not be reached. Check the phone and inverter internet connection.", true)
         } catch (_: Exception) {
             EcoFlowCloudClient.Result.Failure("PowerOcean returned incomplete or unsupported account data. No grid state was inferred.", false)
-        } finally { connection?.disconnect() }
+        } finally {
+            if (activeRequest === connection) activeRequest = null
+            connection?.disconnect()
+        }
     }
 }

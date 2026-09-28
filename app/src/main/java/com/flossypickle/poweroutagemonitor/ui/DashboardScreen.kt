@@ -132,7 +132,11 @@ internal fun DashboardScreen(
     val samplingIncident = snapshot?.externallyPowered == false || poweredFailureRetry || sourceStore.assistedEcoFlowOutageStartedAt() > 0 ||
         monitorState.phase in setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)
     val activeInterval = if (assistedActive) {
-        (if (samplingIncident) assistedSettings.outageSeconds else assistedSettings.normalSeconds).takeIf { it > 0 }
+        com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanTemporarySchedule.interval(
+            assistedSettings, samplingIncident, poweredFailureRetry,
+            sourceStore.hourlyUntilChargerReturns(), snapshot?.externallyPowered,
+            sourceStore.assistedEcoFlowOutageStartedAt() > 0 || monitorState.phase in
+                setOf(OutageEngine.Phase.PENDING_OUTAGE, OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE)).takeIf { it > 0 }
     } else null
     val sourceReading = powerSourceStatus?.takeIf {
         com.flossypickle.poweroutagemonitor.integrations.power.DashboardSourceReadingPolicy.isCurrent(

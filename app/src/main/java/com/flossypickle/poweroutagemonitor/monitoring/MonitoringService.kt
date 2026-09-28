@@ -63,6 +63,7 @@ internal class MonitoringService : Service() {
     private var lastEcoFlowUiRefreshAt = 0L
     private var scheduledDeadline: Long? = null
     private var handoffWakeLock: PowerManager.WakeLock? = null
+    private var confirmationWakeLock: PowerManager.WakeLock? = null
     private val deadlineCheck = Runnable { reconcileSelectedPower() }
     private var historyStartRecorded = false
     private lateinit var remoteControl: TelegramRemoteController
@@ -95,10 +96,15 @@ internal class MonitoringService : Service() {
         startAsForeground(buildNotification(MonitorStore(this).state(), MonitorStore(this).lastSnapshot()))
         registerBatteryReceiver()
         connectivityEvidence = SystemHealthMonitor(this) { health ->
+            val internetRestored = lastInternetAvailable == false && health.internetAvailable
             if (lastInternetAvailable != health.internetAvailable && MonitorStore(this).settings().monitoringEnabled) {
                 MonitoringEvidenceStore(this).record(MonitoringEvidenceStore.Event.NETWORK_CHANGED)
             }
             lastInternetAvailable = health.internetAvailable
+            if (internetRestored) (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.networkRestored()
+            if (health.internetAvailable && MonitorStore(this).settings().monitoringEnabled) {
+                remoteControl.refresh()
+            }
         }
         connectivityEvidence.start()
     }
@@ -136,6 +142,7 @@ internal class MonitoringService : Service() {
             }
             ACTION_REFRESH_NOTIFICATION -> refreshNotification()
             ACTION_RELOAD_POWER_SOURCE -> reloadPowerSource()
+            ACTION_REFRESH_POWEROCEAN_SCHEDULE -> (ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.refreshSchedule()
             ACTION_REQUEST_POWEROCEAN_CHECK -> {
                 if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
                     if ((ecoFlowProvider as? PowerOceanAccountPowerSignalProvider)?.requestCheck() != true) {
@@ -156,6 +163,7 @@ internal class MonitoringService : Service() {
         isRunning = false
         handler.removeCallbacks(deadlineCheck)
         scheduledDeadline = null
+        releaseConfirmationWakeLock()
         runCatching { handoffWakeLock?.takeIf { it.isHeld }?.release() }
         sourceGeneration++
         latestPrimarySignal = null
@@ -187,6 +195,7 @@ internal class MonitoringService : Service() {
     private fun suspendPowerMonitoring() {
         handler.removeCallbacks(deadlineCheck)
         scheduledDeadline = null
+        releaseConfirmationWakeLock()
         runCatching { handoffWakeLock?.takeIf { it.isHeld }?.release() }
         sourceGeneration++
         ecoFlowProvider?.stop(); ecoFlowProvider = null; latestPrimarySignal = null
@@ -374,10 +383,11 @@ internal class MonitoringService : Service() {
         val result = ChargerFirstPolicy.evaluate(charger, primary, lossAt,
             phase in setOf(OutageEngine.Phase.OUTAGE, OutageEngine.Phase.PENDING_RESTORE),
             store.assistedChargerLossRecovered(), now, store.assistedEcoFlowOutageStartedAt(),
-            verificationWindowMs = if (verify) assistance.checkWindowSeconds * 1000L + 60_000 else 0)
+            verificationWindowMs = if (verify) ChargerFirstPolicy.verificationWindow(assistance.checkWindowSeconds * 1000L) else 0)
         store.recordAssistedChargerState(lossAt, result.recovered, result.ecoFlowOutageStartedAt)
         return primary.copy(availability = result.availability, observedAtEpochMs = now,
-            detail = result.detail, recoveryPending = result.recoveryPending)
+            detail = result.detail, recoveryPending = result.recoveryPending,
+            outageVerifiedByEcoFlow = result.outageVerifiedByEcoFlow)
     }
 
     private fun processEcoFlow(primary: PowerSignal) {
@@ -405,7 +415,10 @@ internal class MonitoringService : Service() {
             assistedSignal(com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAssistancePolicy.apply(
                 primary, sourceStore.powerOceanAssistancePaused(), assisted.ignoreUnchanged))
         } else ChargerConfirmationPolicy.apply(primary, currentBatterySnapshot().externallyPowered,
-            PowerSourceStore(this).powerOceanRequiresChargerConfirmation())
+            PowerSourceStore(this).powerOceanRequiresChargerConfirmation()).let {
+                it.copy(outageVerifiedByEcoFlow = it.availability == GridAvailability.UNAVAILABLE &&
+                    (activeSource == PowerSourceStore.Source.ECOFLOW_MODBUS || it.check?.gridEvidenceAvailable == true))
+            }
         val availabilityChanged = signal.availability != lastEcoFlowAvailability
         val persistStatus = availabilityChanged ||
             signal.observedAtEpochMs - lastEcoFlowStatusPersistedAt >= STATUS_PERSIST_INTERVAL_MS
@@ -512,9 +525,9 @@ internal class MonitoringService : Service() {
         val fallback = if (activeSource == PowerSourceStore.Source.ECOFLOW_ACCOUNT &&
             assistance.enabled && !sources.powerOceanAssistancePaused() &&
             assistance.outageSeconds > 0 && lossAt > 0) {
-            maxOf(lossAt + assistance.checkWindowSeconds * 1000L + 60_000L,
-                latestPrimarySignal?.check?.takeIf { it.active && it.requestedAtEpochMs >= lossAt }
-                    ?.let { it.requestedAtEpochMs + assistance.checkWindowSeconds * 1000L + 60_000L } ?: 0L)
+            maxOf(lossAt + ChargerFirstPolicy.verificationWindow(assistance.checkWindowSeconds * 1000L),
+                latestPrimarySignal?.check?.takeIf { it.active && it.firstCheckAfterRestart }
+                    ?.let { it.startedAtEpochMs + ChargerFirstPolicy.verificationWindow(assistance.checkWindowSeconds * 1000L) } ?: 0L)
                 .takeIf { it > System.currentTimeMillis() }
         } else null
         val deadline = listOfNotNull(
@@ -523,11 +536,26 @@ internal class MonitoringService : Service() {
         ).minOrNull()
         if (!force && deadline == scheduledDeadline) return
         scheduledDeadline = deadline
+        // The IO check releases its lock before the 30s/10s confirmation timer fires.
+        // Keep the CPU awake only for short, bounded confirmation/fallback windows.
+        val remaining = deadline?.let { it - System.currentTimeMillis() }
+        if (remaining != null && remaining in 1..120_000L) {
+            if (confirmationWakeLock?.isHeld != true) {
+                confirmationWakeLock = getSystemService(PowerManager::class.java)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:confirmation")
+                    .apply { setReferenceCounted(false); acquire(remaining + 5_000L) }
+            }
+        } else releaseConfirmationWakeLock()
         handler.removeCallbacks(deadlineCheck)
         DeadlineScheduler(this).scheduleAt(deadline)
         if (deadline != null) {
             handler.postDelayed(deadlineCheck, (deadline - System.currentTimeMillis()).coerceAtLeast(0))
         }
+    }
+
+    private fun releaseConfirmationWakeLock() {
+        runCatching { confirmationWakeLock?.takeIf { it.isHeld }?.release() }
+        confirmationWakeLock = null
     }
 
     private fun startAsForeground(notification: Notification) {
@@ -664,6 +692,12 @@ internal class MonitoringService : Service() {
             )
         }
 
+        fun refreshPowerOceanSchedule(context: Context) {
+            if (!MonitorStore(context).settings().monitoringEnabled) return
+            ContextCompat.startForegroundService(context, Intent(context, MonitoringService::class.java)
+                .setAction(ACTION_REFRESH_POWEROCEAN_SCHEDULE))
+        }
+
         fun handleDeadline(context: Context) {
             if (!MonitorStore(context).settings().monitoringEnabled) return
             ContextCompat.startForegroundService(context, Intent(context, MonitoringService::class.java))
@@ -696,6 +730,8 @@ internal class MonitoringService : Service() {
             "com.flossypickle.poweroutagemonitor.REQUEST_POWEROCEAN_CHECK"
         private const val ACTION_RELOAD_POWER_SOURCE =
             "com.flossypickle.poweroutagemonitor.RELOAD_POWER_SOURCE"
+        private const val ACTION_REFRESH_POWEROCEAN_SCHEDULE =
+            "com.flossypickle.poweroutagemonitor.REFRESH_POWEROCEAN_SCHEDULE"
         private const val ACTION_REFRESH_SCHEDULED_ALERTS =
             "com.flossypickle.poweroutagemonitor.REFRESH_SCHEDULED_ALERTS"
         private const val ACTION_RESUME_AFTER_UPDATE =

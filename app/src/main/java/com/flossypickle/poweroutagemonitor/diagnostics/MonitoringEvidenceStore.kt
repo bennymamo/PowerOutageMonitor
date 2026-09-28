@@ -17,9 +17,11 @@ internal class MonitoringEvidenceStore(context: Context) {
     private val storage = if (Build.VERSION.SDK_INT >= 24) appContext.createDeviceProtectedStorageContext() else appContext
     private val preferences = storage.getSharedPreferences("monitoring_evidence", Context.MODE_PRIVATE)
 
-    enum class Event { CHARGER_CHANGED, NETWORK_CHANGED, CHECK_STARTED, CHECK_FINISHED, ALERT_STARTED, ALERT_FINISHED }
+    enum class Event { CHARGER_CHANGED, NETWORK_CHANGED, CHECK_STARTED, CHECK_FINISHED, ALERT_STARTED, ALERT_FINISHED,
+        REMOTE_RECEIVED, REMOTE_IGNORED, REMOTE_REPLY_SENT, REMOTE_REPLY_FAILED, REMOTE_POLL_FAILED }
 
-    fun record(event: Event, check: PowerSourceCheck? = null, delivery: AlertQueueEngine.Status? = null) {
+    fun record(event: Event, check: PowerSourceCheck? = null, delivery: AlertQueueEngine.Status? = null,
+        command: String? = null, requestAgeMs: Long? = null) {
         // Diagnostics must never interrupt monitoring or delivery if storage is unavailable.
         runCatching {
             val connectivity = appContext.getSystemService(ConnectivityManager::class.java)
@@ -50,6 +52,9 @@ internal class MonitoringEvidenceStore(context: Context) {
                         }
                 }
                 delivery?.let { append(" delivery=$it") }
+                command?.takeIf { it in com.flossypickle.poweroutagemonitor.integrations.alerts.telegram.TelegramRemotePolicy.commands.map { entry -> entry.first } }
+                    ?.let { append(" command=$it") }
+                requestAgeMs?.let { append(" requestAgeMs=$it") }
             }
             synchronized(lock) {
                 val retained = (read() + line).takeLast(500)

@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
 import org.eclipse.paho.client.mqttv3.*
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
@@ -17,6 +18,11 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Shared secure feed for manual inspections and opt-in monitoring; never power controls. */
 internal class PowerOceanPushProbe(private val context: android.content.Context? = null) {
+    @Volatile private var activeClient: MqttAsyncClient? = null
+    fun cancel() {
+        runCatching { activeClient?.disconnectForcibly(0, 0, false) }
+        runCatching { activeClient?.close(true) }
+    }
     data class Update(val snapshot: SourceTelemetrySnapshot, val packets: Int, val unsupported: Int, val retained: Int,
         val gridInspection: PowerOceanGridInspection.Snapshot, val chargerExternallyPowered: Boolean? = null,
         val confirmation: PowerOceanLossConfirmation.Result? = null, val liveCheck: PowerOceanLiveCheck.Status? = null)
@@ -46,10 +52,11 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         val client = runCatching {
             require(credentials.transport in setOf("ssl", "wss"))
             val id = if (credentials.transport == "ssl") "ANDROID_${UUID.randomUUID().toString().replace("-", "").uppercase(java.util.Locale.ROOT)}_${session.userId}" else clientId(session.userId)
-            MqttClient("${credentials.transport}://${credentials.host}:${credentials.port}${credentials.path}", id, MemoryPersistence())
+            MqttAsyncClient("${credentials.transport}://${credentials.host}:${credentials.port}${credentials.path}", id, MemoryPersistence())
         }
             .getOrElse { return@withContext "The secure push client could not initialise." }
-        client.timeToWait = 15_000
+        activeClient = client
+        suspend fun awaitOperation(token: IMqttToken) = runInterruptible { token.waitForCompletion(15_000) }
         var packets = 0
         var unsupported = 0
         var retained = 0
@@ -84,14 +91,14 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 isHttpsHostnameVerificationEnabled = Build.VERSION.SDK_INT >= 24
                 sslHostnameVerifier = HttpsURLConnection.getDefaultHostnameVerifier()
             }
-            client.connect(options)
+            awaitOperation(client.connect(options))
             ensureActive()
             stage = "subscribing to device readings"
-            client.subscribe("/app/device/property/${session.connection.serial}", 0)
-            client.subscribe("/app/${session.userId}/${session.connection.serial}/thing/property/get_reply", 1)
+            awaitOperation(client.subscribe("/app/device/property/${session.connection.serial}", 0))
+            awaitOperation(client.subscribe("/app/${session.userId}/${session.connection.serial}/thing/property/get_reply", 1))
             // A broker login is not necessarily safe as one MQTT topic segment.
             if (credentials.account.none { it in "/+#" }) {
-                try { client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1) }
+                try { awaitOperation(client.subscribe("/open/${credentials.account}/${session.connection.serial}/quota", 1)) }
                 catch (failure: MqttException) { if (failure.reasonCode != 128) throw failure }
             }
             val deadline = if (continuous && !singleCheck) Long.MAX_VALUE else SystemClock.elapsedRealtime() + inspectionSeconds * 1000L
@@ -105,14 +112,14 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
                 val readDue = sampling.due(schedule, SystemClock.elapsedRealtime())
                 if (readDue) liveCheck.begin(System.currentTimeMillis())
                 if (schedule.needsLiveActivation(requestLiveReporting, readDue, SystemClock.elapsedRealtime() >= nextLiveRequest, boundedWindow = singleCheck)) {
-                    client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
-                        PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
+                    awaitOperation(client.publish("/app/${session.userId}/${session.connection.serial}/thing/property/set",
+                        PowerOceanReadingRequests.liveReporting((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false))
                     nextLiveRequest = SystemClock.elapsedRealtime() + 20_000
                 }
                 if (readDue) {
                     // GET-only request used by the app to ask for current observations.
                     val getTopic = "/app/${session.userId}/${session.connection.serial}/thing/property/get"
-                    client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false)
+                    awaitOperation(client.publish(getTopic, PowerOceanReadingRequests.allReadings((System.currentTimeMillis() and 0x7FFFFFFF).toInt()), 1, false))
                 }
                 var packet = queue.poll()
                 var changed = false
@@ -206,6 +213,7 @@ internal class PowerOceanPushProbe(private val context: android.content.Context?
         finally {
             runCatching { if (client.isConnected) client.disconnectForcibly(0, 1000, true) }
             runCatching { client.close(true) }
+            if (activeClient === client) activeClient = null
             queue.clear()
         }
     }

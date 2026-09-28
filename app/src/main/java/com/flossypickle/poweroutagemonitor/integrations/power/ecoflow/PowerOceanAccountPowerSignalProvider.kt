@@ -18,6 +18,9 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     private var checkWifiLock: WifiManager.WifiLock? = null
     private var checkLockTimeout: Job? = null
     private val checkScheduler = PowerOceanCheckScheduler(appContext)
+    private val client = PowerOceanAccountClient()
+    @Volatile private var activeProbe: PowerOceanPushProbe? = null
+    private val internetRecovered = java.util.concurrent.atomic.AtomicBoolean(false)
     private var scheduledWakeAtEpochMs: Long? = null
     @Volatile private var chargerPowered: Boolean? = null
     private val manualRevision = java.util.concurrent.atomic.AtomicLong(0)
@@ -26,6 +29,7 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     fun updateCharger(powered: Boolean?) {
         val lostPower = chargerPowered == true && powered == false
         chargerPowered = powered
+        if (powered == true) PowerSourceStore(appContext).setHourlyUntilChargerReturns(false)
         // Each new unplug must check immediately, even during backoff or an existing incident.
         if (lostPower && PowerSourceStore(appContext).powerOceanAssistedSettings().let { it.enabled && it.outageSeconds > 0 })
             manualRevision.incrementAndGet()
@@ -39,6 +43,17 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
         return true
     }
     fun isRunning(): Boolean = worker?.isActive == true
+    fun refreshSchedule() { scheduleChanges.trySend(Unit) }
+    fun networkRestored() {
+        if (!automaticRetriesBlocked) { internetRecovered.set(true); scheduleChanges.trySend(Unit) }
+    }
+
+    private fun checkInterval(store: PowerSourceStore, settings: PowerOceanAssistedSettings, failed: Boolean = false): Int =
+        PowerOceanTemporarySchedule.interval(settings, incident(), failed, store.hourlyUntilChargerReturns(), chargerPowered,
+            store.assistedEcoFlowOutageStartedAt() > 0 || com.flossypickle.poweroutagemonitor.storage.MonitorStore(appContext).state().phase in
+                setOf(com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_OUTAGE,
+                    com.flossypickle.poweroutagemonitor.OutageEngine.Phase.OUTAGE,
+                    com.flossypickle.poweroutagemonitor.OutageEngine.Phase.PENDING_RESTORE))
 
     @Synchronized
     private fun acquireCheckLocks() {
@@ -110,7 +125,7 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     val now = System.currentTimeMillis()
                     val samplingSettings = PowerSourceStore(appContext).powerOceanAssistedSettings()
                     val configuredInterval = if (samplingSettings.enabled)
-                        (if (incident()) samplingSettings.outageSeconds else samplingSettings.normalSeconds).takeIf { it > 0 }
+                        checkInterval(PowerSourceStore(appContext), samplingSettings).takeIf { it > 0 }
                         else savedRefreshSeconds
                     val report = PowerOceanCheckContinuity.qualifiedReport(
                         PowerSignal(availability, now, id, detail, pending, evidenceAt, dataStalled, check))
@@ -129,7 +144,6 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     latest = signal; onSignal(signal)
                 }
             }
-            val client = PowerOceanAccountClient()
             var session: PowerOceanAccountClient.Session? = null
             var credentials: PowerOceanAccountClient.PushCredentials? = null
             val liveCheck = PowerOceanLiveCheck()
@@ -140,6 +154,7 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
             var retryAt = 0L
             var attemptedManual = 0L
             var lastFailure: String? = null
+            var sessionFailures = 0
             // Account editing requires switching away from this source; avoid decrypting secrets every idle tick.
             var savedAccount = runCatching { PowerOceanAccountStore(appContext).connection() }.getOrNull()
             savedRefreshSeconds = savedAccount?.refreshSeconds?.coerceAtLeast(60)
@@ -157,11 +172,15 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 val active = incident()
                 val poweredFailureRetry = chargerPowered == true && store.powerOceanPoweredFailureStreak() > 0
                 val seconds = if (assisted.enabled) {
-                    if (active || poweredFailureRetry) assisted.outageSeconds else assisted.normalSeconds
+                    checkInterval(store, assisted, poweredFailureRetry || lastFailure != null)
                 } else savedAccount?.refreshSeconds?.coerceAtLeast(60) ?: 60
+                val monotonic = android.os.SystemClock.elapsedRealtime()
+                if (internetRecovered.getAndSet(false)) {
+                    retryAt = 0; backoff = 60_000L
+                    if (lastFailure != null) manualRevision.incrementAndGet()
+                }
                 val schedule = PowerOceanReadSchedule(seconds.takeIf { it > 0 }, active || poweredFailureRetry, manualRevision.get(), true,
                     store.powerOceanAssistancePaused(), assisted.enabled && chargerPowered != false && store.assistedEcoFlowOutageStartedAt() > 0)
-                val monotonic = android.os.SystemClock.elapsedRealtime()
                 val retryBlocked = automaticRetriesBlocked ||
                     monotonic < retryAt && schedule.manualRevision <= attemptedManual
                 val due = !retryBlocked && sampling.due(schedule, monotonic)
@@ -201,9 +220,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 acquireCheckLocks()
                 val account = savedAccount
                 val started = System.currentTimeMillis()
+                val firstCheckAfterRestart = latest?.check == null
                 liveCheck.begin(started)
                 emit(GridAvailability.UNKNOWN, "Connecting for an EcoFlow check…", check = PowerSourceCheck(started, null, false,
-                    cycleState = PowerSourceCheck.CycleState.CONNECTING))
+                    cycleState = PowerSourceCheck.CycleState.CONNECTING, ecoFlowBattery = store.lastHomeBattery(),
+                    deadlineAtEpochMs = started + assisted.checkWindowSeconds * 1000L + 60_000L,
+                    firstCheckAfterRestart = firstCheckAfterRestart))
                 if (account == null || !store.powerOceanProfileVerified(account)) {
                     lastFailure = if (account == null) "Unlock this device and check PowerOcean account settings." else "Verify this installation's grid profile before monitoring."
                     emit(GridAvailability.UNKNOWN, lastFailure!!, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
@@ -214,100 +236,118 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                     delay(1000)
                     continue
                 }
+                // Abort network resources as well as the coroutine; blocking HTTP reads must be released.
+                val budgetMs = assisted.checkWindowSeconds * 1000L + 60_000L
+                val abortAtDeadline = launch {
+                    delay(budgetMs)
+                    client.cancelActiveRequest()
+                    activeProbe?.cancel()
+                }
                 try {
-                    if (session?.connection != account) { session = null; credentials = null }
-                    if (session == null) {
-                        when (val login = client.login(account)) {
-                            is EcoFlowCloudClient.Result.Success -> session = login.value
-                            is EcoFlowCloudClient.Result.Failure -> {
-                                lastFailure = login.message
-                                emit(GridAvailability.UNKNOWN, login.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                                if (!login.retryable) automaticRetriesBlocked = true
+                    withTimeout(budgetMs) {
+                        if (session?.connection != account) { session = null; credentials = null }
+                        if (session == null) {
+                            when (val login = runInterruptible { client.login(account) }) {
+                                is EcoFlowCloudClient.Result.Success -> session = login.value
+                                is EcoFlowCloudClient.Result.Failure -> {
+                                    lastFailure = login.message
+                                    emit(GridAvailability.UNKNOWN, login.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                                    if (!login.retryable) automaticRetriesBlocked = true
+                                }
                             }
                         }
-                    }
-                    val current = session
-                    if (current != null && credentials == null) {
-                        when (val access = client.pushCredentials(current)) {
-                            is EcoFlowCloudClient.Result.Success -> credentials = access.value
-                            is EcoFlowCloudClient.Result.Failure -> {
-                                lastFailure = access.message
-                                emit(GridAvailability.UNKNOWN, access.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                                if (!access.retryable) automaticRetriesBlocked = true
+                        val current = session
+                        if (current != null && credentials == null) {
+                            when (val access = runInterruptible { client.pushCredentials(current) }) {
+                                is EcoFlowCloudClient.Result.Success -> credentials = access.value
+                                is EcoFlowCloudClient.Result.Failure -> {
+                                    lastFailure = access.message
+                                    emit(GridAvailability.UNKNOWN, access.message, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                                    if (!access.retryable) automaticRetriesBlocked = true
+                                }
                             }
                         }
-                    }
-                    val access = credentials
-                    if (current != null && access != null) {
-                        lastFailure = null
-                        val failure = PowerOceanPushProbe(appContext).inspect(current, access,
-                            requestLiveReporting = true, inspectionSeconds = assisted.checkWindowSeconds,
-                            correlationProfile = PowerOceanGridCorrelation.Profile(),
-                            requireChargerConfirmation = store.powerOceanRequiresChargerConfirmation(),
-                            readIntervalSeconds = account.refreshSeconds.coerceAtLeast(60), singleCheck = true,
-                            cyclePolicy = PowerOceanCheckCyclePolicy(assisted.checkWindowSeconds, assisted.extraPowerUpdates),
-                            sharedGridInspection = gridInspection, liveCheck = liveCheck,
-                            readSchedule = { PowerOceanReadSchedule(null, incident(), 1, true, store.powerOceanAssistancePaused()) }) { update ->
-                            val result = update.confirmation ?: return@inspect
-                            val detail = when (result.reason) {
-                                PowerOceanLossConfirmation.Reason.CONNECTED -> "EcoFlow reports a grid connection."
-                                PowerOceanLossConfirmation.Reason.RETURN_PENDING -> "Grid appears back; waiting for EcoFlow to reconnect."
-                                PowerOceanLossConfirmation.Reason.ECOFLOW_AND_METER -> "EcoFlow off-grid; meter reports zero flow."
-                                PowerOceanLossConfirmation.Reason.CHARGER_CORROBORATED -> "Grid and charger loss evidence agree."
-                                PowerOceanLossConfirmation.Reason.WAITING_FOR_CHARGER -> "Waiting for charger-loss confirmation."
-                                PowerOceanLossConfirmation.Reason.WAITING_FOR_LIVE_DATA -> "Waiting for EcoFlow to send updated readings; older saved readings cannot verify this check."
-                                PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for updated grid and meter readings."
-                            }
-                            val dataWarning = if (update.liveCheck?.possiblyStalled == true) " Power readings are identical across successive checks; the feed may be stalled or the load steady." else ""
-                            val check = update.liveCheck?.let { status -> status.requestedAt?.let { requested ->
-                                val labels = mapOf("sysLoadPwr" to "Home load", "sysGridPwr" to "Grid power flow",
-                                    "mpptPwr" to "Solar power", "bpPwr" to "Battery power flow")
-                                val inspection = update.gridInspection
-                                val observations = listOfNotNull(
-                                    inspection.lastCode?.let { code -> inspection.lastReceivedUtcMillis?.let { received ->
-                                        val explanation = when (code) {
-                                            0L -> "In the tested Single Phase profile, 0 means the inverter reports grid connection."
-                                            1L -> "In the tested Single Phase profile, 1 means off-grid; this can include the delay while the inverter reconnects."
-                                            else -> "This grid code is unsupported by the selected tested profile."
-                                        }
-                                        SourceReportedValue("Reported grid code", code.toString(), explanation, received, inspection.lastCodeFromDevicePush,
-                                            supportedByLiveFeed = code == 0L && inspection.correlation?.state == PowerOceanGridCorrelation.State.INVERTER_CONNECTED &&
-                                                status.hasCurrentReport(System.currentTimeMillis()))
-                                    } },
-                                    inspection.meterValue?.let { meter -> inspection.meterReceivedUtcMillis?.let { received ->
-                                        SourceReportedValue("Meter 1 reading", meter.toString(),
-                                            if (meter == 0.0) "Zero means no reported flow. Zero alone does not prove grid loss."
-                                            else "Non-zero means reported meter activity. Changing activity can support grid return after a confirmed loss; sign/direction depends on the installation.",
-                                            received, inspection.meterFromDevicePush)
-                                    } })
-                                PowerSourceCheck(requested, status.lastDevicePushAt,
-                                    result.availability != GridAvailability.UNKNOWN,
-                                    status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations, cycleState = PowerSourceCheck.CycleState.COLLECTING,
-                                    deviceUpdates = status.deviceUpdates, powerUpdates = status.powerUpdates, valuesChanged = status.valuesChanged)
-                            } }
-                            val evidenceAt = update.gridInspection.correlation?.let { grid ->
-                                PowerOceanLossConfirmation.evidenceReceivedAt(grid, update.liveCheck,
-                                    System.currentTimeMillis(), assisted.extraPowerUpdates + 1, update.gridInspection.lastCodeFromDevicePush,
-                                    update.gridInspection.meterReceivedUtcMillis.takeIf { update.gridInspection.meterFromDevicePush })
-                            }
-                            emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, evidenceAt,
-                                update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)
+                        val access = credentials
+                        if (current != null && access != null) {
+                            lastFailure = null
+                            val probe = PowerOceanPushProbe(appContext).also { activeProbe = it }
+                            val failure = probe.inspect(current, access,
+                                requestLiveReporting = true, inspectionSeconds = assisted.checkWindowSeconds,
+                                correlationProfile = PowerOceanGridCorrelation.Profile(),
+                                requireChargerConfirmation = store.powerOceanRequiresChargerConfirmation(),
+                                readIntervalSeconds = account.refreshSeconds.coerceAtLeast(60), singleCheck = true,
+                                cyclePolicy = PowerOceanCheckCyclePolicy(assisted.checkWindowSeconds, assisted.extraPowerUpdates),
+                                sharedGridInspection = gridInspection, liveCheck = liveCheck,
+                                readSchedule = { PowerOceanReadSchedule(null, incident(), 1, true, store.powerOceanAssistancePaused()) }) { update ->
+                                val result = update.confirmation ?: return@inspect
+                                val detail = when (result.reason) {
+                                    PowerOceanLossConfirmation.Reason.CONNECTED -> "EcoFlow reports a grid connection."
+                                    PowerOceanLossConfirmation.Reason.RETURN_PENDING -> "Grid appears back; waiting for EcoFlow to reconnect."
+                                    PowerOceanLossConfirmation.Reason.ECOFLOW_AND_METER -> "EcoFlow off-grid; meter reports zero flow."
+                                    PowerOceanLossConfirmation.Reason.CHARGER_CORROBORATED -> "Grid and charger loss evidence agree."
+                                    PowerOceanLossConfirmation.Reason.WAITING_FOR_CHARGER -> "Waiting for charger-loss confirmation."
+                                    PowerOceanLossConfirmation.Reason.WAITING_FOR_LIVE_DATA -> "Waiting for EcoFlow to send updated readings; older saved readings cannot verify this check."
+                                    PowerOceanLossConfirmation.Reason.UNKNOWN -> "Waiting for updated grid and meter readings."
+                                }
+                                val dataWarning = if (update.liveCheck?.possiblyStalled == true) " Power readings are identical across successive checks; the feed may be stalled or the load steady." else ""
+                                val check = update.liveCheck?.let { status -> status.requestedAt?.let { requested ->
+                                    val labels = mapOf("sysLoadPwr" to "Home load", "sysGridPwr" to "Grid power flow",
+                                        "mpptPwr" to "Solar power", "bpPwr" to "Battery power flow")
+                                    val inspection = update.gridInspection
+                                    val observations = listOfNotNull(
+                                        inspection.lastCode?.let { code -> inspection.lastReceivedUtcMillis?.let { received ->
+                                            val explanation = when (code) {
+                                                0L -> "In the tested Single Phase profile, 0 means the inverter reports grid connection."
+                                                1L -> "In the tested Single Phase profile, 1 means off-grid; this can include the delay while the inverter reconnects."
+                                                else -> "This grid code is unsupported by the selected tested profile."
+                                            }
+                                            SourceReportedValue("Reported grid code", code.toString(), explanation, received, inspection.lastCodeFromDevicePush,
+                                                supportedByLiveFeed = inspection.correlation?.state?.let { it != PowerOceanGridCorrelation.State.UNKNOWN } == true &&
+                                                    status.hasCurrentReport(System.currentTimeMillis()))
+                                        } },
+                                        inspection.meterValue?.let { meter -> inspection.meterReceivedUtcMillis?.let { received ->
+                                            SourceReportedValue("Meter 1 reading", meter.toString(),
+                                                if (meter == 0.0) "Zero means no reported flow. Zero alone does not prove grid loss."
+                                                else "Non-zero means reported meter activity. Changing activity can support grid return after a confirmed loss; sign/direction depends on the installation.",
+                                                received, inspection.meterFromDevicePush)
+                                        } })
+                                    PowerSourceCheck(requested, status.lastDevicePushAt,
+                                        result.availability != GridAvailability.UNKNOWN,
+                                        status.powerValues.map { (key, watts) -> SourceTelemetryReading(key, labels.getValue(key), watts.toString(), "W") }, observations, cycleState = PowerSourceCheck.CycleState.COLLECTING,
+                                        deviceUpdates = status.deviceUpdates, powerUpdates = status.powerUpdates, valuesChanged = status.valuesChanged,
+                                        ecoFlowBattery = inspection.battery ?: store.lastHomeBattery(), startedAtEpochMs = started,
+                                        deadlineAtEpochMs = started + assisted.checkWindowSeconds * 1000L + 60_000L,
+                                        firstCheckAfterRestart = firstCheckAfterRestart)
+                                } }
+                                val evidenceAt = update.gridInspection.correlation?.let { grid ->
+                                    PowerOceanLossConfirmation.evidenceReceivedAt(grid, update.liveCheck,
+                                        System.currentTimeMillis(), assisted.extraPowerUpdates + 1, update.gridInspection.lastCodeFromDevicePush,
+                                        update.gridInspection.meterReceivedUtcMillis.takeIf { update.gridInspection.meterFromDevicePush })
+                                }
+                                emit(result.availability, detail + dataWarning, result.reason == PowerOceanLossConfirmation.Reason.RETURN_PENDING, evidenceAt,
+                                    update.liveCheck?.takeIf { it.comparedPower }?.possiblyStalled, check)
+                                if (result.availability == GridAvailability.UNAVAILABLE) store.setHourlyUntilChargerReturns(false)
 
-                        }
-                        lastFailure = failure
-                        if (failure?.contains(Regex("MQTT code (4|5)\\)")) == true) {
-                            // Broker rejected previously saved access. Reauthenticate on the next bounded retry.
-                            session = null; credentials = null
-                        }
-                        if (failure?.contains(Regex("MQTT code 128\\)")) == true) {
-                            emit(GridAvailability.UNKNOWN, failure, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
-                            automaticRetriesBlocked = true
-                            session = null
-                            credentials = null
+                            }
+                            lastFailure = failure
+                            if (failure?.contains(Regex("MQTT code (4|5)\\)")) == true) {
+                                // Broker rejected previously saved access. Reauthenticate on the next bounded retry.
+                                session = null; credentials = null
+                            }
+                            if (failure?.contains(Regex("MQTT code 128\\)")) == true) {
+                                emit(GridAvailability.UNKNOWN, failure, check = latest?.check?.copy(cycleState = PowerSourceCheck.CycleState.FAILED, finishedAtEpochMs = System.currentTimeMillis()))
+                                automaticRetriesBlocked = true
+                                session = null
+                                credentials = null
+                            }
                         }
                     }
+                } catch (_: TimeoutCancellationException) {
+                    lastFailure = "EcoFlow check exceeded its listening/connection deadline. Connection closed; a fresh session will be used on retry."
+                    session = null; credentials = null
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { lastFailure = "EcoFlow check unavailable. Connection closed; waiting before retrying." }
+                finally { abortAtDeadline.cancel(); activeProbe = null }
                 val qualified = PowerOceanCheckContinuity.completedEvidence(latest, lastVerified, started, lastFailure != null)
                 val completed = qualified ?: latest
                 val poweredFailureStreak = PowerOceanFailureRetryPolicy.nextStreak(
@@ -315,9 +355,10 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 store.setPowerOceanPoweredFailureStreak(poweredFailureStreak)
                 val after = store.powerOceanAssistedSettings()
                 val brokerConnectionFailed = qualified == null &&
-                    lastFailure?.contains("while connecting to the secure broker") == true
+                    (lastFailure?.contains("secure broker") == true || lastFailure?.contains("push connection disconnected") == true)
+                sessionFailures = PowerOceanFailureRetryPolicy.sessionFailureStreak(sessionFailures, brokerConnectionFailed)
                 val refreshSessionBeforeNextRetry = PowerOceanFailureRetryPolicy.refreshSession(
-                    poweredFailureStreak, after.sessionRefreshFailureThreshold, brokerConnectionFailed)
+                    sessionFailures, after.sessionRefreshFailureThreshold, brokerConnectionFailed)
                 if (refreshSessionBeforeNextRetry) {
                     session = null
                     credentials = null
@@ -325,14 +366,14 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
                 val afterIncident = incident()
                 val poweredFailureRetryAfter = chargerPowered == true && poweredFailureStreak > 0
                 val afterSeconds = if (after.enabled) {
-                    if (afterIncident || poweredFailureRetryAfter) after.outageSeconds else after.normalSeconds
+                    checkInterval(store, after, poweredFailureRetryAfter || lastFailure != null)
                 } else account.refreshSeconds.coerceAtLeast(60)
                 sampling.finishCheck(android.os.SystemClock.elapsedRealtime(), schedule.copy(intervalSeconds = afterSeconds.takeIf { it > 0 },
                     incident = afterIncident || poweredFailureRetryAfter,
                     paused = store.powerOceanAssistancePaused()))
                 if (lastFailure != null && chargerPowered != true) {
                     retryAt = maxOf(retryAt, android.os.SystemClock.elapsedRealtime() + backoff)
-                    backoff = (backoff * 2).coerceAtMost(30 * 60_000L)
+                    backoff = (backoff * 2).coerceAtMost(5 * 60_000L)
                 } else if (lastFailure == null) { retryAt = 0; backoff = 60_000 }
                 val now = System.currentTimeMillis()
                 val next = if (automaticRetriesBlocked) null else sampling.nextDueAt?.let { now + (maxOf(it, retryAt) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) }
@@ -365,7 +406,12 @@ internal class PowerOceanAccountPowerSignalProvider(context: Context) : PowerSig
     }
 
     @Synchronized
-    override fun stop() { scope?.cancel(); scope = null; worker = null; checkScheduler.schedule(null); scheduledWakeAtEpochMs = null; releaseCheckLocks() }
+    override fun stop() {
+        scope?.cancel(); scope = null; worker = null
+        val closingProbe = activeProbe
+        Thread({ client.cancelActiveRequest(); closingProbe?.cancel() }, "ecoflow-close").apply { isDaemon = true; start() }
+        checkScheduler.schedule(null); scheduledWakeAtEpochMs = null; releaseCheckLocks()
+    }
 
     private companion object {
         const val MAX_CHECK_LOCK_MS = 6 * 60_000L

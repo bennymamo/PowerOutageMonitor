@@ -6,6 +6,8 @@ import android.os.PowerManager
 import android.os.UserManager
 import java.security.MessageDigest
 import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryMaintenanceGate
+import com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult
+import com.flossypickle.poweroutagemonitor.diagnostics.MonitoringEvidenceStore
 
 /** A single cancelable receiver hosted by the existing foreground service. */
 internal class TelegramRemoteController(private val context: Context,
@@ -44,7 +46,7 @@ internal class TelegramRemoteController(private val context: Context,
                 val config = store.settings()
                 if (!config.enabled) break
                 var offset = store.offset(hash) ?: -1L
-                wake.acquire(90_000)
+                wake.acquire(180_000)
                 try {
                     // Discard queued commands on initial enable, token replacement or restore.
                     // Telegram's negative offset reads the tail and forgets earlier updates.
@@ -64,6 +66,7 @@ internal class TelegramRemoteController(private val context: Context,
                     store.health("Listening for trusted private commands")
                     when (val result = api.pollUpdates(token, offset, if (config.longPolling) 25 else 0)) {
                         is TelegramClient.ApiResult.Failure -> {
+                            MonitoringEvidenceStore(context).record(MonitoringEvidenceStore.Event.REMOTE_POLL_FAILED)
                             store.health(if (result.message.contains("Conflict", true))
                                 "Another receiver or webhook uses this bot. Use one command receiver per bot." else result.message)
                             throw Retry(result.retryAfterSeconds)
@@ -82,11 +85,29 @@ internal class TelegramRemoteController(private val context: Context,
                                     if (configurationChanged()) return
                                     store.checkpoint(hash, offset)
                                 }
-                                if (!current.enabled || command == null || generation != run) continue
-                                val reply = runCatching { execute(command, deliveryGeneration) }.getOrElse { "The command could not be completed. Check the app before retrying." }
+                                if (!current.enabled || command == null || generation != run) {
+                                    MonitoringEvidenceStore(context).record(MonitoringEvidenceStore.Event.REMOTE_IGNORED)
+                                    continue
+                                }
+                                val age = System.currentTimeMillis() - update.message!!.sentAtEpochMs
+                                MonitoringEvidenceStore(context).record(MonitoringEvidenceStore.Event.REMOTE_RECEIVED,
+                                    command = command.name, requestAgeMs = age)
+                                val resultText = runCatching { execute(command, deliveryGeneration) }.getOrElse { "The command could not be completed. Check the app before retrying." }
+                                val reply = (if (command.name in setOf("status", "help") && age > 60_000)
+                                    "Request reached the monitor ${age / 60_000} minutes after it was sent. Showing current information.\n\n" else "") + resultText
                                 if (generation != run || configurationChanged()) return
-                                val sent = api.sendMessage(token, update.message!!.chatId, reply)
-                                if (sent !is com.flossypickle.poweroutagemonitor.integrations.alerts.DeliveryResult.Sent)
+                                var sent: DeliveryResult? = null
+                                // Retry only delivery; controls were checkpointed and must never execute twice.
+                                for (attempt in 0..2) {
+                                    if (generation != run || configurationChanged()) return
+                                    sent = api.sendMessage(token, update.message.chatId, reply)
+                                    if (sent !is DeliveryResult.RetryableFailure) break
+                                    if (attempt < 2) Thread.sleep((attempt + 1) * 2_000L)
+                                }
+                                MonitoringEvidenceStore(context).record(if (sent is DeliveryResult.Sent)
+                                    MonitoringEvidenceStore.Event.REMOTE_REPLY_SENT else MonitoringEvidenceStore.Event.REMOTE_REPLY_FAILED,
+                                    command = command.name, requestAgeMs = age)
+                                if (sent !is DeliveryResult.Sent)
                                     store.health("Command handled; its reply could not be delivered. Send /status to check.")
                             }
                             backoff = 5_000
@@ -95,6 +116,14 @@ internal class TelegramRemoteController(private val context: Context,
                 } catch (failure: Retry) {
                     if (wake.isHeld) wake.release()
                     Thread.sleep(maxOf(backoff, (failure.afterSeconds ?: 0) * 1000L)); backoff = (backoff * 2).coerceAtMost(300_000)
+                    continue
+                } catch (interrupted: InterruptedException) {
+                    throw interrupted
+                } catch (_: Exception) {
+                    store.health("Remote receiver recovering after a local/network failure; retrying shortly.")
+                    if (wake.isHeld) wake.release()
+                    Thread.sleep(backoff.coerceAtMost(60_000L))
+                    backoff = (backoff * 2).coerceAtMost(60_000L)
                     continue
                 } finally { if (wake.isHeld) wake.release() }
                 if (!config.longPolling) Thread.sleep(config.pollSeconds * 1000L)

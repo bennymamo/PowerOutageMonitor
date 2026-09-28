@@ -33,7 +33,8 @@ internal class PowerSourceStore(context: Context) {
         val recoveryPending: Boolean = false,
         val dataPossiblyStalled: Boolean = false,
         val check: PowerSourceCheck? = null,
-        val evidenceReceivedAtEpochMs: Long? = null
+        val evidenceReceivedAtEpochMs: Long? = null,
+        val outageVerifiedByEcoFlow: Boolean = false
     )
 
     fun selectedSource(): Source = runCatching {
@@ -61,6 +62,8 @@ internal class PowerSourceStore(context: Context) {
     fun setPowerOceanProfileVerified(connection: com.flossypickle.poweroutagemonitor.integrations.power.ecoflow.PowerOceanAccountClient.Connection, verified: Boolean) {
         require(connection.isValid && connection.model == "86")
         val editor = preferences.edit().remove(KEY_POWEROCEAN_TEST_TIME).remove(KEY_POWEROCEAN_PREVIOUS_TEST)
+            .remove("home_battery_percent").remove("home_battery_received").remove("home_battery_push")
+            .remove("account_hourly_until_charger").remove("reconnection_incident").remove("reconnection_restored")
         if (verified) editor.putString(KEY_POWEROCEAN_PROFILE, powerOceanKey(connection)) else editor.remove(KEY_POWEROCEAN_PROFILE)
         check(editor.commit()) { "Unable to save PowerOcean profile" }
     }
@@ -115,6 +118,7 @@ internal class PowerSourceStore(context: Context) {
             .putInt("account_session_refresh_failure_threshold", settings.sessionRefreshFailureThreshold)
         if (changedMode) edit.remove("account_charger_loss_started").remove("account_charger_loss_recovered")
             .remove("account_ecoflow_outage_started").remove("account_powered_failure_streak")
+            .remove("account_hourly_until_charger")
         check(edit.commit()) { "Unable to save charger-first settings" }
     }
 
@@ -124,6 +128,29 @@ internal class PowerSourceStore(context: Context) {
     }
 
     fun powerOceanPoweredFailureStreak() = preferences.getInt("account_powered_failure_streak", 0).coerceIn(0, 20)
+    fun hourlyUntilChargerReturns() = preferences.getBoolean("account_hourly_until_charger", false)
+    fun setHourlyUntilChargerReturns(enabled: Boolean) {
+        check(preferences.edit().putBoolean("account_hourly_until_charger", enabled).commit())
+    }
+
+    fun lastHomeBattery(): SourceBatteryReading? {
+        val percent = preferences.getInt("home_battery_percent", -1)
+        val received = preferences.getLong("home_battery_received", 0)
+        return if (percent in 0..100 && received > 0) SourceBatteryReading(percent, received,
+            preferences.getBoolean("home_battery_push", false)) else null
+    }
+
+    fun pendingReconnection(): Pair<Long, Long>? {
+        val incident = preferences.getLong("reconnection_incident", 0)
+        val restored = preferences.getLong("reconnection_restored", 0)
+        return if (incident > 0 && restored > 0) incident to restored else null
+    }
+    fun awaitReconnection(incident: Long, restored: Long) {
+        check(preferences.edit().putLong("reconnection_incident", incident).putLong("reconnection_restored", restored).commit())
+    }
+    fun clearPendingReconnection() {
+        check(preferences.edit().remove("reconnection_incident").remove("reconnection_restored").commit())
+    }
     fun setPowerOceanPoweredFailureStreak(value: Int) {
         require(value in 0..20)
         check(preferences.edit().putInt("account_powered_failure_streak", value).commit())
@@ -173,6 +200,8 @@ internal class PowerSourceStore(context: Context) {
             .remove("account_assistance_paused").remove("account_data_warning_episode").remove("account_data_warning_sent")
             .remove("status_data_stalled")
             .remove("account_charger_loss_recovered").remove("account_ecoflow_outage_started")
+            .remove("account_hourly_until_charger").remove("reconnection_incident").remove("reconnection_restored")
+            .remove("home_battery_percent").remove("home_battery_received").remove("home_battery_push")
             .remove(KEY_STATUS_SOURCE)
             .remove(KEY_STATUS_AVAILABILITY)
             .remove(KEY_STATUS_OBSERVED_AT)
@@ -218,6 +247,10 @@ internal class PowerSourceStore(context: Context) {
             else -> Source.ANDROID_CHARGER
         }
         PowerSourceRuntime.status = statusFrom(source, signal)
+        signal.check?.ecoFlowBattery?.takeIf { it.receivedAtEpochMs > (lastHomeBattery()?.receivedAtEpochMs ?: 0) }?.let {
+            preferences.edit().putInt("home_battery_percent", it.percent).putLong("home_battery_received", it.receivedAtEpochMs)
+                .putBoolean("home_battery_push", it.fromDevicePush).apply()
+        }
         if (persist) {
             writeStatus(preferences.edit(), source, signal).apply()
         }
@@ -236,7 +269,8 @@ internal class PowerSourceStore(context: Context) {
             observedAtEpochMs = preferences.getLong(KEY_STATUS_OBSERVED_AT, 0),
             detail = preferences.getString(KEY_STATUS_DETAIL, null),
             recoveryPending = preferences.getBoolean(KEY_STATUS_RECOVERY_PENDING, false),
-            dataPossiblyStalled = preferences.getBoolean("status_data_stalled", false)
+            dataPossiblyStalled = preferences.getBoolean("status_data_stalled", false),
+            outageVerifiedByEcoFlow = preferences.getBoolean("status_ecoflow_verified_outage", false)
         )
     }
 
@@ -248,7 +282,8 @@ internal class PowerSourceStore(context: Context) {
         recoveryPending = signal.recoveryPending,
         dataPossiblyStalled = signal.dataPossiblyStalled ?: lastStatus()?.takeIf { it.source == source }?.dataPossiblyStalled ?: false,
         check = signal.check,
-        evidenceReceivedAtEpochMs = signal.evidenceReceivedAtEpochMs
+        evidenceReceivedAtEpochMs = signal.evidenceReceivedAtEpochMs,
+        outageVerifiedByEcoFlow = signal.outageVerifiedByEcoFlow
     )
 
     private fun writeStatus(
@@ -261,6 +296,7 @@ internal class PowerSourceStore(context: Context) {
         .putLong(KEY_STATUS_OBSERVED_AT, signal.observedAtEpochMs)
         .putString(KEY_STATUS_DETAIL, signal.detail?.take(MAX_DETAIL_LENGTH))
         .putBoolean(KEY_STATUS_RECOVERY_PENDING, signal.recoveryPending)
+        .putBoolean("status_ecoflow_verified_outage", signal.outageVerifiedByEcoFlow)
         .putBoolean("status_data_stalled", PowerSourceRuntime.status?.dataPossiblyStalled ?: false)
 
     companion object {

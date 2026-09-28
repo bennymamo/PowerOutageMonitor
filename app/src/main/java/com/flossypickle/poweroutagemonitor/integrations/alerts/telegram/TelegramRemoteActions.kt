@@ -9,6 +9,9 @@ import com.flossypickle.poweroutagemonitor.storage.OperationalHistoryStore
 import com.flossypickle.poweroutagemonitor.audible.AudibleAlarmCoordinator
 import com.flossypickle.poweroutagemonitor.integrations.alerts.*
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceStore
+import com.flossypickle.poweroutagemonitor.integrations.power.SourceEvidencePresentation
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.text.DateFormat
 import java.util.Date
 
@@ -44,6 +47,24 @@ internal class TelegramRemoteActions(private val context: Context) {
                 else -> { MonitoringService.requestPowerOceanCheck(context)
                     "EcoFlow check requested. Send /status shortly to see the last check, current readings and result. A completed failed/inconclusive check can send a warning." }
             }
+            "ecoflow_hourly" -> when {
+                !monitor.settings().monitoringEnabled -> "Monitoring is inactive. Send /monitor_on first."
+                source.selectedSource() != PowerSourceStore.Source.ECOFLOW_ACCOUNT || source.powerOceanAssistancePaused() ->
+                    "A configured, active EcoFlow account source is required."
+                !source.powerOceanAssistedSettings().enabled -> "Temporary hourly mode requires Charger + EcoFlow assistance."
+                monitor.lastSnapshot()?.externallyPowered != false -> "The charger is already powered; the normal schedule is active."
+                monitor.state().phase != com.flossypickle.poweroutagemonitor.OutageEngine.Phase.POWERED ||
+                    source.lastStatus()?.availability != com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability.AVAILABLE ||
+                    source.lastStatus()?.recoveryPending == true ->
+                    "Wait for confirmed grid reconnection first. Rapid checks remain active while grid status is unknown or an outage is pending."
+                else -> { source.setHourlyUntilChargerReturns(true); MonitoringService.refreshPowerOceanSchedule(context)
+                    "EcoFlow will check every hour until the charger returns. A verified new outage or failed check resumes rapid checks. Use /ecoflow_auto to end this override. Detection of another outage while the charger stays off may take up to an hour." }
+            }
+            "ecoflow_auto" -> { source.setHourlyUntilChargerReturns(false); MonitoringService.refreshPowerOceanSchedule(context)
+                "Temporary hourly checks ended. The configured normal/outage schedule is active." }
+            "restart_monitoring" -> if (!monitor.settings().monitoringEnabled) "Monitoring is inactive. Send /monitor_on first."
+                else { MonitoringService.reloadPowerSource(context)
+                    "Monitoring connection restart requested. Settings, incident state, history and queued alerts are preserved. A fresh EcoFlow check will start; use /status for progress." }
             "charger_on" -> {
                 if (source.selectedSource() == PowerSourceStore.Source.ECOFLOW_ACCOUNT) source.setPowerOceanAssistedSettings(source.powerOceanAssistedSettings().copy(enabled = true))
                 else source.select(PowerSourceStore.Source.ANDROID_CHARGER)
@@ -77,21 +98,32 @@ internal class TelegramRemoteActions(private val context: Context) {
         val monitor = MonitorStore(context); val settings = monitor.settings(); val source = PowerSourceStore(context)
         val last = source.lastStatus(); val check = last?.check
         val snapshot = PowerSnapshot.from(context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))) ?: monitor.lastSnapshot()
+        val now = System.currentTimeMillis()
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val network = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
         return buildString {
             appendLine(settings.deviceName)
             appendLine("Monitoring ${if (settings.monitoringEnabled) "active" else "inactive"}")
             appendLine("Grid: ${if (!settings.monitoringEnabled) "not being monitored" else if (source.selectedSource() != PowerSourceStore.Source.ANDROID_CHARGER && last?.availability == com.flossypickle.poweroutagemonitor.integrations.power.GridAvailability.UNKNOWN) "unknown: no current evidence" else monitor.state().phase.name.lowercase().replace('_', ' ')}")
-            appendLine("Charger: ${when(snapshot?.externallyPowered){true -> "powered";false -> "no power";else -> "unknown"}} · Battery ${snapshot?.batteryPercent ?: "?"}%")
+            appendLine("Charger: ${when(snapshot?.externallyPowered){true -> "powered";false -> "no power";else -> "unknown"}} · Phone battery ${snapshot?.batteryPercent ?: "?"}%")
+            appendLine("Phone internet: ${if (network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) "Android validated" else "not validated"} · ${when { network?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"; network?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "cellular"; else -> "unavailable/other" }}")
             appendLine("Source: ${source.selectedSource().name.lowercase().replace('_', ' ')}")
             if (source.selectedSource() == PowerSourceStore.Source.ECOFLOW_ACCOUNT) {
                 val assisted = source.powerOceanAssistedSettings()
                 val failureStreak = source.powerOceanPoweredFailureStreak()
                 appendLine("Charger watching: ${if (assisted.enabled) "on" else "off"} · EcoFlow: ${if(source.powerOceanAssistancePaused()) "paused" else "on"}")
                 appendLine("Last check: ${time(check?.requestedAtEpochMs)} · ${check?.cycleState?.name?.lowercase() ?: "not checked"}")
+                if (check?.active == true) appendLine("Check ongoing: ${SourceEvidencePresentation.progress(check, now)}")
                 appendLine("Last device update: ${time(check?.liveReportAtEpochMs)}")
                 appendLine("Updates: ${check?.deviceUpdates ?: 0} · Values: ${check?.dataHealth?.name?.lowercase()?.replace('_',' ') ?: "unknown"}")
-                check?.observations?.filter { it.label in setOf("Reported grid code", "Meter 1 reading") }?.forEach { appendLine("${it.label}: ${it.value} · ${time(it.receivedAtEpochMs)}") }
-                appendLine("Next check: ${when { !settings.monitoringEnabled -> "monitoring inactive"; source.powerOceanAssistancePaused() -> "paused"; check?.active == true -> "after this check"; else -> time(check?.nextCheckAtEpochMs) }}")
+                check?.observations?.filter { it.label in setOf("Reported grid code", "Meter 1 reading") }?.forEach {
+                    appendLine("${it.label}: ${SourceEvidencePresentation.value(it)} · ${time(it.receivedAtEpochMs)} · ${SourceEvidencePresentation.age(it.receivedAtEpochMs, now)} · ${SourceEvidencePresentation.origin(it, check)}")
+                }
+                val homeBattery = check?.ecoFlowBattery ?: source.lastHomeBattery()
+                appendLine("EcoFlow home battery: ${homeBattery?.let { "${it.percent}% · ${time(it.receivedAtEpochMs)} · ${SourceEvidencePresentation.age(it.receivedAtEpochMs, now)} · ${if (it.fromDevicePush) "device push" else "sampled reply"}" } ?: "not reported"}")
+                appendLine("EcoFlow evidence: ${check?.let { SourceEvidencePresentation.qualification(it, now) } ?: "unavailable"}; packet receipt does not prove measurement time")
+                if (check?.active != true) appendLine("Next check: ${when { !settings.monitoringEnabled -> "monitoring inactive"; source.powerOceanAssistancePaused() -> "paused"; else -> time(check?.nextCheckAtEpochMs) }}")
+                appendLine("Check schedule: ${if (!assisted.enabled) "configured account schedule" else retryInterval(if (source.hourlyUntilChargerReturns()) 3600 else if (snapshot?.externallyPowered == false || failureStreak > 0 || source.assistedEcoFlowOutageStartedAt() > 0) assisted.outageSeconds else assisted.normalSeconds)}${if(assisted.enabled && source.hourlyUntilChargerReturns()) " · temporary until charger returns" else ""}")
                 if (snapshot?.externallyPowered == true && failureStreak > 0) {
                     appendLine("EcoFlow retries: $failureStreak/${assisted.poweredFailureThreshold} failures · ${retryInterval(assisted.outageSeconds)}")
                 }

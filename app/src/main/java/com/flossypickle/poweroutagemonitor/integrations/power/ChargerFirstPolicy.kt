@@ -2,19 +2,32 @@ package com.flossypickle.poweroutagemonitor.integrations.power
 
 /** Either source can establish loss; a powered UPS charger cannot veto a verified grid outage. */
 internal object ChargerFirstPolicy {
+    // Local fallback must not wait for the full cloud collection window or repeated new checks.
+    const val MAX_LOCAL_VERIFICATION_MS = 60_000L
+    fun verificationWindow(listeningWindowMs: Long) = listeningWindowMs.coerceAtMost(MAX_LOCAL_VERIFICATION_MS)
     data class Result(val availability: GridAvailability, val recovered: Boolean = false,
-        val recoveryPending: Boolean = false, val detail: String, val ecoFlowOutageStartedAt: Long = 0)
+        val recoveryPending: Boolean = false, val detail: String, val ecoFlowOutageStartedAt: Long = 0,
+        val outageVerifiedByEcoFlow: Boolean = false)
 
     fun evaluate(chargerPowered: Boolean?, ecoFlow: PowerSignal?, lossStartedAt: Long,
         outageConfirmed: Boolean, recovered: Boolean, now: Long, ecoFlowOutageStartedAt: Long = 0,
         verificationWindowMs: Long = 0): Result {
         require(verificationWindowMs >= 0)
-        val fresh = ecoFlow?.takeIf { PowerSignalPolicy.evaluate(it, now, 15_000).health == PowerSignalHealth.FRESH }
+        val fresh = ecoFlow?.takeIf {
+            PowerSignalPolicy.evaluate(it, now, 15_000).health == PowerSignalHealth.FRESH ||
+                it.check?.let { check -> check.gridEvidenceAvailable && check.ecoFlowAvailability == it.availability &&
+                    it.evidenceReceivedAtEpochMs?.let { receipt -> receipt in 1..now } == true &&
+                    check.evidenceValidUntilEpochMs?.let { deadline -> now <= deadline } == true &&
+                    (check.cycleState == PowerSourceCheck.CycleState.WAITING ||
+                        check.active && check.deadlineAtEpochMs?.let { deadline -> now <= deadline } == true)
+                } == true
+        }
         val evidence = fresh?.evidenceReceivedAtEpochMs?.takeIf { it in 1..now }
         if (fresh?.availability == GridAvailability.UNAVAILABLE && evidence != null) {
             return Result(GridAvailability.UNAVAILABLE, detail = "EcoFlow grid and meter readings report an outage. " +
                 if (chargerPowered == true) "The charger is still powered; backup power may be keeping it on." else "Local charger watching continues.",
-                ecoFlowOutageStartedAt = ecoFlowOutageStartedAt.takeIf { it > 0 } ?: evidence)
+                ecoFlowOutageStartedAt = ecoFlowOutageStartedAt.takeIf { it > 0 } ?: evidence,
+                outageVerifiedByEcoFlow = true)
         }
         val ecoReturned = ecoFlowOutageStartedAt > 0 && fresh?.availability == GridAvailability.AVAILABLE &&
             evidence != null && evidence > ecoFlowOutageStartedAt
@@ -41,10 +54,10 @@ internal object ChargerFirstPolicy {
         val check = ecoFlow?.check
         val checkCompletedAfterLoss = check != null && !check.active &&
             check.finishedAtEpochMs?.let { it in lossStartedAt..now } == true
-        val restartedCheckIsCollecting = check?.active == true && check.requestedAtEpochMs >= lossStartedAt &&
-            now - check.requestedAtEpochMs in 0 until verificationWindowMs
+        val restartVerification = check?.active == true && check.firstCheckAfterRestart &&
+            now - check.startedAtEpochMs in 0 until verificationWindowMs
         if (!outageConfirmed && verificationWindowMs > 0 &&
-            (now - lossStartedAt in 0 until verificationWindowMs || restartedCheckIsCollecting) &&
+            (now - lossStartedAt in 0 until verificationWindowMs || restartVerification) &&
             !checkCompletedAfterLoss) return Result(GridAvailability.UNKNOWN,
             detail = "Charger power lost. Checking EcoFlow before confirming an outage.", ecoFlowOutageStartedAt = ecoLoss)
         return Result(GridAvailability.UNAVAILABLE,

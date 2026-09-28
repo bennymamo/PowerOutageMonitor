@@ -11,7 +11,8 @@ internal data class PowerSignal(
     val evidenceReceivedAtEpochMs: Long? = null,
     // Null means this update did not assess consecutive power readings.
     val dataPossiblyStalled: Boolean? = null,
-    val check: PowerSourceCheck? = null
+    val check: PowerSourceCheck? = null,
+    val outageVerifiedByEcoFlow: Boolean = false
 )
 
 internal enum class GridAvailability { AVAILABLE, UNAVAILABLE, UNKNOWN }

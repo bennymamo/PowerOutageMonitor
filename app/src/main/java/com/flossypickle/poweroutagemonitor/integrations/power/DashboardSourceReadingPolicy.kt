@@ -28,7 +28,7 @@ internal object DashboardSourceReadingPolicy {
         intervalSeconds: Int?, windowMs: Long): Boolean {
         if (status == null || status.source != selected || status.observedAtEpochMs > now) return false
         if (now - status.observedAtEpochMs <= 15_000) return true
-        if (selected != PowerSourceStore.Source.ECOFLOW_ACCOUNT || status.check?.active != true) return false
+        if (selected != PowerSourceStore.Source.ECOFLOW_ACCOUNT || status.check == null) return false
         val signal = PowerSignal(status.availability, status.observedAtEpochMs,
             PowerSourceStore.POWEROCEAN_PROVIDER_ID, evidenceReceivedAtEpochMs = status.evidenceReceivedAtEpochMs,
             check = status.check)

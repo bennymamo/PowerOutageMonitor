@@ -8,7 +8,11 @@ internal data class PowerSourceCheck(val requestedAtEpochMs: Long, val liveRepor
     val deviceUpdates: Int = 0, val powerUpdates: Int = 0, val valuesChanged: Boolean = false,
     val lastConfirmedOnlineAtEpochMs: Long? = null,
     val evidenceValidUntilEpochMs: Long? = null,
-    val ecoFlowAvailability: GridAvailability? = null) {
+    val ecoFlowAvailability: GridAvailability? = null,
+    val ecoFlowBattery: SourceBatteryReading? = null,
+    val startedAtEpochMs: Long = requestedAtEpochMs,
+    val deadlineAtEpochMs: Long? = null,
+    val firstCheckAfterRestart: Boolean = false) {
     enum class CycleState { CONNECTING, COLLECTING, WAITING, PAUSED, FAILED }
     val active get() = cycleState in setOf(CycleState.CONNECTING, CycleState.COLLECTING)
     /** A first check after restart gets a bounded verification window before a source-loss warning. */

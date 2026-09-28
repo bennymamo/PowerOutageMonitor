@@ -109,7 +109,7 @@ class ChargerFirstPolicyTest {
     }
 
     @Test fun restartWithOldChargerLossStillWaitsForItsFirstBoundedCheck() {
-        val check = PowerSourceCheck(400_000, null, false, cycleState = PowerSourceCheck.CycleState.CONNECTING)
+        val check = PowerSourceCheck(400_000, null, false, cycleState = PowerSourceCheck.CycleState.CONNECTING, firstCheckAfterRestart = true)
         val unknown = grid(GridAvailability.UNKNOWN).copy(observedAtEpochMs = 420_000, check = check)
         assertEquals(GridAvailability.UNKNOWN, ChargerFirstPolicy.evaluate(false, unknown, 1000,
             false, false, 420_000, verificationWindowMs = 180_000).availability)
@@ -122,6 +122,26 @@ class ChargerFirstPolicyTest {
             false, false, 425_000, verificationWindowMs = 180_000).availability)
         assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false, unknown, 1000,
             true, false, 420_000, verificationWindowMs = 180_000).availability)
+    }
+
+    @Test fun laterChecksCannotExtendTheChargerFallbackDeadline() {
+        val check = PowerSourceCheck(61_000, null, false, cycleState = PowerSourceCheck.CycleState.CONNECTING)
+        assertEquals(60_000L, ChargerFirstPolicy.verificationWindow(300_000))
+        assertEquals(GridAvailability.UNAVAILABLE, ChargerFirstPolicy.evaluate(false,
+            grid(GridAvailability.UNKNOWN).copy(observedAtEpochMs = 62_000, check = check),
+            1000, false, false, 62_000, verificationWindowMs = 60_000).availability)
+    }
+
+    @Test fun completedQualifiedOutageRemainsUsableUntilItsExplicitReceiptDeadline() {
+        val check = PowerSourceCheck(1000, 2000, true, cycleState = PowerSourceCheck.CycleState.WAITING,
+            evidenceValidUntilEpochMs = 122_000, ecoFlowAvailability = GridAvailability.UNAVAILABLE)
+        val report = grid(GridAvailability.UNAVAILABLE).copy(check = check)
+        val result = ChargerFirstPolicy.evaluate(true, report, 0, false, false, 40_000)
+        assertEquals(GridAvailability.UNAVAILABLE, result.availability)
+        assertEquals(2000L, result.ecoFlowOutageStartedAt)
+        assertEquals(GridAvailability.AVAILABLE, ChargerFirstPolicy.evaluate(true, report, 0, false, false, 122_001).availability)
+        assertEquals(GridAvailability.AVAILABLE, ChargerFirstPolicy.evaluate(true,
+            report.copy(check = check.copy(gridEvidenceAvailable = false)), 0, false, false, 40_000).availability)
     }
 
 }

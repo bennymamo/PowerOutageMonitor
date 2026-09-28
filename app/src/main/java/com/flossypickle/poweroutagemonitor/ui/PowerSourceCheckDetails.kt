@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flossypickle.poweroutagemonitor.integrations.power.PowerSourceCheck
+import com.flossypickle.poweroutagemonitor.integrations.power.SourceEvidencePresentation
 import java.text.DateFormat
 import java.util.Date
 
@@ -27,9 +28,9 @@ internal fun PowerSourceCheckSummary(check: PowerSourceCheck, paused: Boolean = 
     Text(connection, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         CheckTime("Last check", checkReceiptTime(check.requestedAtEpochMs), Modifier.weight(1f))
-        CheckTime("Next check", when {
+        CheckTime(if (check.active) "Check ongoing" else "Next check", when {
             !enabled || paused -> "Paused"
-            check.active -> "After this check"
+            check.active -> SourceEvidencePresentation.progress(check, System.currentTimeMillis())
             else -> check.nextCheckAtEpochMs?.let(::checkReceiptTime) ?: "Manual only"
         }, Modifier.weight(1f))
     }
@@ -54,7 +55,7 @@ internal fun PowerSourceCheckDetails(check: PowerSourceCheck, title: String) {
         PowerSourceCheck.DataHealth.UNCHANGED -> "Values unchanged so far"
         PowerSourceCheck.DataHealth.NO_UPDATES -> "No device updates received"
     }
-    ExpandableSettingsSection(title, "Grid ${grid?.value ?: "?"} · Meter 1 ${meter?.value ?: "?"} · $health") {
+    ExpandableSettingsSection(title, "Grid ${grid?.value ?: "?"} · Meter 1 ${meter?.let(SourceEvidencePresentation::value) ?: "?"} · $health") {
         SettingText("Last device update", check.liveReportAtEpochMs?.let(::checkReceiptTime) ?: "Not received")
         SettingText("Updates this check", "${check.deviceUpdates} total · ${check.powerUpdates} power reports")
         SettingText("Data health", health)
@@ -62,7 +63,7 @@ internal fun PowerSourceCheckDetails(check: PowerSourceCheck, title: String) {
         listOf("Reported grid code", "Meter 1 reading").forEach { label ->
             val value = check.observations.firstOrNull { it.label == label }
             SettingsCard {
-                SettingText(label, value?.value ?: "Not received")
+                SettingText(label, value?.let(SourceEvidencePresentation::value) ?: "Not received")
                 value?.let {
                     Text(it.explanation, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     val origin = when {
@@ -74,6 +75,9 @@ internal fun PowerSourceCheckDetails(check: PowerSourceCheck, title: String) {
                         color = colors.onSurfaceVariant)
                 }
             }
+        }
+        check.ecoFlowBattery?.let {
+            SettingText("EcoFlow home battery", "${it.percent}% · ${checkReceiptTime(it.receivedAtEpochMs)} · ${SourceEvidencePresentation.age(it.receivedAtEpochMs, System.currentTimeMillis())}")
         }
         if (check.readings.isNotEmpty()) ExpandableSettingsSection("Power readings", "Latest values received in this check") {
             check.readings.forEach { SettingText(it.label, "${it.value} ${it.unit}") }

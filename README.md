@@ -35,6 +35,8 @@ The minimum Android version is **Android 6.0 (API 23)**. Broad support is delibe
 
 Release 1.1.7 completed 285 local unit tests and the full 30-test Android instrumentation suite on both Android 6/API 23 and Android 16/API 36. This covers simulated outage and battery behavior, settings navigation and save feedback, private credential entry, alert ordering and retry handling, backup compatibility, and Telegram command races. A real grid-loss test is still required for every PowerOcean installation because inverter reports and reconnection timing vary by site.
 
+Release 1.1.8 adds timing/recovery safeguards, qualified between-check evidence retention, EcoFlow home-battery reporting, a final grid-reconnection alert and Telegram recovery/scheduling commands. Its source passed 297 unit tests, lint with no errors, and the full 30-test Android suite on both API 23 and API 36 emulators. See [the changelog](docs/releases/v1.1.8.md) for behavior and remaining physical-validation limits; the real outage reviewed on 1.1.7 is not physical validation of these changes.
+
 ## Full guide
 
 ### Install or update
@@ -126,6 +128,9 @@ For a monitoring phone you rarely reach, open **Settings → Alerts & sound → 
 | --- | --- |
 | `/status` | Grid, monitoring, charger, battery, alarm and EcoFlow check/readings information. |
 | `/check_ecoflow` | Start a configured EcoFlow check now; use `/status` shortly afterward for its result. |
+| `/ecoflow_hourly` | After confirmed grid reconnection, check hourly while the charger remains off; end automatically on charger return or verified new grid loss. A new outage can take up to an hour to detect. |
+| `/ecoflow_auto` | End the temporary hourly override and use the configured schedules. |
+| `/restart_monitoring` | Recreate the monitoring connection and start a fresh EcoFlow check; preserve settings, incident state, history and pending alerts. |
 | `/stop_sound` | Acknowledge the current audible alarm and stop its repeats. |
 | `/quiet` or `/quiet 30` | Skip automatic Telegram alerts for the default time or 30 minutes. |
 | `/unquiet` | Resume automatic Telegram alerts. Quiet-period messages are not replayed. |
@@ -140,7 +145,11 @@ Long polling returns when a command arrives, with an idle request lasting up to 
 
 Only explicitly trusted private senders can act. Forwarded/edited messages and stale commands cannot control the phone. Queued commands are discarded after initial enable or restore, and handled commands are not replayed. Protect the bot token and your Telegram account. Remote controls cannot change credentials, backups or inverter electrical settings.
 
-Outage/restoration alerts include the charger state and available grid/meter observations with their receipt times. A charger-based fallback is identified when EcoFlow could not verify grid loss. Trusted Telegram chats also receive short command hints.
+Outage/restoration alerts identify the phone battery separately from the reported EcoFlow home battery, when available. Home-battery readings include their receipt age and origin; they are not a runtime estimate or proof of remaining usable home energy. Grid/meter observations include receipt age, whether they came from this or an earlier check, and whether they were sampled replies or device pushes. A charger fallback and verified EcoFlow loss are identified from the actual monitoring decision. Trusted Telegram chats also receive short command hints.
+
+If restoration initially uses meter activity while grid code 1 lingers, a subsequent qualified code-0 report sends one **GRID CONNECTION CONFIRMED** follow-up, ordered after restoration. It does not create another power event.
+
+Status replies show connection/collection elapsed time and the check deadline. Informational `/status` and `/help` requests remain valid for up to 24 hours after a networking delay and identify delayed receipt; control commands still expire after five minutes. Reply delivery has bounded retries, and diagnostics record command receipt/reply outcomes without identifiers. Delivery can still duplicate if Telegram accepts a request but the acknowledgement is lost.
 
 When the charger still has power, a failed or inconclusive EcoFlow check switches temporarily to the configured outage-check interval. The app warns only after the configured number of consecutive failures, five by default, then groups further failures into the same episode. A successful check resets the count, restores the normal schedule and sends a recovery only if a warning was sent. Charger-off fail-safe warnings keep their separate behavior. Both the retry interval and powered-charger failure limit are configurable and included in power-source backups.
 
@@ -181,7 +190,9 @@ Background account monitoring currently requires the tested **Single Phase** pro
 
 Some installations return a sampled off-grid code while the meter reads zero and live power reports continue changing. The app can now use that combination as guarded outage evidence after enough fresh reports arrive. During restoration it preserves the nonzero-meter evidence while code `1` lingers through inverter reconnection; it does not invert the grid-code mapping. Confirm this behavior with a controlled grid-loss and restoration test before relying on it.
 
-With automatic charger-first assistance enabled, unplugging triggers an immediate EcoFlow check before outage confirmation. Current grid-connected evidence cancels the suspected outage. If the check fails or ends without usable evidence, ordinary charger confirmation takes over. A stalled check cannot hold detection indefinitely: the limit is the configured listening time plus up to one minute for connection setup. Paused assistance or manual-only outage checks use the charger directly.
+With automatic charger-first assistance enabled, unplugging triggers an immediate EcoFlow check before outage confirmation. Current grid-connected evidence cancels the suspected outage. If the check fails or ends without usable evidence, ordinary charger confirmation takes over. Local fallback waits at most one minute for verification (or the shorter configured listening window), then uses the configured outage confirmation delay. Only the first check after a provider restart gets a separate bounded restart-verification window; repeated checks cannot extend local fallback indefinitely. The cloud check itself has the configured listening time plus one minute of connection allowance, closes on timeout and retries with fresh access. Paused assistance or manual-only outage checks use the charger directly.
+
+Confirmation deadlines and check wake-ups use exact alarms when Android has already granted access, and fall back to idle-aware alarms otherwise. Short confirmation windows hold a bounded CPU wake lock. Android/Samsung idle restrictions can still delay checks, networking and alert delivery; inspect battery optimization and test screen-off operation. Configured intervals are not a guarantee of actual wall-clock latency.
 
 In charger-first mode, charger loss can alert independently if EcoFlow is unreachable. Verified EcoFlow loss can also trigger an outage when a backed-up charger stays on. A powered charger cannot veto an EcoFlow-detected outage. Grid return can be recognized from validated changing meter activity while the inverter reconnects, even if the charger remains off.
 

@@ -18,6 +18,7 @@ internal data class PowerOceanAssistedSettings(val enabled: Boolean = false,
 
 /** Routine cloud failures are retried quickly while local charger evidence still proves power. */
 internal object PowerOceanFailureRetryPolicy {
+    fun sessionFailureStreak(previous: Int, failed: Boolean) = if (failed) (previous + 1).coerceAtMost(1000) else 0
     fun nextStreak(previous: Int, chargerPowered: Boolean?, failed: Boolean): Int = when {
         !failed || chargerPowered != true -> 0
         else -> (previous + 1).coerceAtMost(20)
@@ -28,6 +29,18 @@ internal object PowerOceanFailureRetryPolicy {
 
     fun refreshSession(streak: Int, threshold: Int, connectionFailed: Boolean) =
         connectionFailed && threshold > 0 && streak > 0 && streak % threshold == 0
+}
+
+/** A user-requested slow schedule never suppresses a verified or pending outage. */
+internal object PowerOceanTemporarySchedule {
+    fun interval(settings: PowerOceanAssistedSettings, incident: Boolean, failed: Boolean,
+        hourlyOverride: Boolean, chargerPowered: Boolean?, confirmedLoss: Boolean): Int = when {
+        !settings.enabled -> settings.normalSeconds
+        confirmedLoss || failed -> settings.outageSeconds
+        hourlyOverride && chargerPowered == false -> 3600
+        incident -> settings.outageSeconds
+        else -> settings.normalSeconds
+    }
 }
 
 internal data class PowerOceanReadSchedule(val intervalSeconds: Int?, val incident: Boolean,

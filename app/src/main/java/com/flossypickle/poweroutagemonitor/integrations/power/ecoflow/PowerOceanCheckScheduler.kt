@@ -25,6 +25,14 @@ internal class PowerOceanCheckScheduler(private val context: Context) {
     fun schedule(deadlineEpochMs: Long?) {
         alarmManager.cancel(pendingIntent)
         deadlineEpochMs ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadlineEpochMs, pendingIntent)
+                else alarmManager.setExact(AlarmManager.RTC_WAKEUP, deadlineEpochMs, pendingIntent)
+                return
+            } catch (_: SecurityException) { /* Fall back when access was revoked. */ }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadlineEpochMs, pendingIntent)
         } else {

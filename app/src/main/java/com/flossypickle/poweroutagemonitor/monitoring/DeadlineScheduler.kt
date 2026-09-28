@@ -8,7 +8,7 @@ import android.os.Build
 import com.flossypickle.poweroutagemonitor.OutageEngine
 import com.flossypickle.poweroutagemonitor.storage.MonitorStore
 
-/** Schedules an inexact idle-aware wake-up; no exact-alarm special access is required. */
+/** Use granted exact access for confirmation deadlines, with an idle-aware fallback. */
 internal class DeadlineScheduler(private val context: Context) {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
     private val pendingIntent: PendingIntent by lazy {
@@ -32,6 +32,14 @@ internal class DeadlineScheduler(private val context: Context) {
     fun scheduleAt(deadline: Long?) {
         alarmManager.cancel(pendingIntent)
         deadline ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadline, pendingIntent)
+                else alarmManager.setExact(AlarmManager.RTC_WAKEUP, deadline, pendingIntent)
+                return
+            } catch (_: SecurityException) { /* Access may have been revoked since the check. */ }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadline, pendingIntent)
         } else {

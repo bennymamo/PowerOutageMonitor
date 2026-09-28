@@ -42,17 +42,21 @@ internal class MonitoringCoordinator(private val context: Context) {
 
         AlertMessageFactory.forTransition(before, after, snapshot, settings, nowEpochMs)
             ?.let { message ->
+                val sources = PowerSourceStore(context)
+                if (message.kind == com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind.OUTAGE)
+                    sources.clearPendingReconnection()
                 val qualified = if (message.kind == com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind.RESTORED &&
-                    PowerSourceStore(context).lastStatus()?.recoveryPending == true) {
+                    sources.lastStatus()?.recoveryPending == true) {
+                    before.outageStartedEpochMs?.let { sources.awaitReconnection(it, nowEpochMs) }
                     message.copy(title = "GRID RETURN LIKELY · ECOFLOW RECONNECTING",
                         body = message.body + "\n\nMeter activity suggests the utility supply has returned. EcoFlow has not yet confirmed grid reconnection.")
                 } else message
-                val sources = PowerSourceStore(context)
                 alerts.persistForEnabledProviders(com.flossypickle.poweroutagemonitor.integrations.alerts.AlertEvidenceDetails.append(
-                    qualified, sources.selectedSource(), sources.lastStatus(), snapshot))
+                    qualified, sources.selectedSource(), sources.lastStatus(), snapshot, nowEpochMs))
             }
         recordCompletedEvent(before, after, snapshot, nowEpochMs, settings.historyLimit)
         store.save(after, snapshot, nowEpochMs)
+        confirmReconnection(after, snapshot, nowEpochMs)
         scheduledAlerts.process(
             monitorState = after,
             snapshot = snapshot,
@@ -93,6 +97,7 @@ internal class MonitoringCoordinator(private val context: Context) {
         val settings = store.settings()
         if (!settings.monitoringEnabled) return
         val state = store.state()
+        confirmReconnection(state, snapshot, nowEpochMs)
         // Battery broadcasts remain safety-relevant even when the selected grid signal
         // is stable: persist them, enforce the sound cutoff, and send the low-battery alert.
         if (store.lastSnapshot() != snapshot) store.save(state, snapshot, nowEpochMs)
@@ -120,6 +125,23 @@ internal class MonitoringCoordinator(private val context: Context) {
             }
         }
         audibleAlarm.reconcile(state, snapshot, nowEpochMs)
+    }
+
+    private fun confirmReconnection(state: OutageEngine.State, snapshot: PowerSnapshot, now: Long) {
+        val sources = PowerSourceStore(context)
+        val pending = sources.pendingReconnection() ?: return
+        if (!store.settings().sendRestoreNotification) { sources.clearPendingReconnection(); return }
+        if (state.phase != OutageEngine.Phase.POWERED || sources.selectedSource() != PowerSourceStore.Source.ECOFLOW_ACCOUNT ||
+            !com.flossypickle.poweroutagemonitor.integrations.alerts.GridReconnectionPolicy.confirmed(sources.lastStatus(), pending.second, now)) return
+        val message = com.flossypickle.poweroutagemonitor.integrations.alerts.AlertMessage(
+            "power-event-${pending.first}", com.flossypickle.poweroutagemonitor.integrations.alerts.AlertKind.GRID_RECONNECTED,
+            "GRID CONNECTION CONFIRMED",
+            "EcoFlow now reports grid code 0 (connected), supported by current live device data. This completes the earlier meter-based restoration; it is not another outage/restoration event.")
+        if (alerts.persistForEnabledProviders(com.flossypickle.poweroutagemonitor.integrations.alerts.AlertEvidenceDetails.append(
+                message, sources.selectedSource(), sources.lastStatus(), snapshot, now))) {
+            alerts.materializePending()
+        }
+        sources.clearPendingReconnection()
     }
 
     private fun recordCompletedEvent(

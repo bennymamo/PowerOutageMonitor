@@ -123,9 +123,10 @@ internal object AlertMessageFactory {
                 appendLine("Device: ${settings.deviceName}")
                 appendLine("Power lost: ${formatTime(lostAt)}")
                 appendLine("Confirmed: ${formatTime(confirmedAt)}")
-                appendLine("Alert delay: ${formatDuration(settings.outageDelayMs)}")
-                state.outageStartBatteryPercent?.let { appendLine("Battery at power loss: $it%") }
-                append("The selected grid source reports that mains power is unavailable.")
+                appendLine("Configured confirmation delay: ${formatDuration(settings.outageDelayMs)}")
+                appendLine("Time to confirmation: ${formatDuration(confirmedAt - lostAt)}")
+                state.outageStartBatteryPercent?.let { appendLine("Phone battery at detected power loss: $it%") }
+                append("Power loss has been confirmed.")
             }
         )
     }
@@ -148,7 +149,7 @@ internal object AlertMessageFactory {
                 appendLine("Outage duration: ${formatDuration(max(0, restoredAt - lostAt))}")
                 val start = state.outageStartBatteryPercent
                 val end = snapshot.batteryPercent
-                if (start != null && end != null) appendLine("Battery: $start% to $end%")
+                if (start != null && end != null) appendLine("Phone battery: $start% to $end%")
                 append("The selected grid source reports stable mains power again.")
             }
         )

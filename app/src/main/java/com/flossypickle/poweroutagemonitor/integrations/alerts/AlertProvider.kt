@@ -13,6 +13,7 @@ internal enum class AlertKind {
     OUTAGE,
     OUTAGE_UPDATE,
     RESTORED,
+    GRID_RECONNECTED,
     BATTERY_LOW,
     SOURCE_UNAVAILABLE,
     SOURCE_RESTORED,
